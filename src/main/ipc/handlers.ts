@@ -9,11 +9,14 @@ import {
   ModuleItemRepository,
   CharacterRepository,
   BatchJobRepository,
+  BatchTaskRepository,
   GeneratedImageRepository
 } from '../services/database/repositories'
 import { comfyuiManager } from '../services/comfyui/manager'
 import { parseWorkflow } from '../services/comfyui/workflow-parser'
 import { previewPrompt } from '../services/prompt/composition-engine'
+import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
+import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -21,6 +24,7 @@ const moduleRepo = new ModuleRepository()
 const moduleItemRepo = new ModuleItemRepository()
 const characterRepo = new CharacterRepository()
 const batchJobRepo = new BatchJobRepository()
+const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
 
 export function registerIpcHandlers(): void {
@@ -233,6 +237,62 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.BATCH_DELETE, (_event, { id }: { id: string }) => {
     batchJobRepo.delete(id)
     return true
+  })
+
+  // Batch task count preview
+  ipcMain.handle('batch:preview-count', (_event, { moduleSelections, countPerCombination }: { moduleSelections: BatchModuleSelection[]; countPerCombination: number }) => {
+    return calculateTaskCount(moduleSelections, countPerCombination)
+  })
+
+  // Create batch job and expand to tasks
+  ipcMain.handle(IPC_CHANNELS.BATCH_CREATE, (_event, config: BatchConfig) => {
+    // Load module data for expansion
+    const moduleData = config.moduleSelections.map((sel) => {
+      const items = moduleItemRepo.list(sel.moduleId)
+      return {
+        moduleId: sel.moduleId,
+        moduleType: sel.moduleType,
+        items: items.map((item) => ({
+          id: item.id as string,
+          name: item.name as string,
+          prompt: item.prompt as string,
+          negative: (item.negative as string) || '',
+          weight: (item.weight as number) || 1.0,
+          enabled: (item.enabled as number) !== 0
+        }))
+      }
+    })
+
+    const tasks = expandBatchToTasks(config, moduleData)
+
+    // Create the job
+    const jobId = batchJobRepo.create({
+      name: config.name,
+      description: config.description,
+      config: JSON.stringify(config),
+      workflow_id: config.workflowId,
+      total_tasks: tasks.length,
+      pipeline_config: config.pipelineConfig ? JSON.stringify(config.pipelineConfig) : undefined
+    })
+
+    // Create tasks in bulk
+    if (tasks.length > 0) {
+      batchTaskRepo.createBulk(
+        tasks.map((t) => ({
+          job_id: jobId,
+          prompt_data: JSON.stringify(t.promptData),
+          sort_order: t.sortOrder,
+          metadata: JSON.stringify(t.metadata)
+        }))
+      )
+    }
+
+    return { jobId, totalTasks: tasks.length }
+  })
+
+  // Get tasks for a batch job
+  ipcMain.handle('batch:tasks', (_event, { jobId }: { jobId: string }) => {
+    return batchTaskRepo.listByJob(jobId)
   })
 
   // Gallery

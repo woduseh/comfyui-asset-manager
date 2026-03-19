@@ -146,6 +146,7 @@
     "type": "Type",
     "status": "Status",
     "actions": "Actions",
+    "detail": "Detail",
     "loading": "Loading...",
     "noData": "No data",
     "success": "Success",

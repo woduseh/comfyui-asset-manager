@@ -146,6 +146,7 @@
     "type": "유형",
     "status": "상태",
     "actions": "동작",
+    "detail": "상세",
     "loading": "로딩 중...",
     "noData": "데이터가 없습니다",
     "success": "성공",

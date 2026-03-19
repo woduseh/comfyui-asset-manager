@@ -88,10 +88,14 @@ async function updatePreview(): Promise<void> {
 
 async function handleCreate(): Promise<void> {
   if (!newModule.value.name) return
-  await moduleStore.createModule(newModule.value)
-  showCreateModal.value = false
-  newModule.value = { name: '', type: 'custom', description: '' }
-  message.success('모듈이 생성되었습니다')
+  try {
+    await moduleStore.createModule(newModule.value)
+    showCreateModal.value = false
+    newModule.value = { name: '', type: 'custom', description: '' }
+    message.success('모듈이 생성되었습니다')
+  } catch (e) {
+    message.error(`모듈 생성 실패: ${e instanceof Error ? e.message : String(e)}`)
+  }
 }
 
 async function handleDeleteModule(id: string): Promise<void> {
@@ -328,11 +332,10 @@ onMounted(() => {
     <!-- Create Module Modal -->
     <NModal
       v-model:show="showCreateModal"
-      preset="dialog"
+      preset="card"
+      style="width: 500px;"
       :title="t('module.create')"
-      :positive-text="t('common.create')"
-      :negative-text="t('common.cancel')"
-      @positive-click="handleCreate"
+      :bordered="false"
     >
       <NForm>
         <NFormItem :label="t('common.name')">
@@ -345,6 +348,12 @@ onMounted(() => {
           <NInput v-model:value="newModule.description" type="textarea" :placeholder="t('common.description')" />
         </NFormItem>
       </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showCreateModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :disabled="!newModule.name" @click="handleCreate">{{ t('common.create') }}</NButton>
+        </NSpace>
+      </template>
     </NModal>
 
     <!-- Edit Item Modal -->

@@ -1,0 +1,155 @@
+{
+  "app": {
+    "name": "ComfyUI Asset Manager",
+    "description": "Mass image generation and asset management tool for ComfyUI"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "workflows": "Workflows",
+    "modules": "Prompt Modules",
+    "batch": "Batch Jobs",
+    "queue": "Queue Monitor",
+    "gallery": "Gallery",
+    "settings": "Settings"
+  },
+  "connection": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "reconnecting": "Reconnecting..."
+  },
+  "settings": {
+    "title": "Settings",
+    "server": {
+      "title": "ComfyUI Server",
+      "host": "Host",
+      "port": "Port",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "test": "Test Connection"
+    },
+    "output": {
+      "title": "Output Settings",
+      "directory": "Output Directory",
+      "browse": "Browse",
+      "folderPattern": "Folder Structure Pattern",
+      "filePattern": "Filename Pattern"
+    },
+    "general": {
+      "title": "General",
+      "language": "Language",
+      "theme": "Theme",
+      "dark": "Dark",
+      "light": "Light",
+      "system": "System"
+    },
+    "batch": {
+      "title": "Batch Settings",
+      "maxRetries": "Max Retries",
+      "autoSaveInterval": "Auto Save Interval (ms)"
+    }
+  },
+  "workflow": {
+    "title": "Workflow Management",
+    "import": "Import Workflow",
+    "empty": "No workflows registered",
+    "category": {
+      "generation": "Generation",
+      "upscale": "Upscale",
+      "detailer": "Detailer",
+      "custom": "Custom"
+    },
+    "variables": "Variables",
+    "noVariables": "No variables detected"
+  },
+  "module": {
+    "title": "Prompt Modules",
+    "create": "New Module",
+    "empty": "No modules registered",
+    "type": {
+      "character": "Character",
+      "outfit": "Outfit",
+      "emotion": "Emotion",
+      "style": "Style",
+      "artist": "Artist",
+      "quality": "Quality",
+      "negative": "Negative",
+      "lora": "LoRA",
+      "custom": "Custom"
+    },
+    "items": "Items",
+    "addItem": "Add Item",
+    "prompt": "Prompt",
+    "negative": "Negative Prompt",
+    "weight": "Weight"
+  },
+  "batch": {
+    "title": "Batch Jobs",
+    "create": "New Batch Job",
+    "builder": "Matrix Builder",
+    "empty": "No batch jobs created",
+    "totalTasks": "Total Tasks",
+    "countPerCombination": "Count per Combination",
+    "seedMode": {
+      "title": "Seed Mode",
+      "random": "Random",
+      "fixed": "Fixed",
+      "incremental": "Incremental"
+    },
+    "status": {
+      "draft": "Draft",
+      "queued": "Queued",
+      "running": "Running",
+      "paused": "Paused",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "actions": {
+      "start": "Start",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel",
+      "delete": "Delete"
+    }
+  },
+  "queue": {
+    "title": "Queue Monitor",
+    "empty": "No running tasks",
+    "progress": "Progress",
+    "eta": "Estimated Time Remaining",
+    "currentTask": "Current Task"
+  },
+  "gallery": {
+    "title": "Gallery",
+    "empty": "No generated images",
+    "filter": "Filter",
+    "sort": "Sort",
+    "rating": "Rating",
+    "favorite": "Favorite",
+    "export": "Export",
+    "delete": "Delete",
+    "metadata": "Metadata",
+    "compare": "Compare"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "name": "Name",
+    "description": "Description",
+    "type": "Type",
+    "status": "Status",
+    "actions": "Actions",
+    "loading": "Loading...",
+    "noData": "No data",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning"
+  }
+}

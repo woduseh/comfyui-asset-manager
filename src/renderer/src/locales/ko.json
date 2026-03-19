@@ -1,0 +1,155 @@
+{
+  "app": {
+    "name": "ComfyUI Asset Manager",
+    "description": "ComfyUI 대량 이미지 생성 및 자산 관리 도구"
+  },
+  "nav": {
+    "dashboard": "대시보드",
+    "workflows": "워크플로우",
+    "modules": "프롬프트 모듈",
+    "batch": "배치 작업",
+    "queue": "큐 모니터",
+    "gallery": "갤러리",
+    "settings": "설정"
+  },
+  "connection": {
+    "connected": "연결됨",
+    "disconnected": "연결 안 됨",
+    "connecting": "연결 중...",
+    "reconnecting": "재연결 중..."
+  },
+  "settings": {
+    "title": "설정",
+    "server": {
+      "title": "ComfyUI 서버",
+      "host": "호스트",
+      "port": "포트",
+      "connect": "연결",
+      "disconnect": "연결 해제",
+      "test": "연결 테스트"
+    },
+    "output": {
+      "title": "출력 설정",
+      "directory": "출력 디렉토리",
+      "browse": "찾아보기",
+      "folderPattern": "폴더 구조 패턴",
+      "filePattern": "파일명 패턴"
+    },
+    "general": {
+      "title": "일반",
+      "language": "언어",
+      "theme": "테마",
+      "dark": "다크",
+      "light": "라이트",
+      "system": "시스템"
+    },
+    "batch": {
+      "title": "배치 설정",
+      "maxRetries": "최대 재시도 횟수",
+      "autoSaveInterval": "자동 저장 간격 (ms)"
+    }
+  },
+  "workflow": {
+    "title": "워크플로우 관리",
+    "import": "워크플로우 가져오기",
+    "empty": "등록된 워크플로우가 없습니다",
+    "category": {
+      "generation": "생성",
+      "upscale": "업스케일",
+      "detailer": "디테일러",
+      "custom": "커스텀"
+    },
+    "variables": "변수",
+    "noVariables": "감지된 변수가 없습니다"
+  },
+  "module": {
+    "title": "프롬프트 모듈",
+    "create": "새 모듈",
+    "empty": "등록된 모듈이 없습니다",
+    "type": {
+      "character": "캐릭터",
+      "outfit": "복장",
+      "emotion": "감정",
+      "style": "스타일",
+      "artist": "아티스트",
+      "quality": "품질",
+      "negative": "네거티브",
+      "lora": "LoRA",
+      "custom": "커스텀"
+    },
+    "items": "아이템",
+    "addItem": "아이템 추가",
+    "prompt": "프롬프트",
+    "negative": "네거티브 프롬프트",
+    "weight": "가중치"
+  },
+  "batch": {
+    "title": "배치 작업",
+    "create": "새 배치 작업",
+    "builder": "매트릭스 빌더",
+    "empty": "생성된 배치 작업이 없습니다",
+    "totalTasks": "총 작업 수",
+    "countPerCombination": "조합당 생성 수",
+    "seedMode": {
+      "title": "시드 모드",
+      "random": "랜덤",
+      "fixed": "고정",
+      "incremental": "증분"
+    },
+    "status": {
+      "draft": "초안",
+      "queued": "대기 중",
+      "running": "실행 중",
+      "paused": "일시정지",
+      "completed": "완료",
+      "failed": "실패",
+      "cancelled": "취소"
+    },
+    "actions": {
+      "start": "시작",
+      "pause": "일시정지",
+      "resume": "재개",
+      "cancel": "취소",
+      "delete": "삭제"
+    }
+  },
+  "queue": {
+    "title": "큐 모니터",
+    "empty": "실행 중인 작업이 없습니다",
+    "progress": "진행률",
+    "eta": "예상 남은 시간",
+    "currentTask": "현재 작업"
+  },
+  "gallery": {
+    "title": "갤러리",
+    "empty": "생성된 이미지가 없습니다",
+    "filter": "필터",
+    "sort": "정렬",
+    "rating": "평점",
+    "favorite": "즐겨찾기",
+    "export": "내보내기",
+    "delete": "삭제",
+    "metadata": "메타데이터",
+    "compare": "비교"
+  },
+  "common": {
+    "save": "저장",
+    "cancel": "취소",
+    "delete": "삭제",
+    "edit": "편집",
+    "create": "생성",
+    "confirm": "확인",
+    "close": "닫기",
+    "search": "검색",
+    "name": "이름",
+    "description": "설명",
+    "type": "유형",
+    "status": "상태",
+    "actions": "동작",
+    "loading": "로딩 중...",
+    "noData": "데이터가 없습니다",
+    "success": "성공",
+    "error": "오류",
+    "warning": "경고"
+  }
+}

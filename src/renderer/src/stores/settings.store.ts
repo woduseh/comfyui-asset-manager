@@ -1,0 +1,61 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+export interface AppSettings {
+  comfyui_host: string
+  comfyui_port: string
+  output_directory: string
+  language: string
+  theme: string
+  output_pattern: string
+  filename_pattern: string
+  max_retries: string
+  auto_save_interval: string
+  [key: string]: string
+}
+
+const defaultSettings: AppSettings = {
+  comfyui_host: 'localhost',
+  comfyui_port: '8188',
+  output_directory: '',
+  language: 'ko',
+  theme: 'dark',
+  output_pattern: '{job}/{character}/{outfit}/{emotion}',
+  filename_pattern: '{character}_{outfit}_{emotion}_{index}',
+  max_retries: '3',
+  auto_save_interval: '5000'
+}
+
+export const useSettingsStore = defineStore('settings', () => {
+  const settings = ref<AppSettings>({ ...defaultSettings })
+  const loaded = ref(false)
+
+  async function loadSettings(): Promise<void> {
+    try {
+      const all = await window.electron.ipcRenderer.invoke('settings:getAll')
+      if (all) {
+        settings.value = { ...defaultSettings, ...all }
+      }
+      loaded.value = true
+    } catch {
+      loaded.value = true
+    }
+  }
+
+  async function setSetting(key: string, value: string): Promise<void> {
+    settings.value[key] = value
+    await window.electron.ipcRenderer.invoke('settings:set', { key, value })
+  }
+
+  async function getSetting(key: string): Promise<string | null> {
+    return await window.electron.ipcRenderer.invoke('settings:get', { key })
+  }
+
+  return {
+    settings,
+    loaded,
+    loadSettings,
+    setSetting,
+    getSetting
+  }
+})

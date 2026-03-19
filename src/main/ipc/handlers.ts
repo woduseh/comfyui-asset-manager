@@ -18,6 +18,7 @@ import { previewPrompt } from '../services/prompt/composition-engine'
 import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
+import { getDatabase } from '../services/database'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -411,7 +412,7 @@ export function registerIpcHandlers(): void {
 
   // Dashboard statistics
   ipcMain.handle('dashboard:stats', () => {
-    const db = require('../services/database').getDatabase()
+    const db = getDatabase()
 
     const imgCountStmt = db.prepare('SELECT COUNT(*) as count FROM generated_images')
     imgCountStmt.step()

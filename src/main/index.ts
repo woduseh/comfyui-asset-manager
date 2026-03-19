@@ -64,5 +64,10 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // Disconnect from ComfyUI and save database
+  try {
+    const { comfyuiManager } = require('./services/comfyui/manager')
+    comfyuiManager.disconnect()
+  } catch { /* ignore */ }
   closeDatabase()
 })

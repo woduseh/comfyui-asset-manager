@@ -62,6 +62,7 @@ export const IPC_CHANNELS = {
 
   // Workflow Variables
   WORKFLOW_UPDATE_VARIABLE_ROLE: 'workflow:update-variable-role',
+  WORKFLOW_UPDATE_VARIABLE_VALUE: 'workflow:update-variable-value',
 
   // Events (main → renderer)
   QUEUE_PROGRESS: 'queue:progress',

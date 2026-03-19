@@ -32,6 +32,11 @@ export interface BatchConfig {
     action: string
     fixedValue: string
   }>
+  variableOverrides?: Array<{
+    nodeId: string
+    fieldName: string
+    value: string
+  }>
   pipelineConfig?: {
     steps: Array<{
       workflowId: string
@@ -52,6 +57,11 @@ export interface GeneratedTask {
       role: string
       action: string
       fixedValue: string
+    }>
+    variableOverrides?: Array<{
+      nodeId: string
+      fieldName: string
+      value: string
     }>
   }
   metadata: {
@@ -199,7 +209,8 @@ export function expandBatchToTasks(
             role: s.role,
             action: s.action,
             fixedValue: s.fixedValue
-          }))
+          })),
+          variableOverrides: config.variableOverrides
         },
         metadata: {
           ...metadata,

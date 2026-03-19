@@ -309,6 +309,11 @@ class QueueManager {
         action: string
         fixedValue: string
       }>
+      variableOverrides?: Array<{
+        nodeId: string
+        fieldName: string
+        value: string
+      }>
     }
   ): void {
     // Slot-based injection (new system)
@@ -365,6 +370,17 @@ class QueueManager {
               }
             }
             break
+        }
+      }
+    }
+
+    // Apply variable overrides
+    if (promptData.variableOverrides && promptData.variableOverrides.length > 0) {
+      for (const override of promptData.variableOverrides) {
+        const node = workflow[override.nodeId] as { inputs?: Record<string, unknown> }
+        if (node && node.inputs) {
+          const numVal = Number(override.value)
+          node.inputs[override.fieldName] = isNaN(numVal) ? override.value : numVal
         }
       }
     }

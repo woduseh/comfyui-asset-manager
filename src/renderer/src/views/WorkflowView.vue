@@ -4,7 +4,8 @@ import { useI18n } from 'vue-i18n'
 import {
   NCard, NButton, NEmpty, NSpace, NTag, NDataTable, NModal,
   NCollapse, NCollapseItem,
-  NInput, NSelect, NForm, NFormItem, useMessage
+  NInput, NSelect, NForm, NFormItem, NSlider, NInputNumber,
+  useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
@@ -19,6 +20,17 @@ const detailWorkflow = ref<Record<string, unknown> | null>(null)
 const detailVariables = ref<Record<string, unknown>[]>([])
 const editName = ref('')
 const editDescription = ref('')
+
+// ComfyUI available resources
+const comfyuiResources = ref<{
+  checkpoints: string[]
+  loras: string[]
+  vaes: string[]
+  upscaleModels: string[]
+  samplers: string[]
+  schedulers: string[]
+} | null>(null)
+const resourcesLoading = ref(false)
 const columns: DataTableColumns<WorkflowItem> = [
   { title: t('common.name'), key: 'name', width: 200 },
   { title: t('common.description'), key: 'description', ellipsis: { tooltip: true } },
@@ -92,7 +104,38 @@ async function handleViewDetail(id: string): Promise<void> {
     editDescription.value = (detailWorkflow.value.description as string) || ''
     detailVariables.value = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
     showDetailModal.value = true
+    loadComfyUIResources()
   }
+}
+
+async function loadComfyUIResources(): Promise<void> {
+  resourcesLoading.value = true
+  try {
+    comfyuiResources.value = await window.electron.ipcRenderer.invoke('comfyui:models')
+  } catch {
+    comfyuiResources.value = null
+  } finally {
+    resourcesLoading.value = false
+  }
+}
+
+let valueUpdateTimer: ReturnType<typeof setTimeout> | null = null
+async function handleValueChange(variableId: string, value: unknown): Promise<void> {
+  const v = detailVariables.value.find(v => v.id === variableId)
+  if (v) v.default_val = String(value ?? '')
+
+  if (valueUpdateTimer) clearTimeout(valueUpdateTimer)
+  valueUpdateTimer = setTimeout(async () => {
+    await window.electron.ipcRenderer.invoke('workflow:update-variable-value', {
+      variableId,
+      value: String(value ?? '')
+    })
+  }, 300)
+}
+
+function isLoraWeight(variable: Record<string, unknown>): boolean {
+  const fieldName = (variable.field_name as string) || ''
+  return fieldName === 'strength_model' || fieldName === 'strength_clip'
 }
 
 async function handleDelete(id: string): Promise<void> {
@@ -247,8 +290,133 @@ onMounted(() => {
                       @update:value="(v: string) => handleRoleChange(variable.id as string, v)"
                     />
                   </NSpace>
-                  <div style="margin-top: 4px; padding-left: 8px; opacity: 0.8; font-size: 13px;">
-                    기본값: {{ variable.default_val ?? '(없음)' }}
+                  <div style="margin-top: 6px; padding-left: 8px;">
+                    <!-- Model type: checkpoint dropdown -->
+                    <template v-if="variable.var_type === 'model'">
+                      <NSelect
+                        :value="(variable.default_val as string) || undefined"
+                        :options="(comfyuiResources?.checkpoints || []).map(c => ({ label: c, value: c }))"
+                        placeholder="체크포인트 선택"
+                        filterable
+                        size="small"
+                        :loading="resourcesLoading"
+                        :fallback-option="(v: string) => ({ label: v, value: v })"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
+
+                    <!-- LoRA type: lora dropdown -->
+                    <template v-else-if="variable.var_type === 'lora'">
+                      <NSelect
+                        :value="(variable.default_val as string) || undefined"
+                        :options="(comfyuiResources?.loras || []).map(l => ({ label: l, value: l }))"
+                        placeholder="LoRA 선택"
+                        filterable
+                        size="small"
+                        :loading="resourcesLoading"
+                        :fallback-option="(v: string) => ({ label: v, value: v })"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
+
+                    <!-- Seed type: number + random button -->
+                    <template v-else-if="variable.var_type === 'seed'">
+                      <NSpace align="center">
+                        <NInputNumber
+                          :value="Number(variable.default_val) || 0"
+                          :min="0"
+                          :max="2147483647"
+                          size="small"
+                          style="width: 200px;"
+                          @update:value="(v: number | null) => handleValueChange(variable.id as string, v ?? 0)"
+                        />
+                        <NButton size="tiny" quaternary @click="handleValueChange(variable.id as string, Math.floor(Math.random() * 2147483647))">
+                          🎲
+                        </NButton>
+                      </NSpace>
+                    </template>
+
+                    <!-- Number type for LoRA weights (strength_model, strength_clip) -->
+                    <template v-else-if="variable.var_type === 'number' && isLoraWeight(variable)">
+                      <NSpace align="center" style="width: 100%;">
+                        <NSlider
+                          :value="Number(variable.default_val) || 1"
+                          :min="0"
+                          :max="2"
+                          :step="0.05"
+                          style="width: 200px;"
+                          @update:value="(v: number) => handleValueChange(variable.id as string, v)"
+                        />
+                        <NInputNumber
+                          :value="Number(variable.default_val) || 1"
+                          :min="0"
+                          :max="2"
+                          :step="0.05"
+                          size="small"
+                          style="width: 100px;"
+                          @update:value="(v: number | null) => handleValueChange(variable.id as string, v ?? 1)"
+                        />
+                      </NSpace>
+                    </template>
+
+                    <!-- Sampler dropdown -->
+                    <template v-else-if="(variable.field_name as string) === 'sampler_name'">
+                      <NSelect
+                        :value="(variable.default_val as string) || undefined"
+                        :options="(comfyuiResources?.samplers || []).map(s => ({ label: s, value: s }))"
+                        placeholder="샘플러 선택"
+                        filterable
+                        size="small"
+                        :loading="resourcesLoading"
+                        :fallback-option="(v: string) => ({ label: v, value: v })"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
+
+                    <!-- Scheduler dropdown -->
+                    <template v-else-if="(variable.field_name as string) === 'scheduler'">
+                      <NSelect
+                        :value="(variable.default_val as string) || undefined"
+                        :options="(comfyuiResources?.schedulers || []).map(s => ({ label: s, value: s }))"
+                        placeholder="스케줄러 선택"
+                        filterable
+                        size="small"
+                        :loading="resourcesLoading"
+                        :fallback-option="(v: string) => ({ label: v, value: v })"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
+
+                    <!-- Regular number type -->
+                    <template v-else-if="variable.var_type === 'number'">
+                      <NInputNumber
+                        :value="Number(variable.default_val) || 0"
+                        size="small"
+                        style="width: 200px;"
+                        @update:value="(v: number | null) => handleValueChange(variable.id as string, v ?? 0)"
+                      />
+                    </template>
+
+                    <!-- Text type: textarea -->
+                    <template v-else-if="variable.var_type === 'text'">
+                      <NInput
+                        :value="(variable.default_val as string) || ''"
+                        type="textarea"
+                        :rows="2"
+                        size="small"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
+
+                    <!-- Fallback: text input -->
+                    <template v-else>
+                      <NInput
+                        :value="(variable.default_val as string) || ''"
+                        size="small"
+                        placeholder="값 입력"
+                        @update:value="(v: string) => handleValueChange(variable.id as string, v)"
+                      />
+                    </template>
                   </div>
                 </div>
               </div>

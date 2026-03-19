@@ -136,6 +136,12 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  // Update variable value
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_VALUE, (_event, { variableId, value }: { variableId: string; value: string }) => {
+    workflowRepo.updateValue(variableId, value)
+    return true
+  })
+
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET,(_event, { key }: { key: string }) => {
     return settingsRepo.get(key)

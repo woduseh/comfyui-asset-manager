@@ -162,6 +162,12 @@ export class WorkflowRepository {
     db.run('UPDATE workflow_variables SET role = ? WHERE id = ?', [role, variableId])
     saveDatabase()
   }
+
+  updateValue(variableId: string, value: string): void {
+    const db = getDatabase()
+    db.run('UPDATE workflow_variables SET default_val = ? WHERE id = ?', [value, variableId])
+    saveDatabase()
+  }
 }
 
 export class ModuleRepository {

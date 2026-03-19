@@ -5,7 +5,7 @@ import {
   NCard, NButton, NEmpty, NSpace, NTag, NModal, NForm, NFormItem,
   NInput, NSelect, NInputNumber, NDataTable, NGrid, NGridItem,
   NDivider, NStatistic, NCheckboxGroup, NCheckbox, NAlert,
-  NScrollbar, useMessage
+  NScrollbar, NSwitch, NSlider, useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
@@ -57,9 +57,37 @@ interface SlotMapping {
 }
 const slotMappings = ref<SlotMapping[]>([])
 
+// Variable overrides
+interface VariableOverride {
+  variableId: string
+  nodeId: string
+  fieldName: string
+  displayName: string
+  varType: string
+  role: string
+  enabled: boolean
+  value: string
+  defaultValue: string
+}
+const variableOverrides = ref<VariableOverride[]>([])
+const batchResources = ref<{
+  checkpoints: string[]
+  loras: string[]
+  vaes: string[]
+  upscaleModels: string[]
+  samplers: string[]
+  schedulers: string[]
+} | null>(null)
+
+const varTypeLabels: Record<string, string> = {
+  text: '텍스트', number: '숫자', boolean: '불리언',
+  seed: '시드', image: '이미지', model: '모델', lora: 'LoRA'
+}
+
 watch(selectedWorkflowId, async (id) => {
   if (!id) {
     slotMappings.value = []
+    variableOverrides.value = []
     return
   }
   const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
@@ -73,6 +101,30 @@ watch(selectedWorkflowId, async (id) => {
       role: v.role as string,
       action: 'inject' as const,
       fixedValue: (v.default_val as string) || ''
+    }))
+
+  // Load ComfyUI resources for dropdowns
+  try {
+    batchResources.value = await window.electron.ipcRenderer.invoke('comfyui:models')
+  } catch {
+    batchResources.value = null
+  }
+
+  // Set up variable overrides for non-prompt variables
+  variableOverrides.value = variables
+    .filter((v: Record<string, unknown>) =>
+      v.role !== 'prompt_positive' && v.role !== 'prompt_negative' && v.var_type !== 'seed'
+    )
+    .map((v: Record<string, unknown>) => ({
+      variableId: v.id as string,
+      nodeId: v.node_id as string,
+      fieldName: v.field_name as string,
+      displayName: v.display_name as string,
+      varType: v.var_type as string,
+      role: v.role as string,
+      enabled: false,
+      value: (v.default_val as string) || '',
+      defaultValue: (v.default_val as string) || ''
     }))
 })
 // Computed stats
@@ -134,10 +186,13 @@ const jobColumns: DataTableColumns = [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 150,
+    width: 200,
     render(row) {
       return h(NSpace, { size: 'small' }, {
         default: () => [
+          h(NButton, { size: 'tiny', quaternary: true, type: 'info', onClick: () => handleCloneJob(row) }, {
+            default: () => '복제'
+          }),
           h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => handleDeleteJob(row.id as string) }, {
             default: () => t('common.delete')
           })
@@ -168,6 +223,8 @@ async function openBuilder(): Promise<void> {
   await workflowStore.loadWorkflows()
   availableModules.value = moduleStore.modules
   moduleSelections.value = []
+  variableOverrides.value = []
+  batchResources.value = null
   batchName.value = ''
   batchDescription.value = ''
   selectedWorkflowId.value = workflowOptions.value.length > 0 ? workflowOptions.value[0].value : null
@@ -231,7 +288,14 @@ async function handleCreateBatch(): Promise<void> {
         role: s.role,
         action: s.action,
         fixedValue: s.fixedValue
-      }))
+      })),
+      variableOverrides: variableOverrides.value
+        .filter(vo => vo.enabled)
+        .map(vo => ({
+          nodeId: vo.nodeId,
+          fieldName: vo.fieldName,
+          value: vo.value
+        }))
     }))
 
     message.success(`배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
@@ -239,6 +303,80 @@ async function handleCreateBatch(): Promise<void> {
     await loadBatchJobs()
   } catch (error) {
     message.error('배치 작업 생성 실패: ' + (error as Error).message)
+  }
+}
+
+async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
+  try {
+    const config = JSON.parse(job.config as string)
+    await moduleStore.loadModules()
+    await workflowStore.loadWorkflows()
+    availableModules.value = moduleStore.modules
+
+    // Restore basic settings
+    batchName.value = `${job.name as string} (복사)`
+    batchDescription.value = config.description || ''
+    selectedWorkflowId.value = config.workflowId || null
+    countPerCombination.value = config.countPerCombination || 1
+    seedMode.value = config.seedMode || 'random'
+    fixedSeed.value = config.fixedSeed || 42
+    outputPattern.value = config.outputFolderPattern || '{job}/{character}/{outfit}/{emotion}'
+    filePattern.value = config.fileNamePattern || '{character}_{outfit}_{emotion}_{index}'
+
+    // Restore module selections
+    moduleSelections.value = []
+    if (config.moduleSelections && Array.isArray(config.moduleSelections)) {
+      for (const sel of config.moduleSelections) {
+        const mod = availableModules.value.find(m => m.id === sel.moduleId)
+        if (mod) {
+          await moduleStore.loadItems(sel.moduleId)
+          const items = [...moduleStore.currentItems]
+          moduleSelections.value.push({
+            moduleId: sel.moduleId,
+            moduleName: mod.name,
+            moduleType: sel.moduleType || mod.type,
+            items,
+            selectedItemIds: sel.selectedItemIds || items.map(i => i.id)
+          })
+        }
+      }
+    }
+
+    showBuilderModal.value = true
+
+    // Restore slot mapping actions after watcher runs
+    if (config.slotMappings && Array.isArray(config.slotMappings)) {
+      setTimeout(() => {
+        for (const savedSlot of config.slotMappings) {
+          const slot = slotMappings.value.find(s =>
+            s.nodeId === savedSlot.nodeId && s.fieldName === savedSlot.fieldName
+          )
+          if (slot) {
+            slot.action = savedSlot.action || 'inject'
+            slot.fixedValue = savedSlot.fixedValue || ''
+          }
+        }
+      }, 500)
+    }
+
+    // Restore variable overrides after watcher runs
+    if (config.variableOverrides && Array.isArray(config.variableOverrides)) {
+      setTimeout(() => {
+        for (const savedOverride of config.variableOverrides) {
+          const vo = variableOverrides.value.find(v =>
+            v.nodeId === savedOverride.nodeId && v.fieldName === savedOverride.fieldName
+          )
+          if (vo) {
+            vo.enabled = true
+            vo.value = savedOverride.value || ''
+          }
+        }
+      }, 500)
+    }
+
+    message.info('배치 설정을 복원했습니다. 수정 후 새로 생성해주세요.')
+  } catch (e) {
+    message.error('배치 작업 복제 실패: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -371,6 +509,96 @@ onMounted(() => {
                 placeholder="고정 프롬프트 텍스트"
                 style="margin-top: 8px;"
               />
+            </NCard>
+          </template>
+
+          <NDivider>워크플로우 변수 오버라이드</NDivider>
+
+          <NAlert v-if="variableOverrides.length === 0" type="info" style="margin-bottom: 12px; font-size: 12px;">
+            오버라이드 가능한 변수가 없습니다.
+          </NAlert>
+
+          <template v-for="vo in variableOverrides" :key="vo.variableId">
+            <NCard size="small" style="margin-bottom: 8px;">
+              <NSpace align="center" justify="space-between">
+                <NSpace align="center">
+                  <NSwitch v-model:value="vo.enabled" size="small" />
+                  <NTag size="small" :type="vo.varType === 'model' ? 'success' : vo.varType === 'lora' ? 'warning' : 'default'">
+                    {{ varTypeLabels[vo.varType] || vo.varType }}
+                  </NTag>
+                  <span :style="{ opacity: vo.enabled ? 1 : 0.5 }">{{ vo.displayName }}</span>
+                </NSpace>
+                <span v-if="!vo.enabled" style="font-size: 12px; opacity: 0.5;">기본값: {{ vo.defaultValue || '(없음)' }}</span>
+              </NSpace>
+
+              <template v-if="vo.enabled">
+                <div style="margin-top: 8px;">
+                  <!-- Model dropdown -->
+                  <NSelect
+                    v-if="vo.varType === 'model'"
+                    v-model:value="vo.value"
+                    :options="(batchResources?.checkpoints || []).map(c => ({ label: c, value: c }))"
+                    placeholder="체크포인트 선택"
+                    filterable
+                    size="small"
+                    :fallback-option="(v: string) => ({ label: v, value: v })"
+                  />
+                  <!-- LoRA dropdown -->
+                  <NSelect
+                    v-else-if="vo.varType === 'lora'"
+                    v-model:value="vo.value"
+                    :options="(batchResources?.loras || []).map(l => ({ label: l, value: l }))"
+                    placeholder="LoRA 선택"
+                    filterable
+                    size="small"
+                    :fallback-option="(v: string) => ({ label: v, value: v })"
+                  />
+                  <!-- LoRA weights -->
+                  <NSpace v-else-if="vo.varType === 'number' && (vo.fieldName === 'strength_model' || vo.fieldName === 'strength_clip')" align="center">
+                    <NSlider
+                      :value="Number(vo.value) || 1"
+                      :min="0" :max="2" :step="0.05"
+                      style="width: 200px;"
+                      @update:value="(v: number) => { vo.value = String(v) }"
+                    />
+                    <NInputNumber
+                      :value="Number(vo.value) || 1"
+                      :min="0" :max="2" :step="0.05"
+                      size="small" style="width: 100px;"
+                      @update:value="(v: number | null) => { vo.value = String(v ?? 1) }"
+                    />
+                  </NSpace>
+                  <!-- Sampler/Scheduler dropdowns -->
+                  <NSelect
+                    v-else-if="vo.fieldName === 'sampler_name'"
+                    v-model:value="vo.value"
+                    :options="(batchResources?.samplers || []).map(s => ({ label: s, value: s }))"
+                    filterable size="small"
+                    :fallback-option="(v: string) => ({ label: v, value: v })"
+                  />
+                  <NSelect
+                    v-else-if="vo.fieldName === 'scheduler'"
+                    v-model:value="vo.value"
+                    :options="(batchResources?.schedulers || []).map(s => ({ label: s, value: s }))"
+                    filterable size="small"
+                    :fallback-option="(v: string) => ({ label: v, value: v })"
+                  />
+                  <!-- Number -->
+                  <NInputNumber
+                    v-else-if="vo.varType === 'number'"
+                    :value="Number(vo.value) || 0"
+                    size="small" style="width: 200px;"
+                    @update:value="(v: number | null) => { vo.value = String(v ?? 0) }"
+                  />
+                  <!-- Text -->
+                  <NInput
+                    v-else
+                    v-model:value="vo.value"
+                    type="textarea" :rows="2" size="small"
+                    placeholder="오버라이드 값"
+                  />
+                </div>
+              </template>
             </NCard>
           </template>
 

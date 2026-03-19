@@ -98,6 +98,33 @@ async function handleCreate(): Promise<void> {
   }
 }
 
+// Edit module modal
+const showEditModuleModal = ref(false)
+const editModule = ref({ id: '', name: '', type: 'custom' as string, description: '' })
+
+function openEditModule(mod: PromptModule): void {
+  editModule.value = { id: mod.id, name: mod.name, type: mod.type, description: mod.description || '' }
+  showEditModuleModal.value = true
+}
+
+async function handleEditModule(): Promise<void> {
+  if (!editModule.value.name) return
+  try {
+    await moduleStore.updateModule(editModule.value.id, {
+      name: editModule.value.name,
+      type: editModule.value.type,
+      description: editModule.value.description
+    })
+    showEditModuleModal.value = false
+    if (selectedModuleId.value === editModule.value.id) {
+      selectedModule.value = await moduleStore.getModule(editModule.value.id)
+    }
+    message.success('모듈이 수정되었습니다')
+  } catch (e) {
+    message.error(`모듈 수정 실패: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 async function handleDeleteModule(id: string): Promise<void> {
   if (selectedModuleId.value === id) selectedModuleId.value = null
   await moduleStore.deleteModule(id)
@@ -253,6 +280,9 @@ onMounted(() => {
                     <NTag :type="typeColors[mod.type] || 'default'" size="small">
                       {{ t(`module.type.${mod.type}`) }}
                     </NTag>
+                    <NButton size="tiny" quaternary @click.stop="openEditModule(mod)">
+                      {{ t('common.edit') }}
+                    </NButton>
                     <NPopconfirm @positive-click="handleDeleteModule(mod.id)">
                       <template #trigger>
                         <NButton size="tiny" quaternary type="error" @click.stop>
@@ -352,6 +382,33 @@ onMounted(() => {
         <NSpace justify="end">
           <NButton @click="showCreateModal = false">{{ t('common.cancel') }}</NButton>
           <NButton type="primary" :disabled="!newModule.name" @click="handleCreate">{{ t('common.create') }}</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Edit Module Modal -->
+    <NModal
+      v-model:show="showEditModuleModal"
+      preset="card"
+      style="width: 500px;"
+      title="모듈 수정"
+      :bordered="false"
+    >
+      <NForm>
+        <NFormItem :label="t('common.name')">
+          <NInput v-model:value="editModule.name" :placeholder="t('common.name')" />
+        </NFormItem>
+        <NFormItem :label="t('common.type')">
+          <NSelect v-model:value="editModule.type" :options="moduleTypeOptions" />
+        </NFormItem>
+        <NFormItem :label="t('common.description')">
+          <NInput v-model:value="editModule.description" type="textarea" :placeholder="t('common.description')" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showEditModuleModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :disabled="!editModule.name" @click="handleEditModule">{{ t('common.save') }}</NButton>
         </NSpace>
       </template>
     </NModal>

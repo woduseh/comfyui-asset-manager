@@ -42,7 +42,7 @@ interface ModuleSelectionUI {
 }
 const moduleSelections = ref<ModuleSelectionUI[]>([])
 const availableModules = ref<PromptModule[]>([])
-
+const moduleToAdd = ref<string | null>(null)
 // Computed stats
 const taskPreview = computed(() => {
   const selections = moduleSelections.value.filter((s) => s.selectedItemIds.length > 0)
@@ -143,6 +143,7 @@ async function openBuilder(): Promise<void> {
 }
 
 async function addModuleToMatrix(moduleId: string): Promise<void> {
+  if (!moduleId) return
   if (moduleSelections.value.some((s) => s.moduleId === moduleId)) return
   const mod = availableModules.value.find((m) => m.id === moduleId)
   if (!mod) return
@@ -155,6 +156,7 @@ async function addModuleToMatrix(moduleId: string): Promise<void> {
     items,
     selectedItemIds: items.filter((i) => i.enabled).map((i) => i.id)
   })
+  moduleToAdd.value = null
 }
 
 function removeModuleFromMatrix(moduleId: string): void {
@@ -262,6 +264,7 @@ onMounted(() => {
           <!-- Module selection -->
           <NFormItem label="모듈 추가">
             <NSelect
+              v-model:value="moduleToAdd"
               placeholder="매트릭스에 추가할 모듈 선택"
               :options="availableModules.filter(m => !moduleSelections.some(s => s.moduleId === m.id)).map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
               @update:value="addModuleToMatrix"
@@ -290,6 +293,9 @@ onMounted(() => {
                   <NCheckbox v-for="item in sel.items" :key="item.id" :value="item.id" :label="item.name" />
                 </NSpace>
               </NCheckboxGroup>
+              <NAlert v-if="sel.items.length === 0" type="warning" style="margin-top: 8px; font-size: 12px;">
+                이 모듈에 아이템이 없습니다. 프롬프트 모듈 관리에서 아이템을 추가해주세요.
+              </NAlert>
             </NCard>
           </template>
 
@@ -345,6 +351,22 @@ onMounted(() => {
               <NStatistic label="총 생성 이미지 수" :value="taskPreview.totalTasks" />
             </NGridItem>
           </NGrid>
+
+          <NAlert
+            v-if="taskPreview.totalTasks === 0 && moduleSelections.length > 0"
+            type="info"
+            style="margin-top: 12px; font-size: 12px;"
+          >
+            선택된 아이템이 있는 모듈이 필요합니다. 모듈에 아이템을 추가하고 체크해주세요.
+          </NAlert>
+
+          <NAlert
+            v-if="moduleSelections.length === 0"
+            type="info"
+            style="margin-top: 12px; font-size: 12px;"
+          >
+            위에서 모듈을 추가하면 조합 매트릭스가 생성됩니다.
+          </NAlert>
 
           <NAlert
             v-if="taskPreview.totalTasks > 10000"

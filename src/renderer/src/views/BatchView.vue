@@ -11,6 +11,7 @@ import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore, type WorkflowItem } from '@renderer/stores/workflow.store'
+import { toPlain } from '@renderer/utils/ipc'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -178,7 +179,7 @@ async function handleCreateBatch(): Promise<void> {
   }
 
   try {
-    const result = await window.electron.ipcRenderer.invoke('batch:create', {
+    const result = await window.electron.ipcRenderer.invoke('batch:create', toPlain({
       name: batchName.value,
       description: batchDescription.value,
       workflowId: selectedWorkflowId.value,
@@ -192,7 +193,7 @@ async function handleCreateBatch(): Promise<void> {
       fixedSeed: fixedSeed.value,
       outputFolderPattern: outputPattern.value,
       fileNamePattern: filePattern.value
-    })
+    }))
 
     message.success(`배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
     showBuilderModal.value = false

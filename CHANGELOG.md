@@ -2,6 +2,12 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.2.4] - 2026-03-19
+
+### Fixed
+
+- **배치 작업 생성 시 structuredClone 오류**: BatchView에서 직접 IPC 호출 시 reactive 객체가 전달되던 문제 수정. `toPlain()` 래핑 적용
+
 ## [0.2.3] - 2026-03-19
 
 모듈 편집 기능 추가 및 배치 빌더 UX 개선.

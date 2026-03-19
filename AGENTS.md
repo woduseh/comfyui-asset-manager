@@ -94,6 +94,7 @@ npm run format           # Prettier
 
 ## 현재 버전
 
+**0.2.4** — 배치 작업 생성 IPC structuredClone 오류 수정
 **0.2.3** — 모듈 편집 기능 추가, 배치 빌더 UUID 표시 및 UX 개선
 **0.2.2** — IPC structuredClone 직렬화 오류 수정 (toPlain 유틸리티)
 **0.2.1** — UI 버그 수정 3건 (모듈 생성, 워크플로우 변수 스크롤, 워크플로우 편집)

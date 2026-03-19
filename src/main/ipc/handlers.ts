@@ -13,6 +13,7 @@ import {
 } from '../services/database/repositories'
 import { comfyuiManager } from '../services/comfyui/manager'
 import { parseWorkflow } from '../services/comfyui/workflow-parser'
+import { previewPrompt } from '../services/prompt/composition-engine'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -252,6 +253,66 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.GALLERY_DELETE, (_event, { ids }: { ids: string[] }) => {
     imageRepo.delete(ids)
     return true
+  })
+
+  // Prompt Preview
+  ipcMain.handle('prompt:preview', (_event, { moduleIds, variables }: { moduleIds: string[]; variables?: Record<string, string> }) => {
+    const modules: Array<{
+      type: string
+      items: Array<{ prompt: string; negative: string; weight: number; enabled: boolean }>
+    }> = []
+
+    for (const moduleId of moduleIds) {
+      const mod = moduleRepo.get(moduleId)
+      if (!mod) continue
+      const items = moduleItemRepo.list(moduleId)
+      modules.push({
+        type: mod.type as string,
+        items: items.map((item) => ({
+          prompt: item.prompt as string,
+          negative: (item.negative as string) || '',
+          weight: (item.weight as number) || 1.0,
+          enabled: (item.enabled as number) !== 0
+        }))
+      })
+    }
+
+    return previewPrompt(modules, variables)
+  })
+
+  // Module import/export
+  ipcMain.handle('module:export', (_event, { moduleId }: { moduleId: string }) => {
+    const mod = moduleRepo.get(moduleId)
+    if (!mod) return null
+    const items = moduleItemRepo.list(moduleId)
+    return JSON.stringify({ module: mod, items }, null, 2)
+  })
+
+  ipcMain.handle('module:import-data', (_event, { jsonData }: { jsonData: string }) => {
+    try {
+      const data = JSON.parse(jsonData)
+      if (!data.module || !data.items) throw new Error('Invalid module export format')
+      const modId = moduleRepo.create({
+        name: data.module.name + ' (imported)',
+        type: data.module.type,
+        description: data.module.description || '',
+        parent_id: data.module.parent_id || undefined
+      })
+      for (const item of data.items) {
+        moduleItemRepo.create({
+          module_id: modId,
+          name: item.name,
+          prompt: item.prompt,
+          negative: item.negative || '',
+          weight: item.weight ?? 1.0,
+          sort_order: item.sort_order ?? 0,
+          metadata: item.metadata || '{}'
+        })
+      }
+      return { id: modId, name: data.module.name }
+    } catch (error) {
+      return { error: (error as Error).message }
+    }
   })
 
   // Dialogs

@@ -17,6 +17,7 @@ import { parseWorkflow } from '../services/comfyui/workflow-parser'
 import { previewPrompt } from '../services/prompt/composition-engine'
 import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
+import { queueManager } from '../services/batch/queue-manager'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -293,6 +294,39 @@ export function registerIpcHandlers(): void {
   // Get tasks for a batch job
   ipcMain.handle('batch:tasks', (_event, { jobId }: { jobId: string }) => {
     return batchTaskRepo.listByJob(jobId)
+  })
+
+  // Queue execution control
+  ipcMain.handle(IPC_CHANNELS.BATCH_START, async (_event, { id }: { id: string }) => {
+    try {
+      await queueManager.startJob(id)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BATCH_PAUSE, () => {
+    queueManager.pause()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BATCH_RESUME, async () => {
+    await queueManager.resume()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BATCH_CANCEL, () => {
+    queueManager.cancel()
+    return true
+  })
+
+  ipcMain.handle('queue:status', () => {
+    return {
+      isProcessing: queueManager.isProcessing,
+      isPaused: queueManager.isPaused,
+      currentJobId: queueManager.currentJobId
+    }
   })
 
   // Gallery

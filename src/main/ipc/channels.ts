@@ -42,6 +42,7 @@ export const IPC_CHANNELS = {
   BATCH_RESUME: 'batch:resume',
   BATCH_CANCEL: 'batch:cancel',
   BATCH_DELETE: 'batch:delete',
+  BATCH_RERUN: 'batch:rerun',
 
   // Gallery
   GALLERY_LIST: 'gallery:list',

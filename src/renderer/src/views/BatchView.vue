@@ -21,6 +21,7 @@ const workflowStore = useWorkflowStore()
 // Batch jobs list
 const batchJobs = ref<Record<string, unknown>[]>([])
 const loadingJobs = ref(false)
+const editingJobId = ref<string | null>(null)
 
 // Matrix builder
 const showBuilderModal = ref(false)
@@ -194,10 +195,16 @@ const jobColumns: DataTableColumns = [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 200,
+    width: 300,
     render(row) {
       return h(NSpace, { size: 'small' }, {
         default: () => [
+          h(NButton, { size: 'tiny', quaternary: true, type: 'default', onClick: () => handleEditJob(row) }, {
+            default: () => '수정'
+          }),
+          h(NButton, { size: 'tiny', quaternary: true, type: 'warning', onClick: () => handleRerunJob(row) }, {
+            default: () => '재실행'
+          }),
           h(NButton, { size: 'tiny', quaternary: true, type: 'info', onClick: () => handleCloneJob(row) }, {
             default: () => '복제'
           }),
@@ -227,6 +234,7 @@ async function handleDeleteJob(id: string): Promise<void> {
 }
 
 async function openBuilder(): Promise<void> {
+  editingJobId.value = null
   await moduleStore.loadModules()
   await workflowStore.loadWorkflows()
   availableModules.value = moduleStore.modules
@@ -275,6 +283,12 @@ async function handleCreateBatch(): Promise<void> {
   }
 
   try {
+    // If editing, delete old job and its tasks first
+    if (editingJobId.value) {
+      await window.electron.ipcRenderer.invoke('batch:delete-tasks', { jobId: editingJobId.value })
+      await window.electron.ipcRenderer.invoke('batch:delete', { id: editingJobId.value })
+    }
+
     const result = await window.electron.ipcRenderer.invoke('batch:create', toPlain({
       name: batchName.value,
       description: batchDescription.value,
@@ -310,11 +324,105 @@ async function handleCreateBatch(): Promise<void> {
         }))
     }))
 
-    message.success(`배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
+    const isEdit = editingJobId.value !== null
+    editingJobId.value = null
+    message.success(isEdit ? `배치 작업 수정 완료: ${result.totalTasks}개 태스크` : `배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
     showBuilderModal.value = false
     await loadBatchJobs()
   } catch (error) {
-    message.error('배치 작업 생성 실패: ' + (error as Error).message)
+    message.error((editingJobId.value ? '배치 작업 수정 실패: ' : '배치 작업 생성 실패: ') + (error as Error).message)
+  }
+}
+
+async function handleEditJob(job: Record<string, unknown>): Promise<void> {
+  try {
+    const config = JSON.parse(job.config as string)
+    await moduleStore.loadModules()
+    await workflowStore.loadWorkflows()
+    availableModules.value = moduleStore.modules
+
+    editingJobId.value = job.id as string
+
+    // Restore basic settings (same as clone but without "(복사)" suffix)
+    batchName.value = job.name as string
+    batchDescription.value = config.description || ''
+    selectedWorkflowId.value = config.workflowId || null
+    countPerCombination.value = config.countPerCombination || 1
+    seedMode.value = config.seedMode || 'random'
+    fixedSeed.value = config.fixedSeed || 42
+    outputPattern.value = config.outputFolderPattern || '{job}/{character}/{outfit}/{emotion}'
+    filePattern.value = config.fileNamePattern || '{character}_{outfit}_{emotion}_{index}'
+
+    // Restore module selections
+    moduleSelections.value = []
+    if (config.moduleSelections && Array.isArray(config.moduleSelections)) {
+      for (const sel of config.moduleSelections) {
+        const mod = availableModules.value.find(m => m.id === sel.moduleId)
+        if (mod) {
+          await moduleStore.loadItems(sel.moduleId)
+          const items = [...moduleStore.currentItems]
+          moduleSelections.value.push({
+            moduleId: sel.moduleId,
+            moduleName: mod.name,
+            moduleType: sel.moduleType || mod.type,
+            items,
+            selectedItemIds: sel.selectedItemIds || items.map(i => i.id)
+          })
+        }
+      }
+    }
+
+    showBuilderModal.value = true
+
+    // Restore slot mapping actions after watcher runs
+    if (config.slotMappings && Array.isArray(config.slotMappings)) {
+      setTimeout(() => {
+        for (const savedSlot of config.slotMappings) {
+          const slot = slotMappings.value.find(s =>
+            s.nodeId === savedSlot.nodeId && s.fieldName === savedSlot.fieldName
+          )
+          if (slot) {
+            slot.action = savedSlot.action || 'inject'
+            slot.fixedValue = savedSlot.fixedValue || ''
+            slot.assignedModuleIds = savedSlot.assignedModuleIds || []
+            slot.prefixModuleIds = savedSlot.prefixModuleIds || []
+            slot.prefixText = savedSlot.prefixText || ''
+            slot.suffixText = savedSlot.suffixText || ''
+          }
+        }
+      }, 500)
+    }
+
+    // Restore variable overrides after watcher runs
+    if (config.variableOverrides && Array.isArray(config.variableOverrides)) {
+      setTimeout(() => {
+        for (const savedOverride of config.variableOverrides) {
+          const vo = variableOverrides.value.find(v =>
+            v.nodeId === savedOverride.nodeId && v.fieldName === savedOverride.fieldName
+          )
+          if (vo) {
+            vo.enabled = true
+            vo.value = savedOverride.value || ''
+          }
+        }
+      }, 500)
+    }
+  } catch (e) {
+    message.error('배치 작업 수정 실패: ' + (e instanceof Error ? e.message : String(e)))
+  }
+}
+
+async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
+  try {
+    const result = await window.electron.ipcRenderer.invoke('batch:rerun', { id: job.id as string })
+    if (result.success) {
+      message.success('배치 작업 재실행을 시작합니다')
+      await loadBatchJobs()
+    } else {
+      message.error('재실행 실패: ' + result.error)
+    }
+  } catch (e) {
+    message.error('재실행 실패: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -396,6 +504,12 @@ async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
   }
 }
 
+watch(showBuilderModal, (val) => {
+  if (!val) {
+    editingJobId.value = null
+  }
+})
+
 onMounted(() => {
   loadBatchJobs()
 })
@@ -426,7 +540,7 @@ onMounted(() => {
       v-model:show="showBuilderModal"
       preset="card"
       style="width: 900px; max-height: 85vh;"
-      :title="t('batch.builder')"
+      :title="editingJobId ? '배치 작업 수정' : t('batch.builder')"
       :bordered="false"
     >
       <NScrollbar style="max-height: 70vh;">
@@ -757,7 +871,7 @@ onMounted(() => {
         <NSpace justify="end">
           <NButton @click="showBuilderModal = false">{{ t('common.cancel') }}</NButton>
           <NButton type="primary" :disabled="taskPreview.totalTasks === 0" @click="handleCreateBatch">
-            배치 작업 생성 ({{ taskPreview.totalTasks.toLocaleString() }}장)
+            {{ editingJobId ? '배치 작업 수정' : '배치 작업 생성' }} ({{ taskPreview.totalTasks.toLocaleString() }}장)
           </NButton>
         </NSpace>
       </template>

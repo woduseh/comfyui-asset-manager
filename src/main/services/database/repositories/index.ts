@@ -509,6 +509,18 @@ export class BatchTaskRepository {
     db.run(query, params)
     saveDatabase()
   }
+
+  deleteByJob(jobId: string): void {
+    const db = getDatabase()
+    db.run('DELETE FROM batch_tasks WHERE job_id = ?', [jobId])
+    saveDatabase()
+  }
+
+  resetByJob(jobId: string): void {
+    const db = getDatabase()
+    db.run("UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL, error_message = NULL, completed_at = NULL, retry_count = 0 WHERE job_id = ?", [jobId])
+    saveDatabase()
+  }
 }
 
 export class GeneratedImageRepository {

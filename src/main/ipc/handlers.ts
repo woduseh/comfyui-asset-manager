@@ -18,7 +18,7 @@ import { previewPrompt, buildPrompt } from '../services/prompt/composition-engin
 import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
-import { getDatabase } from '../services/database'
+import { getDatabase, saveDatabase } from '../services/database'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -252,6 +252,23 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.BATCH_DELETE, (_event, { id }: { id: string }) => {
     batchJobRepo.delete(id)
     return true
+  })
+
+  ipcMain.handle('batch:delete-tasks', (_event, { jobId }: { jobId: string }) => {
+    batchTaskRepo.deleteByJob(jobId)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, async (_event, { id }: { id: string }) => {
+    try {
+      batchTaskRepo.resetByJob(id)
+      batchJobRepo.updateProgress(id, 0, 0)
+      batchJobRepo.updateStatus(id, 'draft')
+      await queueManager.startJob(id)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
   })
 
   // Batch task count preview

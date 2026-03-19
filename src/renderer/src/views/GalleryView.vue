@@ -29,6 +29,11 @@ const detailImage = ref<GalleryImage | null>(null)
 const selectionMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
 
+function toFileUrl(path: string | undefined): string {
+  if (!path) return ''
+  return 'file:///' + path.replace(/\\/g, '/')
+}
+
 const sortOptions = [
   { label: '생성일 (최신)', value: 'created_at:desc' },
   { label: '생성일 (오래된)', value: 'created_at:asc' },
@@ -201,7 +206,7 @@ onMounted(() => {
                 <NCheckbox :checked="selectedIds.has(image.id)" />
               </template>
               <NImage
-                :src="'file://' + (image.thumbnail_path || image.file_path)"
+                :src="toFileUrl(image.thumbnail_path || image.file_path)"
                 :width="200"
                 object-fit="cover"
                 style="aspect-ratio: 1; border-radius: 4px; width: 100%;"
@@ -255,7 +260,7 @@ onMounted(() => {
         <NGrid :cols="2" :x-gap="16">
           <NGridItem>
             <NImage
-              :src="'file://' + detailImage.file_path"
+              :src="toFileUrl(detailImage.file_path)"
               :width="380"
               object-fit="contain"
               style="border-radius: 4px;"

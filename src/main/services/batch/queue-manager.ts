@@ -252,8 +252,8 @@ class QueueManager {
           for (const img of nodeOut.images) {
             const imageData = await comfyuiManager.restClient.getImage(
               img.filename,
-              img.type,
-              img.subfolder
+              img.subfolder,
+              img.type
             )
 
             const fileName = this.resolveFileName(
@@ -354,12 +354,29 @@ class QueueManager {
       try {
         const history = await comfyuiManager.restClient.getHistory(promptId)
         if (history && history[promptId]) {
-          const entry = history[promptId] as { status?: { completed: boolean }; outputs?: Record<string, unknown> }
+          const entry = history[promptId] as {
+            status?: { status_str?: string; completed: boolean }
+            outputs?: Record<string, unknown>
+          }
+
+          // Check if ComfyUI reports an error
+          if (entry.status?.status_str === 'error') {
+            throw new Error('ComfyUI execution error')
+          }
+
+          // Check if execution is complete and has outputs
+          if (entry.status?.completed && entry.outputs) {
+            return { outputs: entry.outputs }
+          }
+
+          // Fallback: outputs exist even without status field
           if (entry.outputs && Object.keys(entry.outputs).length > 0) {
             return { outputs: entry.outputs }
           }
         }
-      } catch {
+      } catch (e) {
+        // Re-throw non-network errors
+        if ((e as Error).message === 'ComfyUI execution error') throw e
         // Retry on network error
       }
 

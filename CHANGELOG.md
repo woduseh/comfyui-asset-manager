@@ -2,6 +2,15 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.2.5] - 2026-03-19
+
+배치 실행 핵심 버그 수정.
+
+### Fixed
+
+- **이미지 다운로드 실패 (파라미터 순서 오류)**: `getImage(filename, type, subfolder)` → `getImage(filename, subfolder, type)`으로 수정. 파라미터 순서가 뒤바뀌어 ComfyUI에서 이미지를 가져올 수 없었고, 이로 인해 작업이 실패로 표시되고 갤러리에도 이미지가 등록되지 않았음
+- **히스토리 완료 판정 개선**: ComfyUI 히스토리 응답의 `status.completed` 및 `status.status_str` 필드를 확인하여 실행 완료/에러를 정확히 감지. 에러 상태일 때 즉시 실패 처리
+
 ## [0.2.4] - 2026-03-19
 
 ### Fixed

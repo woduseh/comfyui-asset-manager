@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GalleryQuery } from '@renderer/types/ipc'
+import { toPlain } from '@renderer/utils/ipc'
 
 export interface GalleryImage {
   id: string
@@ -38,7 +39,7 @@ export const useGalleryStore = defineStore('gallery', () => {
         ...filters.value
       } as GalleryQuery
 
-      const result = await window.electron.ipcRenderer.invoke('gallery:list', query)
+      const result = await window.electron.ipcRenderer.invoke('gallery:list', toPlain(query))
       if (result) {
         images.value = result.items as GalleryImage[]
         total.value = result.total

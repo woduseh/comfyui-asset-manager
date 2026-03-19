@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ModuleType } from '@renderer/types/ipc'
+import { toPlain } from '@renderer/utils/ipc'
 
 export interface PromptModule {
   id: string
@@ -48,13 +49,13 @@ export const useModuleStore = defineStore('module', () => {
   }
 
   async function createModule(data: { name: string; type: string; description?: string; parent_id?: string }): Promise<string> {
-    const id = await window.electron.ipcRenderer.invoke('module:create', data)
+    const id = await window.electron.ipcRenderer.invoke('module:create', toPlain(data))
     await loadModules()
     return id
   }
 
   async function updateModule(id: string, data: Partial<Record<string, unknown>>): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module:update', { id, data })
+    await window.electron.ipcRenderer.invoke('module:update', { id, data: toPlain(data) })
     await loadModules()
   }
 
@@ -76,13 +77,13 @@ export const useModuleStore = defineStore('module', () => {
     weight?: number
     sort_order?: number
   }): Promise<string> {
-    const id = await window.electron.ipcRenderer.invoke('module-item:create', data)
+    const id = await window.electron.ipcRenderer.invoke('module-item:create', toPlain(data))
     await loadItems(data.module_id)
     return id
   }
 
   async function updateItem(id: string, moduleId: string, data: Partial<Record<string, unknown>>): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module-item:update', { id, data })
+    await window.electron.ipcRenderer.invoke('module-item:update', { id, data: toPlain(data) })
     await loadItems(moduleId)
   }
 

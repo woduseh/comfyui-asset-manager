@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { toPlain } from '@renderer/utils/ipc'
 
 export interface WorkflowItem {
   id: string
@@ -38,7 +39,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   async function updateWorkflow(id: string, data: Partial<Record<string, unknown>>): Promise<void> {
-    await window.electron.ipcRenderer.invoke('workflow:update', { id, data })
+    await window.electron.ipcRenderer.invoke('workflow:update', { id, data: toPlain(data) })
     await loadWorkflows()
   }
 

@@ -2,6 +2,19 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.2.2] - 2026-03-19
+
+IPC 직렬화 오류 수정.
+
+### Fixed
+
+- **모듈 생성 실패 (structuredClone 오류)**: Vue reactive proxy 객체가 Electron IPC `structuredClone()`을 통과하지 못하는 문제 수정. `toPlain()` 유틸리티 함수를 만들어 모든 IPC 호출 전에 반응성을 제거
+- 영향 범위: module, workflow, gallery 스토어의 create/update 호출 전체에 적용
+
+### Added
+
+- `src/renderer/src/utils/ipc.ts` — `toPlain()` 유틸리티 (Vue reactivity → plain object 변환)
+
 ## [0.2.1] - 2026-03-19
 
 UI 버그 수정 3건.

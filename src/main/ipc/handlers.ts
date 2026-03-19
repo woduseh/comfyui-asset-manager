@@ -1,4 +1,6 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { readFileSync } from 'fs'
+import { basename } from 'path'
 import { IPC_CHANNELS } from './channels'
 import {
   SettingsRepository,
@@ -9,6 +11,8 @@ import {
   BatchJobRepository,
   GeneratedImageRepository
 } from '../services/database/repositories'
+import { comfyuiManager } from '../services/comfyui/manager'
+import { parseWorkflow } from '../services/comfyui/workflow-parser'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -19,6 +23,105 @@ const batchJobRepo = new BatchJobRepository()
 const imageRepo = new GeneratedImageRepository()
 
 export function registerIpcHandlers(): void {
+  // === ComfyUI Connection ===
+  ipcMain.handle(IPC_CHANNELS.COMFYUI_CONNECT, async (_event, { host, port }: { host: string; port: number }) => {
+    const success = await comfyuiManager.connect(host, port)
+    return success
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COMFYUI_DISCONNECT, () => {
+    comfyuiManager.disconnect()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COMFYUI_STATUS, () => {
+    return {
+      connected: comfyuiManager.isConnected,
+      clientId: comfyuiManager.clientId
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.COMFYUI_SYSTEM_STATS, async () => {
+    if (!comfyuiManager.isConnected) return null
+    try {
+      return await comfyuiManager.restClient.getSystemStats()
+    } catch {
+      return null
+    }
+  })
+
+  // === Available Models ===
+  ipcMain.handle('comfyui:models', async () => {
+    if (!comfyuiManager.isConnected) return null
+    try {
+      return await comfyuiManager.restClient.getAvailableModels()
+    } catch {
+      return null
+    }
+  })
+
+  // === Workflow Import ===
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_IMPORT, (_event, { filePath }: { filePath: string }) => {
+    try {
+      const content = readFileSync(filePath, 'utf-8')
+      const json = JSON.parse(content)
+      const fileName = basename(filePath, '.json')
+
+      // Detect if this is UI format or API format
+      let apiJson: string
+      let uiJson: string | null = null
+
+      if (json.nodes && json.links) {
+        // This is UI format - we'd need conversion, store as-is for now
+        // TODO: Implement UI→API format conversion
+        uiJson = content
+        throw new Error('UI format workflow detected. Please export in API format (Save API Format).')
+      } else {
+        // This is API format
+        apiJson = content
+      }
+
+      const parsed = parseWorkflow(apiJson, fileName)
+
+      // Save to database
+      const workflowId = workflowRepo.create({
+        name: parsed.name,
+        description: `Imported from ${basename(filePath)}`,
+        category: parsed.suggestedCategory,
+        api_json: apiJson,
+        ui_json: uiJson || undefined,
+        variables: JSON.stringify(parsed.variables)
+      })
+
+      // Save extracted variables
+      workflowRepo.setVariables(
+        workflowId,
+        parsed.variables.map((v) => ({
+          node_id: v.nodeId,
+          field_name: v.fieldName,
+          display_name: v.displayName,
+          var_type: v.varType,
+          default_val: v.currentValue !== undefined ? String(v.currentValue) : undefined,
+          description: `${v.nodeType} → ${v.fieldName}`
+        }))
+      )
+
+      return { id: workflowId, name: parsed.name, category: parsed.suggestedCategory, variableCount: parsed.variables.length }
+    } catch (error) {
+      return { error: (error as Error).message }
+    }
+  })
+
+  // === Workflow Variable Management ===
+  ipcMain.handle('workflow:variables', (_event, { workflowId }: { workflowId: string }) => {
+    return workflowRepo.getVariables(workflowId)
+  })
+
+  ipcMain.handle('workflow:set-variables', (_event, { workflowId, variables }: { workflowId: string; variables: Array<{ node_id: string; field_name: string; display_name: string; var_type: string; default_val?: string; description?: string }> }) => {
+    workflowRepo.setVariables(workflowId, variables)
+    return true
+  })
+
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_event, { key }: { key: string }) => {
     return settingsRepo.get(key)

@@ -1,0 +1,208 @@
+import { VARIABLE_NODE_TYPES, type ComfyUINode } from './types'
+
+export interface ParsedVariable {
+  nodeId: string
+  nodeTitle: string
+  nodeType: string
+  fieldName: string
+  displayName: string
+  varType: string
+  currentValue: unknown
+}
+
+export interface ParsedWorkflow {
+  name: string
+  nodes: Record<string, ComfyUINode>
+  variables: ParsedVariable[]
+  suggestedCategory: 'generation' | 'upscale' | 'detailer' | 'custom'
+}
+
+/**
+ * Parse a ComfyUI API-format workflow JSON and extract configurable variables.
+ */
+export function parseWorkflow(apiJson: string, name?: string): ParsedWorkflow {
+  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+  const variables: ParsedVariable[] = []
+
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    const nodeType = node.class_type
+    const nodeTitle = node._meta?.title || `${nodeType} #${nodeId}`
+    const knownType = VARIABLE_NODE_TYPES[nodeType]
+
+    if (knownType) {
+      for (const fieldDef of knownType.fields) {
+        const currentValue = node.inputs[fieldDef.name]
+        // Skip inputs that are links to other nodes (arrays like [nodeId, outputIndex])
+        if (Array.isArray(currentValue)) continue
+
+        variables.push({
+          nodeId,
+          nodeTitle,
+          nodeType,
+          fieldName: fieldDef.name,
+          displayName: `${nodeTitle} - ${fieldDef.displayName}`,
+          varType: fieldDef.type,
+          currentValue
+        })
+      }
+    } else {
+      // For unknown node types, extract primitive inputs (not node links)
+      for (const [fieldName, value] of Object.entries(node.inputs)) {
+        if (Array.isArray(value)) continue // Skip node links
+
+        const varType = inferVarType(fieldName, value)
+        if (varType) {
+          variables.push({
+            nodeId,
+            nodeTitle,
+            nodeType,
+            fieldName,
+            displayName: `${nodeTitle} - ${fieldName}`,
+            varType,
+            currentValue: value
+          })
+        }
+      }
+    }
+  }
+
+  const suggestedCategory = detectCategory(nodes)
+
+  return {
+    name: name || 'Imported Workflow',
+    nodes,
+    variables,
+    suggestedCategory
+  }
+}
+
+/**
+ * Infer variable type from field name and value.
+ */
+function inferVarType(fieldName: string, value: unknown): string | null {
+  const name = fieldName.toLowerCase()
+
+  if (name.includes('seed')) return 'seed'
+  if (name.includes('text') || name.includes('prompt')) return 'text'
+  if (name.includes('ckpt') || name.includes('checkpoint') || name.includes('model_name'))
+    return 'model'
+  if (name.includes('lora')) return 'lora'
+  if (name.includes('image') && typeof value === 'string') return 'image'
+
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'boolean') return 'boolean'
+  if (typeof value === 'string') return 'text'
+
+  return null
+}
+
+/**
+ * Detect the workflow category based on its node composition.
+ */
+function detectCategory(
+  nodes: Record<string, ComfyUINode>
+): 'generation' | 'upscale' | 'detailer' | 'custom' {
+  const nodeTypes = new Set(Object.values(nodes).map((n) => n.class_type))
+
+  // Upscale detection
+  const upscaleIndicators = [
+    'UpscaleModelLoader',
+    'ImageUpscaleWithModel',
+    'LatentUpscale',
+    'ImageScaleBy',
+    'ImageScale'
+  ]
+  if (upscaleIndicators.some((t) => nodeTypes.has(t))) {
+    // If it also has a sampler, it might be a generation+upscale pipeline
+    const hasSampler = nodeTypes.has('KSampler') || nodeTypes.has('KSamplerAdvanced')
+    const hasEmptyLatent = nodeTypes.has('EmptyLatentImage')
+    if (!hasSampler || !hasEmptyLatent) {
+      return 'upscale'
+    }
+  }
+
+  // Detailer detection
+  const detailerIndicators = [
+    'FaceDetailer',
+    'DetailerForEach',
+    'DetailerForEachDebug',
+    'DetailerForEachPipe',
+    'UltralyticsDetectorProvider',
+    'SAMLoader'
+  ]
+  if (detailerIndicators.some((t) => nodeTypes.has(t))) {
+    return 'detailer'
+  }
+
+  // Generation detection
+  const generationIndicators = ['KSampler', 'KSamplerAdvanced', 'SamplerCustom']
+  if (generationIndicators.some((t) => nodeTypes.has(t))) {
+    return 'generation'
+  }
+
+  return 'custom'
+}
+
+/**
+ * Apply variable values to a workflow template, producing a ready-to-submit prompt.
+ */
+export function applyVariables(
+  apiJson: string,
+  variableValues: Record<string, Record<string, unknown>>
+): Record<string, ComfyUINode> {
+  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+
+  for (const [nodeId, fields] of Object.entries(variableValues)) {
+    if (nodes[nodeId]) {
+      for (const [fieldName, value] of Object.entries(fields)) {
+        nodes[nodeId].inputs[fieldName] = value
+      }
+    }
+  }
+
+  return nodes
+}
+
+/**
+ * Get a list of prompt text nodes from a workflow (CLIPTextEncode nodes).
+ * Useful for identifying which nodes should receive prompt module content.
+ */
+export function getPromptNodes(
+  apiJson: string
+): Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> {
+  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+  const result: Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> =
+    []
+
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    if (node.class_type === 'CLIPTextEncode') {
+      const text = (node.inputs.text as string) || ''
+      const title = node._meta?.title || `CLIPTextEncode #${nodeId}`
+      const isNegative = isLikelyNegativePrompt(title, text)
+
+      result.push({ nodeId, title, currentText: text, isNegative })
+    }
+  }
+
+  return result
+}
+
+/**
+ * Heuristic to detect if a CLIPTextEncode node is a negative prompt.
+ */
+function isLikelyNegativePrompt(title: string, text: string): boolean {
+  const titleLower = title.toLowerCase()
+  if (titleLower.includes('negative') || titleLower.includes('neg')) return true
+
+  const negativeKeywords = [
+    'worst quality',
+    'low quality',
+    'bad anatomy',
+    'bad hands',
+    'blurry',
+    'deformed',
+    'ugly'
+  ]
+  const matchCount = negativeKeywords.filter((kw) => text.toLowerCase().includes(kw)).length
+  return matchCount >= 2
+}

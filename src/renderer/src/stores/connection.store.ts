@@ -14,6 +14,7 @@ export const useConnectionStore = defineStore('connection', () => {
   )
 
   const isConnected = computed(() => status.value.connected)
+  const isConnecting = computed(() => connectionState.value === 'connecting')
 
   async function connect(host?: string, port?: number): Promise<boolean> {
     connectionState.value = 'connecting'
@@ -62,6 +63,7 @@ export const useConnectionStore = defineStore('connection', () => {
     status,
     connectionState,
     isConnected,
+    isConnecting,
     connect,
     disconnect,
     fetchSystemStats,

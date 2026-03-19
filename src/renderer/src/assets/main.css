@@ -38,3 +38,49 @@ h2 {
   font-size: 22px;
   font-weight: 600;
 }
+
+/* ═══ v0.6.0 Global Style Improvements ═══ */
+
+/* Unified border-radius */
+:root {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+/* Smooth transitions for interactive elements */
+.n-card,
+.n-tag,
+.n-button {
+  transition: all 0.2s ease !important;
+}
+
+/* Card hover effect */
+.n-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Better empty states */
+.n-empty {
+  padding: 40px 20px !important;
+}
+
+/* Tag rounded by default */
+.n-tag {
+  border-radius: 999px !important;
+}
+
+/* Modal improvements */
+.n-modal .n-card {
+  border-radius: var(--radius-lg) !important;
+}
+
+/* Gentle animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.n-card {
+  animation: fadeIn 0.2s ease;
+}

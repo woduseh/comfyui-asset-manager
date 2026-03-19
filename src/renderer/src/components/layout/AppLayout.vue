@@ -2,15 +2,13 @@
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { NMenu, NLayout, NLayoutSider, NIcon, NBadge } from 'naive-ui'
+import { NMenu, NLayout, NLayoutSider, NLayoutHeader, NIcon, NButton, NSpace, NTag, NBadge } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { h } from 'vue'
 import {
-  GridOutline,
   GitNetworkOutline,
   CubeOutline,
-  LayersOutline,
-  ListOutline,
+  FlashOutline,
   ImagesOutline,
   SettingsOutline
 } from '@vicons/ionicons5'
@@ -23,16 +21,11 @@ const { t } = useI18n()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 
-function renderIcon(icon: ReturnType<typeof GridOutline>) {
+function renderIcon(icon: ReturnType<typeof GitNetworkOutline>) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
-const menuOptions = computed<MenuOption[]>(() => [
-  {
-    label: t('nav.dashboard'),
-    key: 'dashboard',
-    icon: renderIcon(GridOutline)
-  },
+const mainMenuOptions = computed<MenuOption[]>(() => [
   {
     label: t('nav.workflows'),
     key: 'workflows',
@@ -44,26 +37,24 @@ const menuOptions = computed<MenuOption[]>(() => [
     icon: renderIcon(CubeOutline)
   },
   {
-    label: t('nav.batch'),
-    key: 'batch',
-    icon: renderIcon(LayersOutline)
-  },
-  {
     label: () =>
       h('span', {}, [
-        t('nav.queue'),
+        t('nav.jobs'),
         queueStore.isProcessing
           ? h(NBadge, { value: queueStore.totalProgress + '%', type: 'info', style: 'margin-left: 8px' })
           : null
       ]),
-    key: 'queue',
-    icon: renderIcon(ListOutline)
+    key: 'jobs',
+    icon: renderIcon(FlashOutline)
   },
   {
     label: t('nav.gallery'),
     key: 'gallery',
     icon: renderIcon(ImagesOutline)
-  },
+  }
+])
+
+const settingsMenuOptions = computed<MenuOption[]>(() => [
   {
     label: t('nav.settings'),
     key: 'settings',
@@ -72,11 +63,22 @@ const menuOptions = computed<MenuOption[]>(() => [
 ])
 
 const activeKey = computed(() => {
-  return route.name as string || 'dashboard'
+  return route.name as string || 'workflows'
 })
 
 function handleMenuUpdate(key: string): void {
   router.push({ name: key })
+}
+
+async function handleToggleConnection(): Promise<void> {
+  if (connectionStore.isConnected) {
+    await connectionStore.disconnect()
+  } else {
+    const settings = await window.electron.ipcRenderer.invoke('settings:getAll')
+    const host = settings?.comfyui_host || 'localhost'
+    const port = parseInt(settings?.comfyui_port) || 8188
+    await connectionStore.connect(host, port)
+  }
 }
 </script>
 
@@ -84,47 +86,71 @@ function handleMenuUpdate(key: string): void {
   <NLayout has-sider style="height: 100vh">
     <NLayoutSider
       bordered
-      :width="220"
+      :width="200"
       :collapsed-width="64"
       collapse-mode="width"
       show-trigger
-      content-style="padding: 8px 0;"
+      content-style="display: flex; flex-direction: column; height: 100%;"
     >
       <div class="app-logo">
         <span class="logo-text">ComfyUI AM</span>
       </div>
 
       <NMenu
-        :options="menuOptions"
+        :options="mainMenuOptions"
+        :value="activeKey"
+        @update:value="handleMenuUpdate"
+        style="flex: 1;"
+      />
+
+      <NMenu
+        :options="settingsMenuOptions"
         :value="activeKey"
         @update:value="handleMenuUpdate"
       />
-
-      <div class="connection-status">
-        <div
-          class="status-dot"
-          :class="{ connected: connectionStore.isConnected }"
-        />
-        <span class="status-text">
-          {{ connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected') }}
-        </span>
-      </div>
     </NLayoutSider>
 
-    <NLayout content-style="padding: 24px;">
-      <router-view />
+    <NLayout>
+      <NLayoutHeader bordered style="height: 48px; padding: 0 20px; display: flex; align-items: center; justify-content: flex-end;">
+        <NSpace align="center" :size="12">
+          <NTag
+            :type="connectionStore.isConnected ? 'success' : 'error'"
+            size="small"
+            round
+          >
+            <template #icon>
+              <div
+                class="status-dot"
+                :class="{ connected: connectionStore.isConnected }"
+              />
+            </template>
+            {{ connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected') }}
+          </NTag>
+          <NButton
+            size="tiny"
+            :type="connectionStore.isConnected ? 'default' : 'primary'"
+            @click="handleToggleConnection"
+            :loading="connectionStore.isConnecting"
+          >
+            {{ connectionStore.isConnected ? t('connection.disconnect') : t('connection.connect') }}
+          </NButton>
+        </NSpace>
+      </NLayoutHeader>
+
+      <NLayout content-style="padding: 20px; overflow: auto;" style="height: calc(100vh - 48px);">
+        <router-view />
+      </NLayout>
     </NLayout>
   </NLayout>
 </template>
 
 <style scoped>
 .app-logo {
-  padding: 16px;
+  padding: 14px;
   text-align: center;
   font-weight: bold;
-  font-size: 18px;
+  font-size: 17px;
   border-bottom: 1px solid var(--n-border-color);
-  margin-bottom: 8px;
 }
 
 .logo-text {
@@ -134,23 +160,9 @@ function handleMenuUpdate(key: string): void {
   background-clip: text;
 }
 
-.connection-status {
-  position: absolute;
-  bottom: 16px;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px;
-  font-size: 12px;
-  opacity: 0.7;
-}
-
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #ef4444;
   transition: background 0.3s;
@@ -160,7 +172,10 @@ function handleMenuUpdate(key: string): void {
   background: #22c55e;
 }
 
-.status-text {
-  white-space: nowrap;
+/* Sidebar smooth styling */
+:deep(.n-menu-item-content) {
+  transition: background 0.2s ease, color 0.2s ease !important;
+  border-radius: 8px !important;
+  margin: 2px 6px !important;
 }
 </style>

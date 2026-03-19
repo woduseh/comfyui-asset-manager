@@ -4,8 +4,7 @@ import type { RouteRecordRaw } from 'vue-router'
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'dashboard',
-    component: () => import('@renderer/views/DashboardView.vue')
+    redirect: '/workflows'
   },
   {
     path: '/workflows',
@@ -18,14 +17,9 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@renderer/views/ModuleView.vue')
   },
   {
-    path: '/batch',
-    name: 'batch',
-    component: () => import('@renderer/views/BatchView.vue')
-  },
-  {
-    path: '/queue',
-    name: 'queue',
-    component: () => import('@renderer/views/QueueView.vue')
+    path: '/jobs',
+    name: 'jobs',
+    component: () => import('@renderer/views/JobsView.vue')
   },
   {
     path: '/gallery',

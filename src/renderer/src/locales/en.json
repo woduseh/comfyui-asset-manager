@@ -9,6 +9,7 @@
     "modules": "Prompt Modules",
     "batch": "Batch Jobs",
     "queue": "Queue Monitor",
+    "jobs": "Jobs",
     "gallery": "Gallery",
     "settings": "Settings"
   },
@@ -16,7 +17,9 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "connecting": "Connecting...",
-    "reconnecting": "Reconnecting..."
+    "reconnecting": "Reconnecting...",
+    "connect": "Connect",
+    "disconnect": "Disconnect"
   },
   "settings": {
     "title": "Settings",

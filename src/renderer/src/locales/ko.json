@@ -9,6 +9,7 @@
     "modules": "프롬프트 모듈",
     "batch": "배치 작업",
     "queue": "큐 모니터",
+    "jobs": "작업",
     "gallery": "갤러리",
     "settings": "설정"
   },
@@ -16,7 +17,9 @@
     "connected": "연결됨",
     "disconnected": "연결 안 됨",
     "connecting": "연결 중...",
-    "reconnecting": "재연결 중..."
+    "reconnecting": "재연결 중...",
+    "connect": "연결",
+    "disconnect": "연결 해제"
   },
   "settings": {
     "title": "설정",

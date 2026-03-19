@@ -140,27 +140,16 @@ onMounted(() => {
 
 <template>
   <div class="gallery-view">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h2>{{ t('gallery.title') }} <NTag size="small" round>{{ galleryStore.total }}</NTag></h2>
-      <NSpace>
-        <NButton size="small" :type="selectionMode ? 'primary' : 'default'" @click="toggleSelectionMode">
-          {{ selectionMode ? '선택 해제' : '선택 모드' }}
-        </NButton>
-        <template v-if="selectionMode && selectedIds.size > 0">
-          <NButton size="small" @click="selectAll">전체 선택</NButton>
-          <NPopconfirm @positive-click="deleteSelected">
-            <template #trigger>
-              <NButton size="small" type="error">{{ selectedIds.size }}장 삭제</NButton>
-            </template>
-            선택한 {{ selectedIds.size }}장을 삭제하시겠습니까?
-          </NPopconfirm>
-        </template>
-      </NSpace>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 style="margin: 0;">
+        {{ t('gallery.title') }}
+        <NTag v-if="galleryStore.total > 0" size="small" round style="margin-left: 8px;">{{ galleryStore.total }}</NTag>
+      </h2>
     </div>
 
     <!-- Filter bar -->
-    <NCard size="small" style="margin-top: 12px;">
-      <NSpace align="center" :wrap="true">
+    <NCard size="small" style="margin-bottom: 16px;">
+      <NSpace align="center" :wrap="false" :size="12">
         <NSelect
           :value="sortBy + ':' + sortOrder"
           :options="sortOptions"
@@ -172,24 +161,47 @@ onMounted(() => {
           v-model:value="filterRating"
           :options="ratingOptions"
           size="small"
+          style="width: 120px;"
           placeholder="평점"
-          style="width: 100px;"
           clearable
           @update:value="applyFilters"
         />
         <NButton
           size="small"
           :type="filterFavorite ? 'warning' : 'default'"
+          :tertiary="!filterFavorite"
+          round
           @click="filterFavorite = filterFavorite ? null : true"
         >
           {{ filterFavorite ? '♥ 즐겨찾기' : '♡ 즐겨찾기' }}
         </NButton>
-        <NButton size="small" quaternary @click="clearFilters">필터 초기화</NButton>
+        <NButton size="small" quaternary @click="clearFilters" v-if="filterRating || filterFavorite">
+          필터 초기화
+        </NButton>
+        <div style="flex: 1;" />
+        <NButton
+          size="small"
+          :type="selectionMode ? 'primary' : 'default'"
+          @click="toggleSelectionMode"
+        >
+          {{ selectionMode ? '선택 해제' : '선택 모드' }}
+        </NButton>
+        <template v-if="selectionMode">
+          <NButton size="small" @click="selectAll">전체 선택</NButton>
+          <NPopconfirm @positive-click="deleteSelected">
+            <template #trigger>
+              <NButton size="small" type="error" :disabled="selectedIds.size === 0">
+                삭제 ({{ selectedIds.size }})
+              </NButton>
+            </template>
+            선택한 {{ selectedIds.size }}장을 삭제하시겠습니까?
+          </NPopconfirm>
+        </template>
       </NSpace>
     </NCard>
 
     <!-- Image grid -->
-    <NCard style="margin-top: 12px;">
+    <NCard style="margin-top: 0;">
       <template v-if="galleryStore.images.length > 0">
         <NGrid :cols="5" :x-gap="12" :y-gap="12" responsive="screen" :cols-s="2" :cols-m="3" :cols-l="4" :cols-xl="5">
           <NGridItem v-for="image in galleryStore.images" :key="image.id">
@@ -198,7 +210,9 @@ onMounted(() => {
               hoverable
               :style="{
                 cursor: 'pointer',
-                border: selectedIds.has(image.id) ? '2px solid #63e2b7' : undefined
+                border: selectedIds.has(image.id) ? '2px solid #63e2b7' : undefined,
+                borderRadius: '12px',
+                overflow: 'hidden'
               }"
               @click="openDetail(image)"
             >
@@ -209,7 +223,7 @@ onMounted(() => {
                 :src="toFileUrl(image.thumbnail_path || image.file_path)"
                 :width="200"
                 object-fit="cover"
-                style="aspect-ratio: 1; border-radius: 4px; width: 100%;"
+                style="aspect-ratio: 1; border-radius: 8px; width: 100%;"
                 preview-disabled
               />
               <NSpace justify="space-between" align="center" style="margin-top: 8px;">
@@ -263,7 +277,7 @@ onMounted(() => {
               :src="toFileUrl(detailImage.file_path)"
               :width="380"
               object-fit="contain"
-              style="border-radius: 4px;"
+              style="border-radius: 8px;"
             />
           </NGridItem>
           <NGridItem>

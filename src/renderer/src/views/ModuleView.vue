@@ -248,56 +248,71 @@ onMounted(() => {
     </div>
 
     <!-- Filter bar -->
-    <NSpace style="margin-top: 12px;">
-      <NButton
-        size="small"
-        :type="!filterType ? 'primary' : 'default'"
-        @click="filterType = null"
-      >전체</NButton>
-      <NButton
-        v-for="opt in moduleTypeOptions"
-        :key="opt.value"
-        size="small"
-        :type="filterType === opt.value ? 'primary' : 'default'"
-        @click="filterType = opt.value"
-      >{{ opt.label }}</NButton>
-    </NSpace>
+    <div style="margin: 12px 0;">
+      <NSpace :size="4" :wrap="true">
+        <NButton
+          size="small"
+          :type="!filterType ? 'primary' : 'default'"
+          :tertiary="!!filterType"
+          round
+          @click="filterType = null"
+        >전체</NButton>
+        <NButton
+          v-for="opt in moduleTypeOptions"
+          :key="opt.value"
+          size="small"
+          :type="filterType === opt.value ? 'primary' : 'default'"
+          :tertiary="filterType !== opt.value"
+          round
+          @click="filterType = opt.value"
+        >{{ opt.label }}</NButton>
+      </NSpace>
+    </div>
 
     <NGrid :cols="selectedModuleId ? 2 : 1" :x-gap="16" style="margin-top: 16px;">
-      <!-- Module list -->
+      <!-- Module list (card grid) -->
       <NGridItem>
-        <NCard title="모듈 목록">
-          <NList v-if="filteredModules.length > 0" bordered clickable>
-            <NListItem
-              v-for="mod in filteredModules"
-              :key="mod.id"
-              :style="{ backgroundColor: selectedModuleId === mod.id ? 'rgba(99, 226, 183, 0.1)' : undefined, cursor: 'pointer' }"
-              @click="selectModule(mod.id)"
-            >
-              <NThing :title="mod.name" :description="mod.description || undefined">
-                <template #header-extra>
-                  <NSpace>
-                    <NTag :type="typeColors[mod.type] || 'default'" size="small">
-                      {{ t(`module.type.${mod.type}`) }}
-                    </NTag>
-                    <NButton size="tiny" quaternary @click.stop="openEditModule(mod)">
-                      {{ t('common.edit') }}
-                    </NButton>
-                    <NPopconfirm @positive-click="handleDeleteModule(mod.id)">
-                      <template #trigger>
-                        <NButton size="tiny" quaternary type="error" @click.stop>
-                          {{ t('common.delete') }}
-                        </NButton>
-                      </template>
-                      삭제하시겠습니까?
-                    </NPopconfirm>
-                  </NSpace>
+        <div v-if="filteredModules.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+          <NCard
+            v-for="mod in filteredModules"
+            :key="mod.id"
+            size="small"
+            hoverable
+            :style="{
+              cursor: 'pointer',
+              borderRadius: '12px',
+              borderColor: selectedModuleId === mod.id ? '#63e2b7' : undefined,
+              borderWidth: selectedModuleId === mod.id ? '2px' : '1px'
+            }"
+            @click="selectModule(mod.id)"
+          >
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div style="font-weight: 600; font-size: 14px;">{{ mod.name }}</div>
+                <div v-if="mod.description" style="font-size: 12px; opacity: 0.6; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px;">
+                  {{ mod.description }}
+                </div>
+              </div>
+              <NTag :type="typeColors[mod.type] || 'default'" size="small" round>
+                {{ t(`module.type.${mod.type}`) }}
+              </NTag>
+            </div>
+            <NSpace size="small" style="margin-top: 8px;" @click.stop>
+              <NButton size="tiny" quaternary @click.stop="openEditModule(mod)">
+                {{ t('common.edit') }}
+              </NButton>
+              <NPopconfirm @positive-click="handleDeleteModule(mod.id)">
+                <template #trigger>
+                  <NButton size="tiny" quaternary type="error" @click.stop>
+                    {{ t('common.delete') }}
+                  </NButton>
                 </template>
-              </NThing>
-            </NListItem>
-          </NList>
-          <NEmpty v-else :description="t('module.empty')" />
-        </NCard>
+                삭제하시겠습니까?
+              </NPopconfirm>
+            </NSpace>
+          </NCard>
+        </div>
+        <NEmpty v-else :description="t('module.empty')" />
       </NGridItem>
 
       <!-- Item detail panel -->

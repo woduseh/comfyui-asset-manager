@@ -176,6 +176,11 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
+  // Migration: add sort_order column for batch_jobs
+  try {
+    database.run(`ALTER TABLE batch_jobs ADD COLUMN sort_order INTEGER DEFAULT 0`)
+  } catch { /* Column already exists */ }
+
   database.run(`
     CREATE TABLE IF NOT EXISTS batch_tasks (
       id                TEXT PRIMARY KEY,

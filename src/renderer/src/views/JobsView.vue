@@ -7,6 +7,7 @@ import {
   NCheckboxGroup, NCheckbox, NAlert, NScrollbar, NSwitch, NSlider,
   NProgress, NStatistic, useMessage
 } from 'naive-ui'
+import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
@@ -183,6 +184,25 @@ async function loadBatchJobs(): Promise<void> {
 async function loadQueueStatus(): Promise<void> {
   try { queueStatus.value = await window.electron.ipcRenderer.invoke('queue:status') }
   catch { /* ignore */ }
+}
+
+async function handleReorderJobs(): Promise<void> {
+  const jobIds = batchJobs.value.map(j => j.id as string)
+  await window.electron.ipcRenderer.invoke('batch:reorder', { jobIds })
+}
+
+function getModuleName(moduleId: string): string {
+  const mod = availableModules.value.find(m => m.id === moduleId)
+  return mod ? mod.name : moduleId.slice(0, 8)
+}
+
+function removePrefixModule(slot: SlotMapping, moduleId: string): void {
+  slot.prefixModuleIds = slot.prefixModuleIds.filter(id => id !== moduleId)
+}
+
+function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
+  if (!moduleId || slot.prefixModuleIds.includes(moduleId)) return
+  slot.prefixModuleIds.push(moduleId)
 }
 
 // ─── Queue controls ───
@@ -439,8 +459,15 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
       />
     </NCard>
 
-    <!-- Job cards -->
-    <div v-if="batchJobs.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;">
+    <!-- Job cards (draggable) -->
+    <VueDraggable
+      v-if="batchJobs.length > 0"
+      v-model="batchJobs"
+      animation="200"
+      handle=".job-drag-handle"
+      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;"
+      @end="handleReorderJobs"
+    >
       <NCard
         v-for="job in batchJobs"
         :key="(job.id as string)"
@@ -448,19 +475,22 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
         :style="{ borderRadius: '12px', borderLeft: job.status === 'running' ? '3px solid #f0a020' : job.status === 'completed' ? '3px solid #63e2b7' : job.status === 'failed' ? '3px solid #e88080' : undefined }"
       >
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-          <div>
-            <div style="font-weight: 600;">{{ job.name }}</div>
-            <NSpace :size="6" style="margin-top: 4px;">
-              <NTag :type="statusColors[job.status as string] || 'default'" size="small" round>
-                {{ statusLabels[job.status as string] || job.status }}
-              </NTag>
-              <span style="font-size: 12px; opacity: 0.5;">
-                {{ (job.completed_tasks ?? 0) }}/{{ job.total_tasks ?? 0 }}장
-              </span>
-              <NTag v-if="(job.failed_tasks as number) > 0" type="error" size="small" round>
-                실패 {{ job.failed_tasks }}
-              </NTag>
-            </NSpace>
+          <div style="display: flex; align-items: flex-start;">
+            <span class="job-drag-handle" style="cursor: grab; padding: 2px 8px 0 0; opacity: 0.3; font-size: 14px;">⠿</span>
+            <div>
+              <div style="font-weight: 600;">{{ job.name }}</div>
+              <NSpace :size="6" style="margin-top: 4px;">
+                <NTag :type="statusColors[job.status as string] || 'default'" size="small" round>
+                  {{ statusLabels[job.status as string] || job.status }}
+                </NTag>
+                <span style="font-size: 12px; opacity: 0.5;">
+                  {{ (job.completed_tasks ?? 0) }}/{{ job.total_tasks ?? 0 }}장
+                </span>
+                <NTag v-if="(job.failed_tasks as number) > 0" type="error" size="small" round>
+                  실패 {{ job.failed_tasks }}
+                </NTag>
+              </NSpace>
+            </div>
           </div>
         </div>
 
@@ -491,7 +521,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
           <NButton size="tiny" quaternary type="error" @click="handleDeleteJob(job.id as string)">삭제</NButton>
         </NSpace>
       </NCard>
-    </div>
+    </VueDraggable>
     <NCard v-else>
       <NEmpty description="배치 작업이 없습니다. 새 배치 작업을 만들어보세요." />
     </NCard>
@@ -626,10 +656,28 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
                   <div style="margin-bottom: 6px;">
                     <span style="font-size: 11px; opacity: 0.6;">고정 모듈:</span>
                     <NSelect
-                      v-model:value="slot.prefixModuleIds" multiple filterable size="small"
-                      placeholder="품질, 스타일 등"
-                      :options="availableModules.map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
+                      :value="null"
+                      filterable size="small"
+                      placeholder="+ 모듈 추가"
+                      :options="availableModules.filter(m => !slot.prefixModuleIds.includes(m.id)).map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
+                      @update:value="(v: string) => addPrefixModule(slot, v)"
                     />
+                    <VueDraggable
+                      v-if="slot.prefixModuleIds.length > 0"
+                      v-model="slot.prefixModuleIds"
+                      animation="200"
+                      style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;"
+                    >
+                      <NTag
+                        v-for="mid in slot.prefixModuleIds"
+                        :key="mid"
+                        size="small" round closable
+                        style="cursor: grab;"
+                        @close="removePrefixModule(slot, mid)"
+                      >
+                        {{ getModuleName(mid) }}
+                      </NTag>
+                    </VueDraggable>
                   </div>
                   <NInput
                     v-model:value="slot.prefixText"

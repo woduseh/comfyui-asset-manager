@@ -217,6 +217,11 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_REORDER, (_event, { itemIds }: { itemIds: string[] }) => {
+    moduleItemRepo.reorder(itemIds)
+    return true
+  })
+
   // Characters
   ipcMain.handle(IPC_CHANNELS.CHARACTER_LIST, () => {
     return characterRepo.list()
@@ -251,6 +256,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BATCH_DELETE, (_event, { id }: { id: string }) => {
     batchJobRepo.delete(id)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.BATCH_REORDER, (_event, { jobIds }: { jobIds: string[] }) => {
+    batchJobRepo.reorder(jobIds)
     return true
   })
 

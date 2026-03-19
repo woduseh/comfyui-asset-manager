@@ -294,6 +294,14 @@ export class ModuleItemRepository {
     db.run('DELETE FROM module_items WHERE id = ?', [id])
     saveDatabase()
   }
+
+  reorder(itemIds: string[]): void {
+    const db = getDatabase()
+    for (let i = 0; i < itemIds.length; i++) {
+      db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
+    }
+    saveDatabase()
+  }
 }
 
 export class CharacterRepository {
@@ -364,7 +372,7 @@ export class BatchJobRepository {
       query += ' WHERE status = ?'
       params.push(status)
     }
-    query += ' ORDER BY created_at DESC'
+    query += ' ORDER BY sort_order ASC, created_at DESC'
     const stmt = db.prepare(query)
     if (params.length) stmt.bind(params as string[])
     const results: Record<string, unknown>[] = []
@@ -440,6 +448,14 @@ export class BatchJobRepository {
   delete(id: string): void {
     const db = getDatabase()
     db.run('DELETE FROM batch_jobs WHERE id = ?', [id])
+    saveDatabase()
+  }
+
+  reorder(jobIds: string[]): void {
+    const db = getDatabase()
+    for (let i = 0; i < jobIds.length; i++) {
+      db.run('UPDATE batch_jobs SET sort_order = ? WHERE id = ?', [i, jobIds[i]])
+    }
     saveDatabase()
   }
 }

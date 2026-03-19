@@ -7,6 +7,7 @@ import {
   NInputNumber, NSwitch, NGrid, NGridItem, NDivider,
   NCollapse, NCollapseItem, NPopconfirm, useMessage
 } from 'naive-ui'
+import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 
 const { t } = useI18n()
@@ -230,6 +231,12 @@ async function handleImportModule(): Promise<void> {
   }
 }
 
+async function handleReorderItems(): Promise<void> {
+  if (!selectedModuleId.value) return
+  const itemIds = moduleStore.currentItems.map(item => item.id)
+  await window.electron.ipcRenderer.invoke('module-item:reorder', { itemIds })
+}
+
 onMounted(() => {
   moduleStore.loadModules()
 })
@@ -327,14 +334,23 @@ onMounted(() => {
             </NSpace>
           </template>
 
-          <!-- Items -->
-          <NList v-if="moduleStore.currentItems.length > 0" bordered>
-            <NListItem v-for="item in moduleStore.currentItems" :key="item.id">
-              <NThing
-                :title="item.name"
-                :description="item.prompt.length > 80 ? item.prompt.substring(0, 80) + '...' : item.prompt"
-              >
-                <template #header-extra>
+          <!-- Items (draggable) -->
+          <VueDraggable
+            v-if="moduleStore.currentItems.length > 0"
+            v-model="moduleStore.currentItems"
+            handle=".drag-handle"
+            animation="200"
+            @end="handleReorderItems"
+          >
+            <div
+              v-for="item in moduleStore.currentItems"
+              :key="item.id"
+              style="display: flex; align-items: center; padding: 10px; border-radius: 10px; background: rgba(128,128,128,0.06); margin-bottom: 6px;"
+            >
+              <span class="drag-handle" style="cursor: grab; padding: 0 8px 0 0; opacity: 0.4; font-size: 16px;">⠿</span>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-weight: 600; font-size: 13px;">{{ item.name }}</span>
                   <NSpace align="center" :size="4">
                     <NTag v-if="item.weight !== 1.0" size="tiny" round>w:{{ item.weight }}</NTag>
                     <NSwitch
@@ -354,10 +370,13 @@ onMounted(() => {
                       삭제하시겠습니까?
                     </NPopconfirm>
                   </NSpace>
-                </template>
-              </NThing>
-            </NListItem>
-          </NList>
+                </div>
+                <div style="font-size: 12px; opacity: 0.5; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                  {{ item.prompt.length > 80 ? item.prompt.substring(0, 80) + '...' : item.prompt }}
+                </div>
+              </div>
+            </div>
+          </VueDraggable>
           <NEmpty v-else description="아이템을 추가하세요" />
 
           <!-- Prompt Preview -->

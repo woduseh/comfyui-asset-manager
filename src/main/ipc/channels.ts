@@ -25,6 +25,7 @@ export const IPC_CHANNELS = {
   MODULE_ITEM_CREATE: 'module-item:create',
   MODULE_ITEM_UPDATE: 'module-item:update',
   MODULE_ITEM_DELETE: 'module-item:delete',
+  MODULE_ITEM_REORDER: 'module-item:reorder',
 
   // Characters
   CHARACTER_LIST: 'character:list',
@@ -43,6 +44,7 @@ export const IPC_CHANNELS = {
   BATCH_CANCEL: 'batch:cancel',
   BATCH_DELETE: 'batch:delete',
   BATCH_RERUN: 'batch:rerun',
+  BATCH_REORDER: 'batch:reorder',
 
   // Gallery
   GALLERY_LIST: 'gallery:list',

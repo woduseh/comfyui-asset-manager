@@ -409,6 +409,59 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  // Dashboard statistics
+  ipcMain.handle('dashboard:stats', () => {
+    const db = require('../services/database').getDatabase()
+
+    const imgCountStmt = db.prepare('SELECT COUNT(*) as count FROM generated_images')
+    imgCountStmt.step()
+    const totalImages = (imgCountStmt.getAsObject() as { count: number }).count
+    imgCountStmt.free()
+
+    const favCountStmt = db.prepare('SELECT COUNT(*) as count FROM generated_images WHERE is_favorite = 1')
+    favCountStmt.step()
+    const favoriteCount = (favCountStmt.getAsObject() as { count: number }).count
+    favCountStmt.free()
+
+    const jobCountStmt = db.prepare('SELECT COUNT(*) as count FROM batch_jobs')
+    jobCountStmt.step()
+    const totalJobs = (jobCountStmt.getAsObject() as { count: number }).count
+    jobCountStmt.free()
+
+    const completedJobsStmt = db.prepare("SELECT COUNT(*) as count FROM batch_jobs WHERE status = 'completed'")
+    completedJobsStmt.step()
+    const completedJobs = (completedJobsStmt.getAsObject() as { count: number }).count
+    completedJobsStmt.free()
+
+    const workflowCountStmt = db.prepare('SELECT COUNT(*) as count FROM workflows')
+    workflowCountStmt.step()
+    const totalWorkflows = (workflowCountStmt.getAsObject() as { count: number }).count
+    workflowCountStmt.free()
+
+    const moduleCountStmt = db.prepare('SELECT COUNT(*) as count FROM prompt_modules')
+    moduleCountStmt.step()
+    const totalModules = (moduleCountStmt.getAsObject() as { count: number }).count
+    moduleCountStmt.free()
+
+    // Recent images (last 10)
+    const recentStmt = db.prepare('SELECT id, file_path, character_name, emotion_name, created_at FROM generated_images ORDER BY created_at DESC LIMIT 10')
+    const recentImages: Record<string, unknown>[] = []
+    while (recentStmt.step()) {
+      recentImages.push(recentStmt.getAsObject())
+    }
+    recentStmt.free()
+
+    return {
+      totalImages,
+      favoriteCount,
+      totalJobs,
+      completedJobs,
+      totalWorkflows,
+      totalModules,
+      recentImages
+    }
+  })
+
   // Dialogs
   ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_FILE, async (_event, args?: { filters?: { name: string; extensions: string[] }[] }) => {
     const win = BrowserWindow.getFocusedWindow()

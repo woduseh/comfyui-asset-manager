@@ -32,6 +32,7 @@ export interface BatchConfig {
     action: 'inject' | 'fixed'
     fixedValue: string
     assignedModuleIds: string[]
+    prefixModuleIds: string[]
     prefixText: string
     suffixText: string
   }>
@@ -61,6 +62,7 @@ export interface GeneratedTask {
       action: 'inject' | 'fixed'
       fixedValue: string
       assignedModuleIds: string[]
+      prefixModuleIds: string[]
       prefixText: string
       suffixText: string
     }>
@@ -268,6 +270,7 @@ export function expandBatchToTasks(
             action: s.action,
             fixedValue: s.fixedValue,
             assignedModuleIds: s.assignedModuleIds || [],
+            prefixModuleIds: s.prefixModuleIds || [],
             prefixText: s.prefixText || '',
             suffixText: s.suffixText || ''
           })),

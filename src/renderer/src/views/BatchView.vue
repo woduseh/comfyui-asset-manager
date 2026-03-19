@@ -55,6 +55,7 @@ interface SlotMapping {
   action: 'inject' | 'fixed'
   fixedValue: string
   assignedModuleIds: string[]
+  prefixModuleIds: string[]
   prefixText: string
   suffixText: string
 }
@@ -105,6 +106,7 @@ watch(selectedWorkflowId, async (id) => {
       action: 'inject' as const,
       fixedValue: (v.default_val as string) || '',
       assignedModuleIds: [] as string[],
+      prefixModuleIds: [] as string[],
       prefixText: '',
       suffixText: ''
     }))
@@ -295,6 +297,7 @@ async function handleCreateBatch(): Promise<void> {
         action: s.action,
         fixedValue: s.fixedValue,
         assignedModuleIds: s.assignedModuleIds,
+        prefixModuleIds: s.prefixModuleIds,
         prefixText: s.prefixText,
         suffixText: s.suffixText
       })),
@@ -364,6 +367,7 @@ async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
             slot.action = savedSlot.action || 'inject'
             slot.fixedValue = savedSlot.fixedValue || ''
             slot.assignedModuleIds = savedSlot.assignedModuleIds || []
+            slot.prefixModuleIds = savedSlot.prefixModuleIds || []
             slot.prefixText = savedSlot.prefixText || ''
             slot.suffixText = savedSlot.suffixText || ''
           }
@@ -526,19 +530,32 @@ onMounted(() => {
 
               <!-- Inject mode with per-slot module control -->
               <template v-if="slot.action === 'inject'">
-                <!-- Prefix text -->
+                <!-- Fixed (prefix) modules -->
+                <div style="margin-top: 8px;">
+                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">고정 모듈 (프리픽스):</span>
+                  <NSelect
+                    v-model:value="slot.prefixModuleIds"
+                    multiple
+                    filterable
+                    placeholder="품질, 스타일, 아티스트 등 고정 모듈 선택"
+                    size="small"
+                    :options="availableModules.map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
+                  />
+                </div>
+
+                <!-- Manual prefix text -->
                 <NInput
                   v-model:value="slot.prefixText"
                   type="textarea"
                   :rows="2"
-                  placeholder="고정 프리픽스 (예: masterpiece, best quality, 1girl)"
+                  placeholder="추가 텍스트 (예: 1girl, ...)"
                   size="small"
                   style="margin-top: 8px;"
                 />
 
-                <!-- Module assignment -->
+                <!-- Matrix module assignment -->
                 <div v-if="moduleSelections.length > 0" style="margin-top: 8px;">
-                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">주입할 모듈 선택:</span>
+                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">조합 모듈 (매트릭스):</span>
                   <NCheckboxGroup v-model:value="slot.assignedModuleIds">
                     <NSpace>
                       <NCheckbox
@@ -559,7 +576,7 @@ onMounted(() => {
                   v-model:value="slot.suffixText"
                   type="textarea"
                   :rows="2"
-                  placeholder="고정 서픽스 (선택사항)"
+                  placeholder="서픽스 텍스트 (선택사항)"
                   size="small"
                   style="margin-top: 8px;"
                 />

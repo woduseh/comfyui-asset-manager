@@ -14,7 +14,7 @@ import {
 } from '../services/database/repositories'
 import { comfyuiManager } from '../services/comfyui/manager'
 import { parseWorkflow } from '../services/comfyui/workflow-parser'
-import { previewPrompt } from '../services/prompt/composition-engine'
+import { previewPrompt, buildPrompt } from '../services/prompt/composition-engine'
 import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
@@ -261,6 +261,40 @@ export function registerIpcHandlers(): void {
 
   // Create batch job and expand to tasks
   ipcMain.handle(IPC_CHANNELS.BATCH_CREATE, (_event, config: BatchConfig) => {
+    // Store original config for DB (preserves module IDs for cloning)
+    const originalConfigJson = JSON.stringify(config)
+
+    // Resolve prefix module IDs to composed text
+    if (config.slotMappings) {
+      for (const slot of config.slotMappings) {
+        if (slot.action === 'inject' && slot.prefixModuleIds && slot.prefixModuleIds.length > 0) {
+          const prefixModules = slot.prefixModuleIds.map(moduleId => {
+            const mod = moduleRepo.get(moduleId)
+            const items = moduleItemRepo.list(moduleId)
+            return {
+              type: (mod?.type as string) || 'custom',
+              items: items
+                .filter(item => (item.enabled as number) !== 0)
+                .map(item => ({
+                  prompt: item.prompt as string,
+                  negative: (item.negative as string) || '',
+                  weight: (item.weight as number) || 1.0,
+                  enabled: true
+                }))
+            }
+          }).filter(m => m.items.length > 0)
+
+          if (prefixModules.length > 0) {
+            const composed = buildPrompt(prefixModules)
+            const composedText = slot.role === 'prompt_positive' ? composed.positive : composed.negative
+            if (composedText.trim()) {
+              slot.prefixText = composedText.trim() + (slot.prefixText?.trim() ? ', ' + slot.prefixText.trim() : '')
+            }
+          }
+        }
+      }
+    }
+
     // Load module data for expansion
     const moduleData = config.moduleSelections.map((sel) => {
       const items = moduleItemRepo.list(sel.moduleId)
@@ -284,7 +318,7 @@ export function registerIpcHandlers(): void {
     const jobId = batchJobRepo.create({
       name: config.name,
       description: config.description,
-      config: JSON.stringify(config),
+      config: originalConfigJson,
       workflow_id: config.workflowId,
       total_tasks: tasks.length,
       pipeline_config: config.pipelineConfig ? JSON.stringify(config.pipelineConfig) : undefined

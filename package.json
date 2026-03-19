@@ -1,6 +1,6 @@
 {
   "name": "comfyui-asset-manager",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "ComfyUI 대량 이미지 생성 및 자산 관리 도구",
   "main": "./out/main/index.js",
   "author": "ComfyUI Asset Manager",

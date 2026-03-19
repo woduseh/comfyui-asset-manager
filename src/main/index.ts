@@ -1,9 +1,22 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initDatabase, closeDatabase } from './services/database'
 import { registerIpcHandlers } from './ipc/handlers'
+
+// Register custom protocol for serving local images
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-asset',
+    privileges: {
+      bypassCSP: true,
+      stream: true,
+      supportFetchAPI: true
+    }
+  }
+])
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -39,6 +52,18 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.comfyui-asset-manager')
+
+  // Register protocol handler for local file access
+  protocol.handle('local-asset', (request) => {
+    // URL format: local-asset://image/<encoded-path>
+    // Extract everything after 'local-asset://image/'
+    const prefix = 'local-asset://image/'
+    const encoded = request.url.startsWith(prefix)
+      ? request.url.slice(prefix.length)
+      : request.url.slice('local-asset://'.length)
+    const filePath = decodeURIComponent(encoded)
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

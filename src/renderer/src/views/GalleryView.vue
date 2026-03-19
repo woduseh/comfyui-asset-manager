@@ -31,7 +31,7 @@ const selectedIds = ref<Set<string>>(new Set())
 
 function toFileUrl(path: string | undefined): string {
   if (!path) return ''
-  return 'file:///' + path.replace(/\\/g, '/')
+  return 'local-asset://image/' + encodeURIComponent(path)
 }
 
 const sortOptions = [

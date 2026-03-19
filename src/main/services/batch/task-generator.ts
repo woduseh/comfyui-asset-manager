@@ -29,8 +29,11 @@ export interface BatchConfig {
     nodeId: string
     fieldName: string
     role: string
-    action: string
+    action: 'inject' | 'fixed'
     fixedValue: string
+    assignedModuleIds: string[]
+    prefixText: string
+    suffixText: string
   }>
   variableOverrides?: Array<{
     nodeId: string
@@ -55,9 +58,13 @@ export interface GeneratedTask {
       nodeId: string
       fieldName: string
       role: string
-      action: string
+      action: 'inject' | 'fixed'
       fixedValue: string
+      assignedModuleIds: string[]
+      prefixText: string
+      suffixText: string
     }>
+    slotPrompts?: Record<string, string>
     variableOverrides?: Array<{
       nodeId: string
       fieldName: string
@@ -111,6 +118,7 @@ export function expandBatchToTasks(
     moduleType: string
     item: { id: string; name: string; prompt: string; negative: string; weight: number; enabled: boolean }
   }>> = []
+  const dimensionModuleIds: string[] = []
 
   for (const selection of config.moduleSelections) {
     const modData = moduleData.find((m) => m.moduleId === selection.moduleId)
@@ -122,6 +130,7 @@ export function expandBatchToTasks(
 
     if (selectedItems.length === 0) continue
 
+    dimensionModuleIds.push(selection.moduleId)
     dimensions.push(
       selectedItems.map((item) => ({
         moduleType: selection.moduleType,
@@ -197,6 +206,55 @@ export function expandBatchToTasks(
 
       const composed = buildPrompt(modules, config.extraVariables as Record<string, string>, seed)
 
+      // Compute per-slot prompts
+      const slotPrompts: Record<string, string> = {}
+      if (config.slotMappings) {
+        for (const slot of config.slotMappings) {
+          if (slot.action !== 'inject') continue
+
+          const slotKey = `${slot.nodeId}:${slot.fieldName}`
+
+          if (slot.assignedModuleIds && slot.assignedModuleIds.length > 0) {
+            const assignedModules = combo
+              .map((entry, idx) => ({ entry, moduleId: dimensionModuleIds[idx] }))
+              .filter(({ moduleId }) => slot.assignedModuleIds.includes(moduleId))
+              .map(({ entry }) => ({
+                type: entry.moduleType,
+                items: [{
+                  prompt: entry.item.prompt,
+                  negative: entry.item.negative,
+                  weight: entry.item.weight,
+                  enabled: true
+                }]
+              }))
+
+            if (assignedModules.length > 0) {
+              const slotComposed = buildPrompt(assignedModules, config.extraVariables as Record<string, string>, seed)
+              const promptText = slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
+
+              const parts: string[] = []
+              if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
+              if (promptText.trim()) parts.push(promptText.trim())
+              if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
+              slotPrompts[slotKey] = parts.join(', ')
+            } else {
+              const parts: string[] = []
+              if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
+              if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
+              slotPrompts[slotKey] = parts.join(', ')
+            }
+          } else {
+            // No specific modules assigned — use global composed prompt (backward compat)
+            const globalPrompt = slot.role === 'prompt_positive' ? composed.positive : composed.negative
+            const parts: string[] = []
+            if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
+            if (globalPrompt.trim()) parts.push(globalPrompt.trim())
+            if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
+            slotPrompts[slotKey] = parts.join(', ')
+          }
+        }
+      }
+
       tasks.push({
         promptData: {
           positive: composed.positive,
@@ -208,8 +266,12 @@ export function expandBatchToTasks(
             fieldName: s.fieldName,
             role: s.role,
             action: s.action,
-            fixedValue: s.fixedValue
+            fixedValue: s.fixedValue,
+            assignedModuleIds: s.assignedModuleIds || [],
+            prefixText: s.prefixText || '',
+            suffixText: s.suffixText || ''
           })),
+          slotPrompts,
           variableOverrides: config.variableOverrides
         },
         metadata: {

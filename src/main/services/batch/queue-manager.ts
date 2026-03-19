@@ -306,9 +306,13 @@ class QueueManager {
         nodeId: string
         fieldName: string
         role: string
-        action: string
+        action: 'inject' | 'fixed'
         fixedValue: string
+        assignedModuleIds?: string[]
+        prefixText?: string
+        suffixText?: string
       }>
+      slotPrompts?: Record<string, string>
       variableOverrides?: Array<{
         nodeId: string
         fieldName: string
@@ -323,8 +327,14 @@ class QueueManager {
         if (!node?.inputs) continue
 
         if (slot.action === 'inject') {
-          node.inputs[slot.fieldName] =
-            slot.role === 'prompt_positive' ? promptData.positive : promptData.negative
+          const slotKey = `${slot.nodeId}:${slot.fieldName}`
+          // Use per-slot prompt if available, fall back to global
+          if (promptData.slotPrompts && promptData.slotPrompts[slotKey]) {
+            node.inputs[slot.fieldName] = promptData.slotPrompts[slotKey]
+          } else {
+            node.inputs[slot.fieldName] =
+              slot.role === 'prompt_positive' ? promptData.positive : promptData.negative
+          }
         } else if (slot.action === 'fixed') {
           node.inputs[slot.fieldName] = slot.fixedValue
         }

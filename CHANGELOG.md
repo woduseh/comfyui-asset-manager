@@ -2,6 +2,25 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.5.0] - 2026-03-19
+
+슬롯별 모듈 매핑 — 프롬프트 슬롯마다 어떤 모듈을 주입할지 개별 설정 가능.
+
+### Added
+
+- **슬롯별 모듈 할당**: 각 프롬프트 슬롯에 매트릭스의 어떤 모듈을 주입할지 체크박스로 선택
+  - 예: "아니마 긍정" 슬롯에는 캐릭터+복장+감정, "IL 긍정" 슬롯은 고정값
+  - 모듈 미선택 시 전체 합성 프롬프트 사용 (하위 호환)
+- **고정 프리픽스/서픽스**: 각 주입 슬롯에 고정 텍스트를 모듈 프롬프트 앞뒤에 추가
+  - 예: 프리픽스="masterpiece, best quality, 1girl" + 모듈 프롬프트 + 서픽스
+- **슬롯별 프롬프트 합성**: 태스크 생성 시 각 슬롯에 할당된 모듈만으로 개별 프롬프트 합성
+
+### Changed
+
+- `BatchConfig.slotMappings`에 `assignedModuleIds`, `prefixText`, `suffixText` 필드 추가
+- `GeneratedTask.promptData`에 `slotPrompts` (슬롯키→합성 프롬프트) 맵 추가
+- 큐 매니저가 `slotPrompts`를 우선 사용, 없으면 글로벌 프롬프트로 폴백
+
 ## [0.4.0] - 2026-03-19
 
 ComfyUI 리소스 브라우저 + 배치 작업 복제 — 앱에서 직접 모델/LoRA/샘플러 선택 가능.

@@ -54,6 +54,9 @@ interface SlotMapping {
   role: string
   action: 'inject' | 'fixed'
   fixedValue: string
+  assignedModuleIds: string[]
+  prefixText: string
+  suffixText: string
 }
 const slotMappings = ref<SlotMapping[]>([])
 
@@ -100,7 +103,10 @@ watch(selectedWorkflowId, async (id) => {
       displayName: v.display_name as string,
       role: v.role as string,
       action: 'inject' as const,
-      fixedValue: (v.default_val as string) || ''
+      fixedValue: (v.default_val as string) || '',
+      assignedModuleIds: [] as string[],
+      prefixText: '',
+      suffixText: ''
     }))
 
   // Load ComfyUI resources for dropdowns
@@ -287,7 +293,10 @@ async function handleCreateBatch(): Promise<void> {
         fieldName: s.fieldName,
         role: s.role,
         action: s.action,
-        fixedValue: s.fixedValue
+        fixedValue: s.fixedValue,
+        assignedModuleIds: s.assignedModuleIds,
+        prefixText: s.prefixText,
+        suffixText: s.suffixText
       })),
       variableOverrides: variableOverrides.value
         .filter(vo => vo.enabled)
@@ -354,6 +363,9 @@ async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
           if (slot) {
             slot.action = savedSlot.action || 'inject'
             slot.fixedValue = savedSlot.fixedValue || ''
+            slot.assignedModuleIds = savedSlot.assignedModuleIds || []
+            slot.prefixText = savedSlot.prefixText || ''
+            slot.suffixText = savedSlot.suffixText || ''
           }
         }
       }, 500)
@@ -501,6 +513,8 @@ onMounted(() => {
                   style="width: 180px;"
                 />
               </NSpace>
+
+              <!-- Fixed value mode -->
               <NInput
                 v-if="slot.action === 'fixed'"
                 v-model:value="slot.fixedValue"
@@ -509,6 +523,47 @@ onMounted(() => {
                 placeholder="고정 프롬프트 텍스트"
                 style="margin-top: 8px;"
               />
+
+              <!-- Inject mode with per-slot module control -->
+              <template v-if="slot.action === 'inject'">
+                <!-- Prefix text -->
+                <NInput
+                  v-model:value="slot.prefixText"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="고정 프리픽스 (예: masterpiece, best quality, 1girl)"
+                  size="small"
+                  style="margin-top: 8px;"
+                />
+
+                <!-- Module assignment -->
+                <div v-if="moduleSelections.length > 0" style="margin-top: 8px;">
+                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">주입할 모듈 선택:</span>
+                  <NCheckboxGroup v-model:value="slot.assignedModuleIds">
+                    <NSpace>
+                      <NCheckbox
+                        v-for="sel in moduleSelections"
+                        :key="sel.moduleId"
+                        :value="sel.moduleId"
+                        :label="`${sel.moduleName} (${t('module.type.' + sel.moduleType)})`"
+                      />
+                    </NSpace>
+                  </NCheckboxGroup>
+                </div>
+                <NAlert v-else type="info" style="margin-top: 8px; font-size: 12px;">
+                  매트릭스에 모듈을 추가하면 이 슬롯에 주입할 모듈을 선택할 수 있습니다.
+                </NAlert>
+
+                <!-- Suffix text -->
+                <NInput
+                  v-model:value="slot.suffixText"
+                  type="textarea"
+                  :rows="2"
+                  placeholder="고정 서픽스 (선택사항)"
+                  size="small"
+                  style="margin-top: 8px;"
+                />
+              </template>
             </NCard>
           </template>
 

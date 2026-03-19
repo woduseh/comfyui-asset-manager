@@ -6,6 +6,9 @@
 npm run dev              # Launch Electron app in dev mode (HMR for renderer)
 npm run build            # Typecheck + build all (main, preload, renderer)
 npx electron-vite build  # Build only (skip typecheck, faster iteration)
+npm test                 # Run all tests (Vitest)
+npm run test:watch       # Watch mode tests
+npm run test:coverage    # Coverage report (V8 provider)
 npm run lint             # ESLint (flat config, Vue + TS + Prettier)
 npm run format           # Prettier format all files
 npm run typecheck        # Run both node and web typechecks
@@ -13,7 +16,7 @@ npm run typecheck:node   # Typecheck main process + preload only
 npm run typecheck:web    # Typecheck renderer (Vue) only
 ```
 
-No test framework is configured. Build verification: `npx electron-vite build` must succeed.
+Tests: 146 tests across 5 files in `tests/main/services/` (Vitest, sql.js in-memory DB for repository tests, vi.mock for HTTP mocks).
 
 ## Architecture
 

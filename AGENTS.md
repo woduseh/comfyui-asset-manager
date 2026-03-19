@@ -80,12 +80,18 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 npm run dev              # 개발 모드 (HMR)
 npm run build            # 타입체크 + 전체 빌드 (검증 시 사용)
 npx electron-vite build  # 빌드만 (타입체크 스킵, 빠른 반복)
+npm test                 # Vitest 테스트 실행
+npm run test:watch       # 감시 모드 테스트
+npm run test:coverage    # 커버리지 리포트
 npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크는 아직 설정되지 않았습니다.** 빌드 성공 여부로 검증합니다.
+**테스트 프레임워크: Vitest** — 5개 파일, 146개 테스트 케이스.
+- 테스트 위치: `tests/main/services/` (소스 구조와 미러링)
+- DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
+- HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
 
 ## 현재 버전
 
-**0.1.0** — 전체 파이프라인 기능 완성 (ComfyUI 연결 → 워크플로우 → 모듈 → 배치 → 큐 → 갤러리 → 대시보드)
+**0.2.0** — 테스트 인프라 추가 (Vitest, 146개 테스트 케이스)

@@ -143,6 +143,19 @@ npm run build:linux   # Linux
 2. 평점·즐겨찾기로 선호하는 이미지를 관리합니다
 3. 출력 폴더에서 `{작업명}/{캐릭터}/{복장}/{감정}/` 구조로 파일을 확인합니다
 
+## 테스트
+
+```bash
+# 전체 테스트 실행
+npm test
+
+# 감시 모드 (파일 변경 시 자동 재실행)
+npm run test:watch
+
+# 커버리지 리포트
+npm run test:coverage
+```
+
 ## 기술 스택
 
 | 영역 | 기술 |
@@ -155,6 +168,7 @@ npm run build:linux   # Linux
 | HTTP 클라이언트 | ofetch |
 | WebSocket | ws |
 | 빌드 | Vite 7, electron-builder |
+| 테스트 | Vitest, sql.js (in-memory test DB) |
 | 코드 품질 | ESLint (flat config), Prettier |
 
 ## 프로젝트 구조

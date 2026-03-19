@@ -117,3 +117,12 @@ The `ModuleType` union defines prompt module categories used throughout the code
 ### ComfyUI Workflow Format
 
 This app works with **API format** JSON (node IDs as keys, `class_type` + `inputs`), not UI format (nodes + links arrays). The workflow parser detects format and rejects UI format with an error message.
+
+### Release Documentation
+
+Every feature/fix commit must update these 3 files together:
+- **`AGENTS.md`** — AI agent conventions and project rules
+- **`README.md`** — User-facing feature documentation
+- **`CHANGELOG.md`** — Version history (Added/Changed/Fixed/Removed per SemVer section)
+
+Bump `package.json` version using SemVer: MAJOR (breaking), MINOR (feature), PATCH (fix).

@@ -140,6 +140,36 @@ const varTypeLabels: Record<string, string> = {
   lora: 'LoRA'
 }
 
+const roleOptions = [
+  { label: '긍정 프롬프트', value: 'prompt_positive' },
+  { label: '부정 프롬프트', value: 'prompt_negative' },
+  { label: '시드', value: 'seed' },
+  { label: '고정값', value: 'fixed' },
+  { label: '사용자 정의', value: 'custom' }
+]
+
+const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
+  prompt_positive: 'success',
+  prompt_negative: 'error',
+  seed: 'warning',
+  fixed: 'info',
+  custom: 'default'
+}
+
+const roleLabels: Record<string, string> = {
+  prompt_positive: '긍정',
+  prompt_negative: '부정',
+  seed: '시드',
+  fixed: '고정',
+  custom: '사용자'
+}
+
+async function handleRoleChange(variableId: string, role: string): Promise<void> {
+  await window.electron.ipcRenderer.invoke('workflow:update-variable-role', { variableId, role })
+  const v = detailVariables.value.find((v) => v.id === variableId)
+  if (v) v.role = role
+}
+
 onMounted(() => {
   workflowStore.loadWorkflows()
 })
@@ -199,10 +229,23 @@ onMounted(() => {
                     <NTag size="small" :type="(variable.var_type === 'text' ? 'info' : variable.var_type === 'seed' ? 'warning' : 'default') as 'info' | 'warning' | 'default'">
                       {{ varTypeLabels[variable.var_type as string] || variable.var_type }}
                     </NTag>
+                    <NTag size="small" :type="roleColors[(variable.role as string) || 'custom']">
+                      {{ roleLabels[(variable.role as string) || 'custom'] }}
+                    </NTag>
                     <strong>{{ variable.display_name }}</strong>
                     <span style="opacity: 0.6; font-size: 12px;">
                       Node {{ variable.node_id }} → {{ variable.field_name }}
                     </span>
+                  </NSpace>
+                  <NSpace align="center" style="margin-top: 6px; padding-left: 8px;">
+                    <span style="font-size: 12px; opacity: 0.7;">역할:</span>
+                    <NSelect
+                      :value="(variable.role as string) || 'custom'"
+                      :options="roleOptions"
+                      size="small"
+                      style="width: 160px;"
+                      @update:value="(v: string) => handleRoleChange(variable.id as string, v)"
+                    />
                   </NSpace>
                   <div style="margin-top: 4px; padding-left: 8px; opacity: 0.8; font-size: 13px;">
                     기본값: {{ variable.default_val ?? '(없음)' }}

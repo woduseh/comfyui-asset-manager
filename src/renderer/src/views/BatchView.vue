@@ -44,6 +44,37 @@ interface ModuleSelectionUI {
 const moduleSelections = ref<ModuleSelectionUI[]>([])
 const availableModules = ref<PromptModule[]>([])
 const moduleToAdd = ref<string | null>(null)
+
+// Prompt slot mappings
+interface SlotMapping {
+  variableId: string
+  nodeId: string
+  fieldName: string
+  displayName: string
+  role: string
+  action: 'inject' | 'fixed'
+  fixedValue: string
+}
+const slotMappings = ref<SlotMapping[]>([])
+
+watch(selectedWorkflowId, async (id) => {
+  if (!id) {
+    slotMappings.value = []
+    return
+  }
+  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
+  slotMappings.value = variables
+    .filter((v: Record<string, unknown>) => v.role === 'prompt_positive' || v.role === 'prompt_negative')
+    .map((v: Record<string, unknown>) => ({
+      variableId: v.id as string,
+      nodeId: v.node_id as string,
+      fieldName: v.field_name as string,
+      displayName: v.display_name as string,
+      role: v.role as string,
+      action: 'inject' as const,
+      fixedValue: (v.default_val as string) || ''
+    }))
+})
 // Computed stats
 const taskPreview = computed(() => {
   const selections = moduleSelections.value.filter((s) => s.selectedItemIds.length > 0)
@@ -192,7 +223,15 @@ async function handleCreateBatch(): Promise<void> {
       seedMode: seedMode.value,
       fixedSeed: fixedSeed.value,
       outputFolderPattern: outputPattern.value,
-      fileNamePattern: filePattern.value
+      fileNamePattern: filePattern.value,
+      slotMappings: slotMappings.value.map((s) => ({
+        variableId: s.variableId,
+        nodeId: s.nodeId,
+        fieldName: s.fieldName,
+        role: s.role,
+        action: s.action,
+        fixedValue: s.fixedValue
+      }))
     }))
 
     message.success(`배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
@@ -297,6 +336,41 @@ onMounted(() => {
               <NAlert v-if="sel.items.length === 0" type="warning" style="margin-top: 8px; font-size: 12px;">
                 이 모듈에 아이템이 없습니다. 프롬프트 모듈 관리에서 아이템을 추가해주세요.
               </NAlert>
+            </NCard>
+          </template>
+
+          <NDivider>프롬프트 슬롯 매핑</NDivider>
+
+          <NAlert v-if="slotMappings.length === 0" type="info" style="margin-bottom: 12px; font-size: 12px;">
+            워크플로우에 감지된 프롬프트 슬롯이 없습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.
+          </NAlert>
+          <template v-for="slot in slotMappings" :key="slot.variableId">
+            <NCard size="small" style="margin-bottom: 8px;">
+              <NSpace align="center" justify="space-between">
+                <NSpace align="center">
+                  <NTag size="small" :type="slot.role === 'prompt_positive' ? 'success' : 'error'">
+                    {{ slot.role === 'prompt_positive' ? '긍정' : '부정' }}
+                  </NTag>
+                  <span>{{ slot.displayName }}</span>
+                </NSpace>
+                <NSelect
+                  v-model:value="slot.action"
+                  :options="[
+                    { label: '모듈 프롬프트 주입', value: 'inject' },
+                    { label: '고정값 사용', value: 'fixed' }
+                  ]"
+                  size="small"
+                  style="width: 180px;"
+                />
+              </NSpace>
+              <NInput
+                v-if="slot.action === 'fixed'"
+                v-model:value="slot.fixedValue"
+                type="textarea"
+                :rows="2"
+                placeholder="고정 프롬프트 텍스트"
+                style="margin-top: 8px;"
+              />
             </NCard>
           </template>
 

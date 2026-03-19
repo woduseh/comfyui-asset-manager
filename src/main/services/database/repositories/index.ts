@@ -141,6 +141,7 @@ export class WorkflowRepository {
       var_type: string
       default_val?: string
       description?: string
+      role?: string
     }>
   ): void {
     const db = getDatabase()
@@ -148,11 +149,17 @@ export class WorkflowRepository {
     for (const v of variables) {
       const id = uuidv4()
       db.run(
-        `INSERT INTO workflow_variables (id, workflow_id, node_id, field_name, display_name, var_type, default_val, description)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, workflowId, v.node_id, v.field_name, v.display_name, v.var_type, v.default_val || null, v.description || null]
+        `INSERT INTO workflow_variables (id, workflow_id, node_id, field_name, display_name, var_type, default_val, description, role)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, workflowId, v.node_id, v.field_name, v.display_name, v.var_type, v.default_val || null, v.description || null, v.role || 'custom']
       )
     }
+    saveDatabase()
+  }
+
+  updateVariableRole(variableId: string, role: string): void {
+    const db = getDatabase()
+    db.run('UPDATE workflow_variables SET role = ? WHERE id = ?', [role, variableId])
     saveDatabase()
   }
 }

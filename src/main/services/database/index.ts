@@ -108,9 +108,15 @@ function createTables(database: SqlJsDatabase): void {
       display_name TEXT NOT NULL,
       var_type     TEXT NOT NULL DEFAULT 'text',
       default_val  TEXT,
-      description  TEXT
+      description  TEXT,
+      role         TEXT NOT NULL DEFAULT 'custom'
     );
   `)
+
+  // Migration: add role column for existing databases
+  try {
+    database.run(`ALTER TABLE workflow_variables ADD COLUMN role TEXT NOT NULL DEFAULT 'custom'`)
+  } catch { /* Column already exists */ }
 
   database.run(`
     CREATE TABLE IF NOT EXISTS prompt_modules (

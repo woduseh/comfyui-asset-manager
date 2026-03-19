@@ -60,6 +60,9 @@ export const IPC_CHANNELS = {
   DIALOG_OPEN_FILE: 'dialog:open-file',
   DIALOG_OPEN_DIRECTORY: 'dialog:open-directory',
 
+  // Workflow Variables
+  WORKFLOW_UPDATE_VARIABLE_ROLE: 'workflow:update-variable-role',
+
   // Events (main → renderer)
   QUEUE_PROGRESS: 'queue:progress',
   QUEUE_TASK_COMPLETED: 'queue:task-completed',

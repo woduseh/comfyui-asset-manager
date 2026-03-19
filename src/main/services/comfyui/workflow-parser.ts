@@ -8,6 +8,7 @@ export interface ParsedVariable {
   displayName: string
   varType: string
   currentValue: unknown
+  role: string
 }
 
 export interface ParsedWorkflow {
@@ -42,7 +43,8 @@ export function parseWorkflow(apiJson: string, name?: string): ParsedWorkflow {
           fieldName: fieldDef.name,
           displayName: `${nodeTitle} - ${fieldDef.displayName}`,
           varType: fieldDef.type,
-          currentValue
+          currentValue,
+          role: detectRole(nodeId, node, fieldDef.name, fieldDef.type, nodes)
         })
       }
     } else {
@@ -59,7 +61,8 @@ export function parseWorkflow(apiJson: string, name?: string): ParsedWorkflow {
             fieldName,
             displayName: `${nodeTitle} - ${fieldName}`,
             varType,
-            currentValue: value
+            currentValue: value,
+            role: detectRole(nodeId, node, fieldName, varType, nodes)
           })
         }
       }
@@ -205,4 +208,102 @@ function isLikelyNegativePrompt(title: string, text: string): boolean {
   ]
   const matchCount = negativeKeywords.filter((kw) => text.toLowerCase().includes(kw)).length
   return matchCount >= 2
+}
+
+/**
+ * Trace from a node's output through conditioning nodes to find a connected KSampler.
+ * Returns the sampler node ID and which input name ('positive' or 'negative') the chain connects to.
+ */
+function traceToSampler(
+  startNodeId: string,
+  nodes: Record<string, ComfyUINode>,
+  visited: Set<string> = new Set()
+): { samplerNodeId: string; inputName: string } | null {
+  if (visited.has(startNodeId)) return null
+  visited.add(startNodeId)
+
+  const samplerTypes = ['KSampler', 'KSamplerAdvanced', 'SamplerCustom']
+  const condTypes = [
+    'ConditioningCombine',
+    'ConditioningConcat',
+    'ConditioningSetArea',
+    'ConditioningSetMask'
+  ]
+
+  for (const [nodeId, node] of Object.entries(nodes)) {
+    for (const [inputName, inputValue] of Object.entries(node.inputs)) {
+      if (!Array.isArray(inputValue) || inputValue[0] !== startNodeId) continue
+
+      if (samplerTypes.includes(node.class_type)) {
+        return { samplerNodeId: nodeId, inputName }
+      }
+
+      if (condTypes.includes(node.class_type)) {
+        const result = traceToSampler(nodeId, nodes, visited)
+        if (result) return result
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Detect the role of a variable based on node connections and heuristics.
+ */
+function detectRole(
+  nodeId: string,
+  node: ComfyUINode,
+  fieldName: string,
+  varType: string,
+  nodes: Record<string, ComfyUINode>
+): string {
+  if (varType === 'seed') return 'seed'
+
+  // For text fields on CLIPTextEncode nodes, trace connection to KSampler
+  if (node.class_type === 'CLIPTextEncode' && fieldName === 'text') {
+    // Direct connection check
+    for (const [, otherNode] of Object.entries(nodes)) {
+      const samplerTypes = ['KSampler', 'KSamplerAdvanced', 'SamplerCustom']
+      if (!samplerTypes.includes(otherNode.class_type)) continue
+
+      const posInput = otherNode.inputs.positive
+      const negInput = otherNode.inputs.negative
+
+      if (Array.isArray(posInput) && posInput[0] === nodeId) return 'prompt_positive'
+      if (Array.isArray(negInput) && negInput[0] === nodeId) return 'prompt_negative'
+    }
+
+    // Indirect connection check (e.g. CLIPTextEncode → ConditioningCombine → KSampler)
+    const traced = traceToSampler(nodeId, nodes)
+    if (traced) {
+      if (traced.inputName === 'positive') return 'prompt_positive'
+      if (traced.inputName === 'negative') return 'prompt_negative'
+    }
+
+    // Fallback: title keyword heuristic
+    const title = (node._meta?.title || '').toLowerCase()
+    if (title.includes('부정') || title.includes('negative') || title.includes('neg '))
+      return 'prompt_negative'
+    if (title.includes('긍정') || title.includes('positive') || title.includes('pos '))
+      return 'prompt_positive'
+
+    // Content heuristic (last resort)
+    const text = ((node.inputs.text as string) || '').toLowerCase()
+    const negKeywords = ['worst quality', 'low quality', 'bad anatomy', 'deformed']
+    if (negKeywords.filter((kw) => text.includes(kw)).length >= 2) return 'prompt_negative'
+
+    return 'prompt_positive'
+  }
+
+  // For other text fields, check if they could be prompts
+  if (varType === 'text') {
+    const fn = fieldName.toLowerCase()
+    if (fn.includes('prompt') || fn.includes('text')) {
+      const title = (node._meta?.title || '').toLowerCase()
+      if (title.includes('부정') || title.includes('negative')) return 'prompt_negative'
+      if (title.includes('긍정') || title.includes('positive')) return 'prompt_positive'
+    }
+  }
+
+  return 'custom'
 }

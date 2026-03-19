@@ -24,6 +24,14 @@ export interface BatchConfig {
   outputFolderPattern: string
   fileNamePattern: string
   extraVariables?: Record<string, string | number>
+  slotMappings?: Array<{
+    variableId: string
+    nodeId: string
+    fieldName: string
+    role: string
+    action: string
+    fixedValue: string
+  }>
   pipelineConfig?: {
     steps: Array<{
       workflowId: string
@@ -38,6 +46,13 @@ export interface GeneratedTask {
     negative: string
     seed: number
     extraVariables: Record<string, string | number>
+    slotMappings?: Array<{
+      nodeId: string
+      fieldName: string
+      role: string
+      action: string
+      fixedValue: string
+    }>
   }
   metadata: {
     characterName?: string
@@ -177,7 +192,14 @@ export function expandBatchToTasks(
           positive: composed.positive,
           negative: composed.negative,
           seed,
-          extraVariables: config.extraVariables || {}
+          extraVariables: config.extraVariables || {},
+          slotMappings: config.slotMappings?.map((s) => ({
+            nodeId: s.nodeId,
+            fieldName: s.fieldName,
+            role: s.role,
+            action: s.action,
+            fixedValue: s.fixedValue
+          }))
         },
         metadata: {
           ...metadata,

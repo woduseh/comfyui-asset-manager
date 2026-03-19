@@ -33,7 +33,8 @@ function createTables(db: SqlJsDatabase): void {
   db.run(`CREATE TABLE IF NOT EXISTS workflow_variables (
     id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     node_id TEXT NOT NULL, field_name TEXT NOT NULL, display_name TEXT NOT NULL,
-    var_type TEXT NOT NULL DEFAULT 'text', default_val TEXT, description TEXT
+    var_type TEXT NOT NULL DEFAULT 'text', default_val TEXT, description TEXT,
+    role TEXT NOT NULL DEFAULT 'custom'
   )`)
   db.run(`CREATE TABLE IF NOT EXISTS prompt_modules (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, description TEXT DEFAULT '',

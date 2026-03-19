@@ -109,7 +109,8 @@ export function registerIpcHandlers(): void {
           display_name: v.displayName,
           var_type: v.varType,
           default_val: v.currentValue !== undefined ? String(v.currentValue) : undefined,
-          description: `${v.nodeType} → ${v.fieldName}`
+          description: `${v.nodeType} → ${v.fieldName}`,
+          role: v.role
         }))
       )
 
@@ -129,8 +130,14 @@ export function registerIpcHandlers(): void {
     return true
   })
 
+  // Update variable role
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE, (_event, { variableId, role }: { variableId: string; role: string }) => {
+    workflowRepo.updateVariableRole(variableId, role)
+    return true
+  })
+
   // Settings
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_event, { key }: { key: string }) => {
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET,(_event, { key }: { key: string }) => {
     return settingsRepo.get(key)
   })
 

@@ -297,39 +297,83 @@ class QueueManager {
    */
   private injectPromptData(
     workflow: Record<string, unknown>,
-    promptData: { positive: string; negative: string; seed: number; extraVariables?: Record<string, string | number> }
+    promptData: {
+      positive: string
+      negative: string
+      seed: number
+      extraVariables?: Record<string, string | number>
+      slotMappings?: Array<{
+        nodeId: string
+        fieldName: string
+        role: string
+        action: string
+        fixedValue: string
+      }>
+    }
   ): void {
-    for (const [_nodeId, nodeData] of Object.entries(workflow)) {
-      const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
-      if (!node.class_type || !node.inputs) continue
+    // Slot-based injection (new system)
+    if (promptData.slotMappings && promptData.slotMappings.length > 0) {
+      for (const slot of promptData.slotMappings) {
+        const node = workflow[slot.nodeId] as { inputs?: Record<string, unknown> }
+        if (!node?.inputs) continue
 
-      switch (node.class_type) {
-        case 'CLIPTextEncode': {
-          // Check if this is positive or negative by looking at connections
-          // Simple heuristic: if text contains negative-like content, it's likely negative
-          const currentText = node.inputs.text as string
-          if (currentText && typeof currentText === 'string') {
-            // Try to detect if this is the positive or negative node
-            const isNegative = currentText.toLowerCase().includes('worst quality') ||
-              currentText.toLowerCase().includes('low quality') ||
-              currentText.toLowerCase().includes('bad anatomy')
-            node.inputs.text = isNegative ? promptData.negative : promptData.positive
-          }
-          break
+        if (slot.action === 'inject') {
+          node.inputs[slot.fieldName] =
+            slot.role === 'prompt_positive' ? promptData.positive : promptData.negative
+        } else if (slot.action === 'fixed') {
+          node.inputs[slot.fieldName] = slot.fixedValue
         }
-        case 'KSampler':
-        case 'KSamplerAdvanced':
+      }
+
+      // Also inject seeds into KSampler nodes
+      for (const [, nodeData] of Object.entries(workflow)) {
+        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
+        if (!node.class_type || !node.inputs) continue
+        if (node.class_type === 'KSampler' || node.class_type === 'KSamplerAdvanced') {
           if (promptData.seed !== undefined) {
             node.inputs.seed = promptData.seed
             if (node.inputs.noise_seed !== undefined) {
               node.inputs.noise_seed = promptData.seed
             }
           }
-          break
+        }
       }
+    } else {
+      // Legacy heuristic injection (backward compatibility)
+      for (const [, nodeData] of Object.entries(workflow)) {
+        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
+        if (!node.class_type || !node.inputs) continue
 
-      // Apply extra variables
-      if (promptData.extraVariables) {
+        switch (node.class_type) {
+          case 'CLIPTextEncode': {
+            const currentText = node.inputs.text as string
+            if (currentText && typeof currentText === 'string') {
+              const isNegative =
+                currentText.toLowerCase().includes('worst quality') ||
+                currentText.toLowerCase().includes('low quality') ||
+                currentText.toLowerCase().includes('bad anatomy')
+              node.inputs.text = isNegative ? promptData.negative : promptData.positive
+            }
+            break
+          }
+          case 'KSampler':
+          case 'KSamplerAdvanced':
+            if (promptData.seed !== undefined) {
+              node.inputs.seed = promptData.seed
+              if (node.inputs.noise_seed !== undefined) {
+                node.inputs.noise_seed = promptData.seed
+              }
+            }
+            break
+        }
+      }
+    }
+
+    // Apply extra variables
+    if (promptData.extraVariables) {
+      for (const [, nodeData] of Object.entries(workflow)) {
+        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
+        if (!node.inputs) continue
         for (const [key, value] of Object.entries(promptData.extraVariables)) {
           if (key in node.inputs) {
             node.inputs[key] = value

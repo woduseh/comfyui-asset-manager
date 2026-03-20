@@ -208,11 +208,17 @@ export function registerIpcHandlers(): void {
 
   // Module Items
   ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_LIST, (_event, { moduleId }: { moduleId: string }) => {
-    return moduleItemRepo.list(moduleId)
+    const items = moduleItemRepo.list(moduleId)
+    return items.map(item => ({
+      ...item,
+      prompt_variants: parsePromptVariants(item.prompt_variants as string)
+    }))
   })
 
-  ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_CREATE, (_event, data: { module_id: string; name: string; prompt: string; negative?: string; weight?: number; sort_order?: number; metadata?: string }) => {
-    return moduleItemRepo.create(data)
+  ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_CREATE, (_event, data: { module_id: string; name: string; prompt: string; negative?: string; weight?: number; sort_order?: number; metadata?: string; prompt_variants?: Record<string, { prompt: string; negative: string }> | string }) => {
+    const pv = data.prompt_variants
+    const serialized = typeof pv === 'string' ? pv : (pv ? JSON.stringify(pv) : '{}')
+    return moduleItemRepo.create({ ...data, prompt_variants: serialized })
   })
 
   ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_UPDATE, (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {

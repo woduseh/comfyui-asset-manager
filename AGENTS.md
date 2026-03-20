@@ -148,6 +148,13 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - **하위 호환**: `module_data_snapshot`이 없는 레거시 작업은 기존 청크 DB 로드 경로 사용
 - **DB 공간 절약**: `clearPromptDataForCompleted()` — 완료 태스크의 `prompt_data`를 `{}`로 비움
 
+### 완료 감지 최적화 (v0.9.1~)
+
+- **WebSocket 기반 완료 감지**: `waitForCompletion()`이 `executionComplete`/`executionError` WebSocket 이벤트로 완료 대기
+- **REST 폴링 폴백**: WebSocket 연결 끊김 시 자동 전환, 5초 간격 폴링
+- **리스너 정리**: Promise settle 시 `removeListener()`로 이벤트 리스너 즉시 정리
+- **프리뷰 쓰로틀**: `PREVIEW_THROTTLE_MS = 500` — 초당 2회로 프리뷰 전송 제한
+
 ### 전역 스타일 가이드 (v0.6.0~)
 
 - border-radius: 12px (통일)
@@ -156,6 +163,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
+**0.9.1** — WebSocket 기반 완료 감지: REST 폴링 제거로 ComfyUI 부하 대폭 절감. 프리뷰 쓰로틀링(500ms). 프롬프트 변형 편집 버그 수정
 **0.9.0** — 지연 태스크 생성(Lazy Task Expansion): 배치 생성 시 태스크 사전 생성 없이 실행 시 동적 생성. 모듈 데이터 스냅샷으로 실행 안정성 확보. 테스트 159개
 **0.8.1** — 대량 배치 최적화: 청크 기반 태스크 처리(50개 단위), ComfyUI 히스토리 자동 정리, DB 트랜잭션 최적화, 실시간 ETA 표시
 **0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능. MCP 도구에도 변형 지원 추가. MCP 세션 메모리 누수 수정 (타임아웃 + 최대 세션 제한)

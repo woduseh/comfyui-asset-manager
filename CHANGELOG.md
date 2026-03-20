@@ -2,6 +2,24 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.9.1] - 2025-07-24
+
+ComfyUI 과부하 근본 원인 수정 — WebSocket 기반 완료 감지로 REST 폴링 제거, 프리뷰 쓰로틀링, 프롬프트 변형 편집 버그 수정.
+
+### Changed
+
+- **WebSocket 기반 완료 감지**: `waitForCompletion()`이 매 1초 REST `/history` 폴링 대신 WebSocket `executionComplete`/`executionError` 이벤트를 활용
+  - 28장 배치 기준: 기존 ~840회 HTTP 요청 → 28회(완료 확인용)로 대폭 절감
+  - WebSocket 연결 끊김 시 자동으로 REST 폴링 폴백 (5초 간격)
+- **프리뷰 이미지 쓰로틀링**: 500ms 간격으로 프리뷰 전송 제한 (매 프레임 base64 변환 방지)
+
+### Fixed
+
+- **프롬프트 변형 편집 버그**: 기존 변형이 있는 아이템을 편집하면 빈 변형이 무한 생성되던 문제 수정
+  - 원인: `MODULE_ITEM_LIST` 핸들러가 `prompt_variants`를 JSON 문자열 그대로 전달 → `Object.entries(string)` 실행
+  - 수정: 핸들러에서 `parsePromptVariants()` 적용하여 객체로 변환 후 전달
+- **모듈 아이템 생성 시 변형 직렬화**: `MODULE_ITEM_CREATE` 핸들러에서 `prompt_variants` 객체를 JSON 문자열로 정상 직렬화
+
 ## [0.9.0] - 2025-07-24
 
 지연 태스크 생성(Lazy Task Expansion) — 배치 생성 시 수천 개 태스크를 사전 생성하지 않고 실행 시점에 동적으로 생성하여 메모리와 DB 부하를 극적으로 절감.

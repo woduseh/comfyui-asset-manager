@@ -541,13 +541,107 @@ class QueueManager {
   }
 
   /**
-   * Poll ComfyUI history until the prompt is complete
+   * Wait for ComfyUI prompt completion using WebSocket events (primary)
+   * with REST polling as fallback when WebSocket is disconnected.
    */
   private async waitForCompletion(
     promptId: string,
     timeoutMs = 600000 // 10 minute timeout per image
   ): Promise<{ outputs: Record<string, unknown> } | null> {
+    const ws = comfyuiManager.webSocket
+
+    if (ws.isConnected) {
+      // Primary: WebSocket event-based detection (no polling overhead)
+      return this.waitForCompletionViaWebSocket(promptId, timeoutMs)
+    } else {
+      // Fallback: REST polling with longer interval
+      return this.waitForCompletionViaPolling(promptId, timeoutMs)
+    }
+  }
+
+  /**
+   * WebSocket-based completion detection — zero polling overhead.
+   * Listens for executionComplete/executionError events matching our promptId.
+   */
+  private waitForCompletionViaWebSocket(
+    promptId: string,
+    timeoutMs: number
+  ): Promise<{ outputs: Record<string, unknown> } | null> {
+    return new Promise((resolve, reject) => {
+      const ws = comfyuiManager.webSocket
+      let timer: ReturnType<typeof setTimeout> | null = null
+      let cancelTimer: ReturnType<typeof setInterval> | null = null
+      let settled = false
+
+      const cleanup = (): void => {
+        if (settled) return
+        settled = true
+        ws.removeListener('executionComplete', onComplete)
+        ws.removeListener('executionError', onError)
+        ws.removeListener('disconnected', onDisconnect)
+        if (timer) clearTimeout(timer)
+        if (cancelTimer) clearInterval(cancelTimer)
+      }
+
+      const onComplete = (data: { promptId: string }): void => {
+        if (data.promptId !== promptId) return
+        cleanup()
+        // Fetch outputs from history (single request, not polling)
+        comfyuiManager.restClient
+          .getHistoryEntry(promptId)
+          .then((entry) => {
+            if (entry) {
+              const e = entry as { outputs?: Record<string, unknown> }
+              resolve(e.outputs ? { outputs: e.outputs } : null)
+            } else {
+              resolve(null)
+            }
+          })
+          .catch(() => resolve(null))
+      }
+
+      const onError = (data: { promptId: string; message: string }): void => {
+        if (data.promptId !== promptId) return
+        cleanup()
+        reject(new Error(`ComfyUI execution error: ${data.message}`))
+      }
+
+      const onDisconnect = (): void => {
+        // WebSocket dropped — fall back to REST polling for this prompt
+        cleanup()
+        this.waitForCompletionViaPolling(promptId, timeoutMs).then(resolve).catch(reject)
+      }
+
+      ws.on('executionComplete', onComplete)
+      ws.on('executionError', onError)
+      ws.on('disconnected', onDisconnect)
+
+      // Timeout
+      timer = setTimeout(() => {
+        cleanup()
+        reject(new Error(`Timeout waiting for prompt ${promptId}`))
+      }, timeoutMs)
+
+      // Periodically check if job was cancelled
+      cancelTimer = setInterval(() => {
+        if (this._isCancelled) {
+          cleanup()
+          reject(new Error('Cancelled'))
+        }
+      }, 1000)
+    })
+  }
+
+  /**
+   * REST polling fallback — used when WebSocket is unavailable.
+   * Polls at 5-second intervals to minimize server load.
+   */
+  private async waitForCompletionViaPolling(
+    promptId: string,
+    timeoutMs: number
+  ): Promise<{ outputs: Record<string, unknown> } | null> {
     const startTime = Date.now()
+    const POLL_INTERVAL = 5000
 
     while (Date.now() - startTime < timeoutMs) {
       if (this._isCancelled) throw new Error('Cancelled')
@@ -560,28 +654,23 @@ class QueueManager {
             outputs?: Record<string, unknown>
           }
 
-          // Check if ComfyUI reports an error
           if (entry.status?.status_str === 'error') {
             throw new Error('ComfyUI execution error')
           }
 
-          // Check if execution is complete and has outputs
           if (entry.status?.completed && entry.outputs) {
             return { outputs: entry.outputs }
           }
 
-          // Fallback: outputs exist even without status field
           if (entry.outputs && Object.keys(entry.outputs).length > 0) {
             return { outputs: entry.outputs }
           }
         }
       } catch (e) {
-        // Re-throw non-network errors
         if ((e as Error).message === 'ComfyUI execution error') throw e
-        // Retry on network error
       }
 
-      await this.sleep(1000)
+      await this.sleep(POLL_INTERVAL)
     }
 
     throw new Error(`Timeout waiting for prompt ${promptId}`)

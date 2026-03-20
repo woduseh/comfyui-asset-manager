@@ -11,6 +11,11 @@ import { queueManager } from '../batch/queue-manager'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+function parsePromptVariants(raw: unknown): Record<string, { prompt: string; negative: string }> {
+  if (!raw || typeof raw !== 'string' || raw === '{}') return {}
+  try { return JSON.parse(raw) } catch { return {} }
+}
+
 const moduleRepo = new ModuleRepository()
 const moduleItemRepo = new ModuleItemRepository()
 const workflowRepo = new WorkflowRepository()
@@ -114,21 +119,26 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'create_module_item',
-    'Create a new item in a prompt module.',
+    'Create a new item in a prompt module. Supports optional prompt variants for per-slot different prompts.',
     {
       module_id: z.string().describe('Module ID'),
       name: z.string().describe('Item name'),
-      prompt: z.string().describe('Positive prompt text'),
-      negative: z.string().optional().describe('Negative prompt text'),
-      weight: z.number().optional().describe('Weight (default: 1.0)')
+      prompt: z.string().describe('Positive prompt text (default)'),
+      negative: z.string().optional().describe('Negative prompt text (default)'),
+      weight: z.number().optional().describe('Weight (default: 1.0)'),
+      prompt_variants: z.record(z.string(), z.object({
+        prompt: z.string().describe('Variant positive prompt'),
+        negative: z.string().describe('Variant negative prompt')
+      })).optional().describe('Named prompt variants, e.g. {"natural_language": {prompt: "...", negative: "..."}, "tags": {prompt: "...", negative: "..."}}')
     },
-    async ({ module_id, name, prompt, negative, weight }) => {
+    async ({ module_id, name, prompt, negative, weight, prompt_variants }) => {
       const id = moduleItemRepo.create({
         module_id,
         name,
         prompt,
         negative: negative || '',
-        weight: weight ?? 1.0
+        weight: weight ?? 1.0,
+        prompt_variants: prompt_variants ? JSON.stringify(prompt_variants) : '{}'
       })
       return {
         content: [{ type: 'text', text: JSON.stringify({ id, name, module_id }) }]
@@ -138,20 +148,25 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'update_module_item',
-    'Update an existing module item.',
+    'Update an existing module item. Supports prompt variants for per-slot different prompts.',
     {
       id: z.string().describe('Item ID'),
       name: z.string().optional().describe('New name'),
-      prompt: z.string().optional().describe('New prompt text'),
-      negative: z.string().optional().describe('New negative prompt'),
-      weight: z.number().optional().describe('New weight')
+      prompt: z.string().optional().describe('New default prompt text'),
+      negative: z.string().optional().describe('New default negative prompt'),
+      weight: z.number().optional().describe('New weight'),
+      prompt_variants: z.record(z.string(), z.object({
+        prompt: z.string().describe('Variant positive prompt'),
+        negative: z.string().describe('Variant negative prompt')
+      })).optional().describe('Named prompt variants (replaces all existing variants)')
     },
-    async ({ id, name, prompt, negative, weight }) => {
+    async ({ id, name, prompt, negative, weight, prompt_variants }) => {
       const data: Record<string, unknown> = {}
       if (name !== undefined) data.name = name
       if (prompt !== undefined) data.prompt = prompt
       if (negative !== undefined) data.negative = negative
       if (weight !== undefined) data.weight = weight
+      if (prompt_variants !== undefined) data.prompt_variants = JSON.stringify(prompt_variants)
       moduleItemRepo.update(id, data)
       return {
         content: [{ type: 'text', text: JSON.stringify({ success: true, id }) }]
@@ -208,7 +223,7 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'create_batch_job',
-    'Create a batch job that generates images from module combinations. Requires a workflow ID and module selections.',
+    'Create a batch job that generates images from module combinations. Requires a workflow ID and module selections. Supports slot mappings with prompt variants for per-slot different prompts.',
     {
       name: z.string().describe('Job name'),
       description: z.string().optional().describe('Job description'),
@@ -220,9 +235,22 @@ export function registerMcpTools(server: McpServer): void {
       })).describe('Module selections for batch combinations'),
       count_per_combination: z.number().default(1).describe('Images per combination'),
       seed_mode: z.enum(['random', 'fixed', 'incremental']).default('random').describe('Seed mode'),
-      fixed_seed: z.number().optional().describe('Fixed seed value (for fixed/incremental mode)')
+      fixed_seed: z.number().optional().describe('Fixed seed value (for fixed/incremental mode)'),
+      slot_mappings: z.array(z.object({
+        variableId: z.string().describe('Workflow variable ID'),
+        nodeId: z.string().describe('ComfyUI node ID'),
+        fieldName: z.string().describe('Node field name'),
+        role: z.string().describe('Slot role: prompt_positive or prompt_negative'),
+        action: z.enum(['inject', 'fixed']).default('inject').describe('Action: inject modules or use fixed value'),
+        fixedValue: z.string().optional().describe('Fixed prompt text (when action=fixed)'),
+        assignedModuleIds: z.array(z.string()).optional().describe('Module IDs to inject into this slot'),
+        prefixModuleIds: z.array(z.string()).optional().describe('Module IDs for prefix'),
+        prefixText: z.string().optional().describe('Additional prefix text'),
+        suffixText: z.string().optional().describe('Additional suffix text'),
+        promptVariant: z.string().optional().describe('Prompt variant name to use for this slot (e.g. "natural_language" or "tags")')
+      })).optional().describe('Slot mappings for multi-model workflows with per-slot prompt variant selection')
     },
-    async ({ name, description, workflow_id, module_selections, count_per_combination, seed_mode, fixed_seed }) => {
+    async ({ name, description, workflow_id, module_selections, count_per_combination, seed_mode, fixed_seed, slot_mappings }) => {
       // Validate workflow exists
       const workflow = workflowRepo.get(workflow_id)
       if (!workflow) {
@@ -246,7 +274,20 @@ export function registerMcpTools(server: McpServer): void {
         seedMode: seed_mode,
         fixedSeed: fixed_seed,
         outputFolderPattern: '{job}/{character}/{outfit}/{emotion}',
-        fileNamePattern: '{character}_{outfit}_{emotion}_{index}'
+        fileNamePattern: '{character}_{outfit}_{emotion}_{index}',
+        slotMappings: slot_mappings?.map(sm => ({
+          variableId: sm.variableId,
+          nodeId: sm.nodeId,
+          fieldName: sm.fieldName,
+          role: sm.role,
+          action: sm.action,
+          fixedValue: sm.fixedValue || '',
+          assignedModuleIds: sm.assignedModuleIds || [],
+          prefixModuleIds: sm.prefixModuleIds || [],
+          prefixText: sm.prefixText || '',
+          suffixText: sm.suffixText || '',
+          promptVariant: sm.promptVariant
+        }))
       }
 
       // Load module data for expansion
@@ -261,7 +302,8 @@ export function registerMcpTools(server: McpServer): void {
             prompt: item.prompt as string,
             negative: (item.negative as string) || '',
             weight: (item.weight as number) || 1.0,
-            enabled: (item.enabled as number) !== 0
+            enabled: (item.enabled as number) !== 0,
+            prompt_variants: parsePromptVariants(item.prompt_variants as string)
           }))
         }
       })

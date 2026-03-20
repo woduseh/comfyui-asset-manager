@@ -274,8 +274,17 @@ async function handleDeleteJob(id: string): Promise<void> {
 async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
   try {
     const result = await window.electron.ipcRenderer.invoke('batch:rerun', { id: job.id as string })
-    if (result.success) { message.success('재실행을 시작합니다'); await loadBatchJobs(); await loadQueueStatus() }
-    else message.error('재실행 실패: ' + result.error)
+    if (result.success) {
+      message.success('재실행을 시작합니다')
+    } else {
+      message.error('재실행 실패: ' + result.error)
+      return
+    }
+    // Short delay for main process to update DB status
+    await new Promise((r) => setTimeout(r, 300))
+    await loadBatchJobs()
+    await loadQueueStatus()
+    await queueStore.loadActiveJobs()
   } catch (e) { message.error('재실행 실패: ' + (e instanceof Error ? e.message : String(e))) }
 }
 

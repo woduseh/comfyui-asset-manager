@@ -283,17 +283,19 @@ export function registerIpcHandlers(): void {
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, async (_event, { id }: { id: string }) => {
-    try {
-      // Delete old task rows (they'll be regenerated lazily during execution)
-      batchTaskRepo.deleteByJob(id)
-      batchJobRepo.updateProgress(id, 0, 0)
-      batchJobRepo.updateStatus(id, 'draft')
-      await queueManager.startJob(id)
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: (error as Error).message }
+  ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, (_event, { id }: { id: string }) => {
+    if (queueManager.isProcessing) {
+      return { success: false, error: 'Queue is already processing a job' }
     }
+    // Delete old task rows and reset progress before starting
+    batchTaskRepo.deleteByJob(id)
+    batchJobRepo.updateProgress(id, 0, 0)
+    batchJobRepo.updateStatus(id, 'draft')
+    // Fire-and-forget so renderer gets immediate response
+    queueManager.startJob(id).catch((err) => {
+      console.error('[QueueManager] Rerun job error:', err)
+    })
+    return { success: true }
   })
 
   // Batch task count preview

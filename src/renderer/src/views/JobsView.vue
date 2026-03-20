@@ -83,6 +83,7 @@ interface VariableOverride {
   defaultValue: string
 }
 const variableOverrides = ref<VariableOverride[]>([])
+const showOverrides = ref(false)
 const batchResources = ref<{
   checkpoints: string[]
   loras: string[]
@@ -153,10 +154,9 @@ const runningJobEta = computed(() => {
 const canGoStep2 = computed(() => !!batchName.value && !!selectedWorkflowId.value)
 const canGoStep3 = computed(() => taskPreview.value.totalTasks > 0)
 
-// ─── Watcher: load variables when workflow selected ───
-watch(selectedWorkflowId, async (id) => {
-  if (!id) { slotMappings.value = []; variableOverrides.value = []; return }
-  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
+// ─── Load workflow variables ───
+async function loadWorkflowVariables(workflowId: string): Promise<void> {
+  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId })
   slotMappings.value = variables
     .filter((v: Record<string, unknown>) => v.role === 'prompt_positive' || v.role === 'prompt_negative')
     .map((v: Record<string, unknown>) => ({
@@ -192,6 +192,11 @@ watch(selectedWorkflowId, async (id) => {
       value: (v.default_val as string) || '',
       defaultValue: (v.default_val as string) || ''
     }))
+}
+
+watch(selectedWorkflowId, async (id) => {
+  if (!id) { slotMappings.value = []; variableOverrides.value = []; return }
+  await loadWorkflowVariables(id)
 })
 
 // ─── Data loading ───
@@ -284,7 +289,11 @@ async function openWizard(): Promise<void> {
   fixedSeed.value = 42
   outputPattern.value = '{job}/{character}/{outfit}/{emotion}'
   filePattern.value = '{character}_{outfit}_{emotion}_{index}'
+  showOverrides.value = false
   selectedWorkflowId.value = workflowOptions.value.length > 0 ? workflowOptions.value[0].value : null
+  if (selectedWorkflowId.value) {
+    await loadWorkflowVariables(selectedWorkflowId.value)
+  }
   showWizard.value = true
 }
 
@@ -403,13 +412,16 @@ async function restoreConfig(job: Record<string, unknown>, isClone: boolean): Pr
         }
       }, 500)
     }
-    if (config.variableOverrides && Array.isArray(config.variableOverrides)) {
+    if (config.variableOverrides && Array.isArray(config.variableOverrides) && config.variableOverrides.length > 0) {
+      showOverrides.value = true
       setTimeout(() => {
         for (const saved of config.variableOverrides) {
           const vo = variableOverrides.value.find(v => v.nodeId === saved.nodeId && v.fieldName === saved.fieldName)
           if (vo) { vo.enabled = true; vo.value = saved.value || '' }
         }
       }, 500)
+    } else {
+      showOverrides.value = false
     }
   } catch (e) {
     message.error('설정 복원 실패: ' + (e instanceof Error ? e.message : String(e)))
@@ -760,8 +772,19 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
 
           <!-- Variable overrides -->
           <div v-if="variableOverrides.length > 0" style="margin-bottom: 16px;">
-            <div style="font-weight: 600; margin-bottom: 8px;">변수 오버라이드 (선택사항)</div>
-            <div v-for="vo in variableOverrides" :key="vo.variableId" style="padding: 8px 10px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 6px;">
+            <NSpace
+              align="center" :size="6"
+              style="margin-bottom: 8px; cursor: pointer; user-select: none;"
+              @click="showOverrides = !showOverrides"
+            >
+              <span style="font-size: 12px; opacity: 0.6; transition: transform 0.15s;" :style="{ display: 'inline-block', transform: showOverrides ? 'rotate(90deg)' : 'rotate(0)' }">▶</span>
+              <span style="font-weight: 600;">변수 오버라이드 (선택사항)</span>
+              <NTag v-if="variableOverrides.filter(v => v.enabled).length > 0" size="tiny" type="info" round>
+                {{ variableOverrides.filter(v => v.enabled).length }}개 활성
+              </NTag>
+            </NSpace>
+            <div v-show="showOverrides">
+              <div v-for="vo in variableOverrides" :key="vo.variableId" style="padding: 8px 10px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 6px;">
               <NSpace align="center" justify="space-between">
                 <NSpace align="center" :size="8">
                   <NSwitch v-model:value="vo.enabled" size="small" />
@@ -812,6 +835,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
                 />
                 <NInput v-else v-model:value="vo.value" size="small" placeholder="값 입력" />
               </div>
+            </div>
             </div>
           </div>
 

@@ -21,6 +21,7 @@ import { queueManager } from '../services/batch/queue-manager'
 import { getDatabase } from '../services/database'
 import { ptyManager } from '../services/terminal/pty-manager'
 import { mcpServerManager } from '../services/mcp'
+import { getMcpConfigStatus, writeMcpJsonConfig, removeMcpJsonConfig } from '../services/mcp/config-generator'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -606,7 +607,6 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.MCP_CONFIG_STATUS, () => {
-    const { getMcpConfigStatus } = require('../services/mcp/config-generator')
     return getMcpConfigStatus()
   })
 
@@ -615,7 +615,6 @@ export function registerIpcHandlers(): void {
       return { success: false, error: 'MCP server is not running' }
     }
     try {
-      const { writeMcpJsonConfig } = require('../services/mcp/config-generator')
       const configPath = writeMcpJsonConfig(mcpServerManager.url, targetDir)
       return { success: true, configPath }
     } catch (error) {
@@ -625,7 +624,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.MCP_REMOVE_CLI, (_event, { targetDir }: { targetDir?: string }) => {
     try {
-      const { removeMcpJsonConfig } = require('../services/mcp/config-generator')
       const removed = removeMcpJsonConfig(targetDir)
       return { success: true, removed }
     } catch (error) {

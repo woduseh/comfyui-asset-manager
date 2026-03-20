@@ -29,6 +29,12 @@ function writeMcpBanner(): void {
     if (terminalStore.mcpConfigStatus.claudeCode) {
       terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mClaude Code:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`)
     }
+    if (terminalStore.mcpConfigStatus.geminiCli) {
+      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mGemini CLI:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`)
+    }
+    if (terminalStore.mcpConfigStatus.codexCli) {
+      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mCodex CLI:\x1b[0m  \x1b[32mconfigured ✓\x1b[0m\r\n`)
+    }
     terminal.write('\x1b[38;5;117m╰──────────────────────────────────────────────╯\x1b[0m\r\n\r\n')
   }
 }

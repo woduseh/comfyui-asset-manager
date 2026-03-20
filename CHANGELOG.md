@@ -2,6 +2,22 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.7.1] - 2025-07-24
+
+MCP 서버 버그 수정 및 멀티 CLI 호환성 개선.
+
+### Fixed
+
+- **MCP 서버 세션 관리**: 매 요청마다 새 Transport/Server를 생성하던 문제 → 세션 기반 관리 (Map)로 변경
+- **`require()` 번들링 오류**: `handlers.ts`의 동적 `require()` 3곳을 정적 import로 교체 (electron-vite 빌드 후 MODULE_NOT_FOUND 해결)
+- **`.mcp.json` 형식 수정**: `type: "url"` 제거 → 표준 `{ url: "..." }` 형식 (Copilot CLI/Claude Code 호환)
+
+### Added
+
+- **Gemini CLI 지원**: `~/.gemini/settings.json`에 `type: "http"` 형식으로 자동 설정
+- **Codex CLI 지원**: `~/.codex/config.toml`에 TOML 형식으로 자동 설정
+- **멀티 CLI 상태 표시**: 설정 페이지 + 터미널 배너에서 CLI별 설정 상태 확인 (Claude Code ✓, Gemini CLI ✓, Codex CLI ✓)
+
 ## [0.7.0] - 2026-03-20
 
 MCP 서버와 내장 터미널 추가. LLM CLI(Copilot CLI, Claude CLI 등)가 MCP 도구를 통해 앱 기능을 프로그래밍적으로 제어 가능.

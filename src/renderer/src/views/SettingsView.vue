@@ -268,7 +268,7 @@ onMounted(async () => {
           </span>
         </NAlert>
 
-        <!-- Claude Code (.mcp.json) -->
+        <!-- CLI Config Status (.mcp.json + .gemini/settings.json) -->
         <NSpace align="center" :size="8">
           <NButton
             size="small"
@@ -282,10 +282,18 @@ onMounted(async () => {
           </NButton>
           <NTag v-if="terminalStore.mcpConfigStatus.claudeCode" type="success" size="small" round>
             <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            {{ t('settings.mcp.cliSetup.configured') }}
+            .mcp.json ✓
+          </NTag>
+          <NTag v-if="terminalStore.mcpConfigStatus.geminiCli" type="success" size="small" round>
+            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+            Gemini CLI ✓
+          </NTag>
+          <NTag v-if="terminalStore.mcpConfigStatus.codexCli" type="success" size="small" round>
+            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+            Codex CLI ✓
           </NTag>
           <NButton
-            v-if="terminalStore.mcpConfigStatus.claudeCode"
+            v-if="terminalStore.mcpConfigStatus.claudeCode || terminalStore.mcpConfigStatus.geminiCli || terminalStore.mcpConfigStatus.codexCli"
             size="tiny"
             quaternary
             type="error"

@@ -16,8 +16,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     port: 39464,
     url: 'http://localhost:39464/mcp'
   })
-  const mcpConfigStatus = ref<{ claudeCode: boolean; configPath: string }>({
+  const mcpConfigStatus = ref<{ claudeCode: boolean; geminiCli: boolean; codexCli: boolean; configPath: string }>({
     claudeCode: false,
+    geminiCli: false,
+    codexCli: false,
     configPath: ''
   })
 

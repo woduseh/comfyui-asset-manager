@@ -26,6 +26,9 @@ const selectedModule = ref<PromptModule | null>(null)
 const showItemModal = ref(false)
 const editingItem = ref<Partial<ModuleItem> & { isNew?: boolean }>({})
 
+// Prompt variants for current editing item
+const editingVariants = ref<Array<{ name: string; prompt: string; negative: string }>>([])
+
 // Prompt preview
 const promptPreview = ref<{ positive: string; negative: string } | null>(null)
 
@@ -147,14 +150,40 @@ function openAddItem(): void {
     negative: '',
     weight: 1.0,
     sort_order: moduleStore.currentItems.length,
-    enabled: 1
+    enabled: 1,
+    prompt_variants: {}
   }
+  editingVariants.value = []
   showItemModal.value = true
 }
 
 function openEditItem(item: ModuleItem): void {
   editingItem.value = { ...item, isNew: false }
+  const pv = item.prompt_variants || {}
+  editingVariants.value = Object.entries(pv).map(([name, v]) => ({
+    name,
+    prompt: v.prompt || '',
+    negative: v.negative || ''
+  }))
   showItemModal.value = true
+}
+
+function addVariant(): void {
+  editingVariants.value.push({ name: '', prompt: '', negative: '' })
+}
+
+function removeVariant(idx: number): void {
+  editingVariants.value.splice(idx, 1)
+}
+
+function variantsToRecord(): Record<string, { prompt: string; negative: string }> {
+  const record: Record<string, { prompt: string; negative: string }> = {}
+  for (const v of editingVariants.value) {
+    if (v.name.trim()) {
+      record[v.name.trim()] = { prompt: v.prompt, negative: v.negative }
+    }
+  }
+  return record
 }
 
 async function handleSaveItem(): Promise<void> {
@@ -164,6 +193,8 @@ async function handleSaveItem(): Promise<void> {
     return
   }
 
+  const promptVariants = variantsToRecord()
+
   if (item.isNew && selectedModuleId.value) {
     await moduleStore.createItem({
       module_id: selectedModuleId.value,
@@ -171,7 +202,8 @@ async function handleSaveItem(): Promise<void> {
       prompt: item.prompt!,
       negative: item.negative,
       weight: item.weight,
-      sort_order: item.sort_order
+      sort_order: item.sort_order,
+      prompt_variants: promptVariants
     })
     message.success('아이템이 추가되었습니다')
   } else if (item.id && selectedModuleId.value) {
@@ -181,7 +213,8 @@ async function handleSaveItem(): Promise<void> {
       negative: item.negative,
       weight: item.weight,
       sort_order: item.sort_order,
-      enabled: item.enabled
+      enabled: item.enabled,
+      prompt_variants: JSON.stringify(promptVariants)
     })
     message.success('아이템이 수정되었습니다')
   }
@@ -475,6 +508,36 @@ onMounted(() => {
             placeholder="네거티브 프롬프트 (선택사항)"
           />
         </NFormItem>
+        <!-- Prompt Variants -->
+        <NDivider style="margin: 12px 0 8px;">
+          <span style="font-size: 12px; opacity: 0.7;">{{ t('module.variant.title') }}</span>
+        </NDivider>
+        <div v-for="(variant, idx) in editingVariants" :key="idx" style="padding: 8px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <NInput
+              v-model:value="variant.name"
+              size="small" placeholder="변형 이름 (예: 자연어, 태그)"
+              style="flex: 1;"
+            />
+            <NButton size="small" quaternary type="error" @click="removeVariant(idx)">
+              {{ t('common.delete') }}
+            </NButton>
+          </div>
+          <NInput
+            v-model:value="variant.prompt"
+            type="textarea" :rows="2" size="small"
+            :placeholder="t('module.prompt')"
+            style="margin-bottom: 4px;"
+          />
+          <NInput
+            v-model:value="variant.negative"
+            type="textarea" :rows="1" size="small"
+            :placeholder="t('module.negative')"
+          />
+        </div>
+        <NButton size="small" dashed block @click="addVariant" style="margin-bottom: 12px;">
+          + {{ t('module.variant.add') }}
+        </NButton>
         <NGrid :cols="2" :x-gap="12">
           <NGridItem>
             <NFormItem :label="t('module.weight')">

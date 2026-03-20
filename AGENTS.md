@@ -60,6 +60,7 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 - 모든 mutation 후 `saveDatabase()` 호출 필수
 - Repository 패턴: `src/main/services/database/repositories/index.ts`
 - 새 테이블 추가 시 `createTables()` 함수에 `CREATE TABLE IF NOT EXISTS` 추가
+- `module_items.prompt_variants`: JSON 컬럼 — `Record<string, { prompt, negative }>` 형식으로 슬롯별 변형 프롬프트 저장
 
 ### 컴포넌트 & 스토어
 
@@ -87,7 +88,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 5개 파일, 146개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 5개 파일, 152개 테스트 케이스.
 - 테스트 위치: `tests/main/services/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
@@ -137,6 +138,8 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 ## 현재 버전
 
 **0.7.1** — MCP 멀티 CLI 호환: Copilot/Claude/Gemini/Codex CLI 자동 설정, 세션 관리 버그 수정
+**0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능
+**0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선
 **0.7.0** — MCP 서버 + 내장 터미널: LLM CLI가 앱 기능을 MCP 도구로 제어 가능, 5+1 페이지 구조, 커스텀 앱 아이콘·브랜딩
 **0.6.0** — UI 리디자인: 4+1 페이지 구조, 배치/큐 통합 (JobsView), 3단계 배치 위자드
 **0.5.0** — 슬롯별 모듈 매핑 (프리픽스/서픽스 + 모듈 체크박스 + 슬롯별 합성)

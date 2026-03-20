@@ -24,6 +24,7 @@ export interface ModuleItem {
   sort_order: number
   metadata: string
   enabled: number
+  prompt_variants: Record<string, { prompt: string; negative: string }>
 }
 
 export const useModuleStore = defineStore('module', () => {
@@ -76,8 +77,13 @@ export const useModuleStore = defineStore('module', () => {
     negative?: string
     weight?: number
     sort_order?: number
+    prompt_variants?: Record<string, { prompt: string; negative: string }>
   }): Promise<string> {
-    const id = await window.electron.ipcRenderer.invoke('module-item:create', toPlain(data))
+    const payload = {
+      ...data,
+      prompt_variants: data.prompt_variants ? JSON.stringify(data.prompt_variants) : '{}'
+    }
+    const id = await window.electron.ipcRenderer.invoke('module-item:create', toPlain(payload))
     await loadItems(data.module_id)
     return id
   }

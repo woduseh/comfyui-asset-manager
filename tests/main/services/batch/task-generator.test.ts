@@ -270,5 +270,144 @@ describe('Task Generator', () => {
       expect(tasks[3].metadata.combinationIndex).toBe(1)
       expect(tasks[3].metadata.imageIndex).toBe(0)
     })
+
+    describe('prompt variants', () => {
+      const variantModuleData = [
+        {
+          moduleId: 'mod-char',
+          moduleType: 'character',
+          items: [
+            {
+              id: 'char-1',
+              name: 'Alice',
+              prompt: '1girl, alice, blonde hair',
+              negative: 'bad anatomy',
+              weight: 1.0,
+              enabled: true,
+              prompt_variants: {
+                '자연어': { prompt: 'A cute girl named Alice with blonde hair', negative: 'ugly' },
+                '태그': { prompt: '1girl, alice, blonde_hair, blue_dress', negative: 'bad_anatomy' }
+              }
+            }
+          ]
+        }
+      ]
+
+      it('uses default prompt when no promptVariant is specified', () => {
+        const config = makeConfig({
+          moduleSelections: [
+            { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
+          ],
+          countPerCombination: 1,
+          slotMappings: [{
+            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
+            role: 'prompt_positive', action: 'inject', fixedValue: '',
+            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+            prefixText: '', suffixText: ''
+          }]
+        })
+        const tasks = expandBatchToTasks(config, variantModuleData)
+        expect(tasks).toHaveLength(1)
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde hair')
+      })
+
+      it('uses variant prompt when promptVariant is specified', () => {
+        const config = makeConfig({
+          moduleSelections: [
+            { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
+          ],
+          countPerCombination: 1,
+          slotMappings: [{
+            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
+            role: 'prompt_positive', action: 'inject', fixedValue: '',
+            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+            prefixText: '', suffixText: '', promptVariant: '태그'
+          }]
+        })
+        const tasks = expandBatchToTasks(config, variantModuleData)
+        expect(tasks).toHaveLength(1)
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde_hair, blue_dress')
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).not.toContain('blonde hair')
+      })
+
+      it('falls back to default when variant name does not exist', () => {
+        const config = makeConfig({
+          moduleSelections: [
+            { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
+          ],
+          countPerCombination: 1,
+          slotMappings: [{
+            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
+            role: 'prompt_positive', action: 'inject', fixedValue: '',
+            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+            prefixText: '', suffixText: '', promptVariant: 'nonexistent'
+          }]
+        })
+        const tasks = expandBatchToTasks(config, variantModuleData)
+        expect(tasks).toHaveLength(1)
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde hair')
+      })
+
+      it('uses variant negative prompt for negative slots', () => {
+        const config = makeConfig({
+          moduleSelections: [
+            { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
+          ],
+          countPerCombination: 1,
+          slotMappings: [{
+            variableId: 'v2', nodeId: 'n2', fieldName: 'text',
+            role: 'prompt_negative', action: 'inject', fixedValue: '',
+            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+            prefixText: '', suffixText: '', promptVariant: '태그'
+          }]
+        })
+        const tasks = expandBatchToTasks(config, variantModuleData)
+        expect(tasks).toHaveLength(1)
+        expect(tasks[0].promptData.slotPrompts!['n2:text']).toContain('bad_anatomy')
+      })
+
+      it('supports different variants per slot', () => {
+        const config = makeConfig({
+          moduleSelections: [
+            { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
+          ],
+          countPerCombination: 1,
+          slotMappings: [
+            {
+              variableId: 'v1', nodeId: 'n1', fieldName: 'text',
+              role: 'prompt_positive', action: 'inject', fixedValue: '',
+              assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+              prefixText: '', suffixText: '', promptVariant: '자연어'
+            },
+            {
+              variableId: 'v2', nodeId: 'n2', fieldName: 'text',
+              role: 'prompt_positive', action: 'inject', fixedValue: '',
+              assignedModuleIds: ['mod-char'], prefixModuleIds: [],
+              prefixText: '', suffixText: '', promptVariant: '태그'
+            }
+          ]
+        })
+        const tasks = expandBatchToTasks(config, variantModuleData)
+        expect(tasks).toHaveLength(1)
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('A cute girl named Alice')
+        expect(tasks[0].promptData.slotPrompts!['n2:text']).toContain('1girl, alice, blonde_hair')
+      })
+
+      it('works with items that have no prompt_variants field', () => {
+        const config = makeConfig({
+          countPerCombination: 1,
+          slotMappings: [{
+            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
+            role: 'prompt_positive', action: 'inject', fixedValue: '',
+            assignedModuleIds: ['mod-char', 'mod-emo'], prefixModuleIds: [],
+            prefixText: '', suffixText: '', promptVariant: '태그'
+          }]
+        })
+        // moduleData has no prompt_variants on its items — should fall back gracefully
+        const tasks = expandBatchToTasks(config, moduleData)
+        expect(tasks).toHaveLength(2)
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice')
+      })
+    })
   })
 })

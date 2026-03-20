@@ -44,7 +44,8 @@ function createTables(db: SqlJsDatabase): void {
   db.run(`CREATE TABLE IF NOT EXISTS module_items (
     id TEXT PRIMARY KEY, module_id TEXT NOT NULL REFERENCES prompt_modules(id) ON DELETE CASCADE,
     name TEXT NOT NULL, prompt TEXT NOT NULL, negative TEXT DEFAULT '', weight REAL DEFAULT 1.0,
-    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}', thumbnail BLOB, enabled INTEGER DEFAULT 1
+    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}', thumbnail BLOB, enabled INTEGER DEFAULT 1,
+    prompt_variants TEXT DEFAULT '{}'
   )`)
   db.run(`CREATE TABLE IF NOT EXISTS characters (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, base_prompt TEXT NOT NULL,

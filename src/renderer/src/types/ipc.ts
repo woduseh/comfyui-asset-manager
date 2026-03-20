@@ -120,6 +120,11 @@ export type ModuleType =
   | 'lora'
   | 'custom'
 
+export interface PromptVariant {
+  prompt: string
+  negative: string
+}
+
 export interface ModuleItemRecord {
   id: string
   module_id: string
@@ -131,6 +136,7 @@ export interface ModuleItemRecord {
   metadata: string
   thumbnail: Buffer | null
   enabled: number
+  prompt_variants: string // JSON: Record<string, PromptVariant>
 }
 
 export interface CharacterRecord {

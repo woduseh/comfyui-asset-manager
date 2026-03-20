@@ -64,6 +64,7 @@ interface SlotMapping {
   prefixModuleIds: string[]
   prefixText: string
   suffixText: string
+  promptVariant: string
 }
 const slotMappings = ref<SlotMapping[]>([])
 
@@ -151,7 +152,8 @@ watch(selectedWorkflowId, async (id) => {
       assignedModuleIds: [] as string[],
       prefixModuleIds: [] as string[],
       prefixText: '',
-      suffixText: ''
+      suffixText: '',
+      promptVariant: ''
     }))
 
   try { batchResources.value = await window.electron.ipcRenderer.invoke('comfyui:models') }
@@ -312,7 +314,8 @@ async function handleCreateBatch(): Promise<void> {
         variableId: s.variableId, nodeId: s.nodeId, fieldName: s.fieldName,
         role: s.role, action: s.action, fixedValue: s.fixedValue,
         assignedModuleIds: s.assignedModuleIds, prefixModuleIds: s.prefixModuleIds,
-        prefixText: s.prefixText, suffixText: s.suffixText
+        prefixText: s.prefixText, suffixText: s.suffixText,
+        promptVariant: s.promptVariant
       })),
       variableOverrides: variableOverrides.value
         .filter(vo => vo.enabled)
@@ -377,6 +380,7 @@ async function restoreConfig(job: Record<string, unknown>, isClone: boolean): Pr
             slot.prefixModuleIds = saved.prefixModuleIds || []
             slot.prefixText = saved.prefixText || ''
             slot.suffixText = saved.suffixText || ''
+            slot.promptVariant = saved.promptVariant || ''
           }
         }
       }, 500)
@@ -699,6 +703,12 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
                   <NInput
                     v-model:value="slot.suffixText"
                     size="small" placeholder="서픽스 (선택사항)"
+                  />
+                  <NInput
+                    v-model:value="slot.promptVariant"
+                    size="small"
+                    :placeholder="t('batch.slot.variantPlaceholder')"
+                    style="margin-top: 6px;"
                   />
                 </template>
               </div>

@@ -133,18 +133,24 @@ function createTables(database: SqlJsDatabase): void {
 
   database.run(`
     CREATE TABLE IF NOT EXISTS module_items (
-      id          TEXT PRIMARY KEY,
-      module_id   TEXT NOT NULL REFERENCES prompt_modules(id) ON DELETE CASCADE,
-      name        TEXT NOT NULL,
-      prompt      TEXT NOT NULL,
-      negative    TEXT DEFAULT '',
-      weight      REAL DEFAULT 1.0,
-      sort_order  INTEGER DEFAULT 0,
-      metadata    TEXT DEFAULT '{}',
-      thumbnail   BLOB,
-      enabled     INTEGER DEFAULT 1
+      id               TEXT PRIMARY KEY,
+      module_id        TEXT NOT NULL REFERENCES prompt_modules(id) ON DELETE CASCADE,
+      name             TEXT NOT NULL,
+      prompt           TEXT NOT NULL,
+      negative         TEXT DEFAULT '',
+      weight           REAL DEFAULT 1.0,
+      sort_order       INTEGER DEFAULT 0,
+      metadata         TEXT DEFAULT '{}',
+      thumbnail        BLOB,
+      enabled          INTEGER DEFAULT 1,
+      prompt_variants  TEXT DEFAULT '{}'
     );
   `)
+
+  // Migration: add prompt_variants column for existing databases
+  try {
+    database.run(`ALTER TABLE module_items ADD COLUMN prompt_variants TEXT DEFAULT '{}'`)
+  } catch { /* Column already exists */ }
 
   database.run(`
     CREATE TABLE IF NOT EXISTS characters (

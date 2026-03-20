@@ -262,12 +262,13 @@ export class ModuleItemRepository {
     weight?: number
     sort_order?: number
     metadata?: string
+    prompt_variants?: string
   }): string {
     const db = getDatabase()
     const id = uuidv4()
     db.run(
-      `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.module_id,
@@ -276,7 +277,8 @@ export class ModuleItemRepository {
         data.negative || '',
         data.weight ?? 1.0,
         data.sort_order ?? 0,
-        data.metadata || '{}'
+        data.metadata || '{}',
+        data.prompt_variants || '{}'
       ]
     )
     saveDatabase()

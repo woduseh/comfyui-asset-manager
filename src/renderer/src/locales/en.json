@@ -105,7 +105,13 @@
     "addItem": "Add Item",
     "prompt": "Prompt",
     "negative": "Negative Prompt",
-    "weight": "Weight"
+    "weight": "Weight",
+    "variant": {
+      "title": "Prompt Variants",
+      "add": "Add Variant",
+      "name": "Variant Name",
+      "empty": "No variants. Add variants to provide different prompts per slot for the same item."
+    }
   },
   "batch": {
     "title": "Batch Jobs",
@@ -135,6 +141,10 @@
       "resume": "Resume",
       "cancel": "Cancel",
       "delete": "Delete"
+    },
+    "slot": {
+      "variantPlaceholder": "Prompt variant (leave empty for default prompt)",
+      "variant": "Prompt Variant"
     }
   },
   "queue": {

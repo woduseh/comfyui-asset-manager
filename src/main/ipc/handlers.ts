@@ -23,6 +23,11 @@ import { ptyManager } from '../services/terminal/pty-manager'
 import { mcpServerManager } from '../services/mcp'
 import { getMcpConfigStatus, writeMcpJsonConfig, removeMcpJsonConfig } from '../services/mcp/config-generator'
 
+function parsePromptVariants(raw: unknown): Record<string, { prompt: string; negative: string }> {
+  if (!raw || typeof raw !== 'string' || raw === '{}') return {}
+  try { return JSON.parse(raw) } catch { return {} }
+}
+
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
 const moduleRepo = new ModuleRepository()
@@ -337,7 +342,8 @@ export function registerIpcHandlers(): void {
           prompt: item.prompt as string,
           negative: (item.negative as string) || '',
           weight: (item.weight as number) || 1.0,
-          enabled: (item.enabled as number) !== 0
+          enabled: (item.enabled as number) !== 0,
+          prompt_variants: parsePromptVariants(item.prompt_variants as string)
         }))
       }
     })

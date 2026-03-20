@@ -35,6 +35,7 @@ export interface BatchConfig {
     prefixModuleIds: string[]
     prefixText: string
     suffixText: string
+    promptVariant?: string
   }>
   variableOverrides?: Array<{
     nodeId: string
@@ -112,13 +113,14 @@ export function expandBatchToTasks(
       negative: string
       weight: number
       enabled: boolean
+      prompt_variants?: Record<string, { prompt: string; negative: string }>
     }>
   }>
 ): GeneratedTask[] {
   // Build the cartesian dimensions
   const dimensions: Array<Array<{
     moduleType: string
-    item: { id: string; name: string; prompt: string; negative: string; weight: number; enabled: boolean }
+    item: { id: string; name: string; prompt: string; negative: string; weight: number; enabled: boolean; prompt_variants?: Record<string, { prompt: string; negative: string }> }
   }>> = []
   const dimensionModuleIds: string[] = []
 
@@ -220,15 +222,21 @@ export function expandBatchToTasks(
             const assignedModules = combo
               .map((entry, idx) => ({ entry, moduleId: dimensionModuleIds[idx] }))
               .filter(({ moduleId }) => slot.assignedModuleIds.includes(moduleId))
-              .map(({ entry }) => ({
-                type: entry.moduleType,
-                items: [{
-                  prompt: entry.item.prompt,
-                  negative: entry.item.negative,
-                  weight: entry.item.weight,
-                  enabled: true
-                }]
-              }))
+              .map(({ entry }) => {
+                // Resolve prompt variant if slot specifies one
+                const variant = slot.promptVariant
+                  ? entry.item.prompt_variants?.[slot.promptVariant]
+                  : undefined
+                return {
+                  type: entry.moduleType,
+                  items: [{
+                    prompt: variant?.prompt ?? entry.item.prompt,
+                    negative: variant?.negative ?? entry.item.negative,
+                    weight: entry.item.weight,
+                    enabled: true
+                  }]
+                }
+              })
 
             if (assignedModules.length > 0) {
               const slotComposed = buildPrompt(assignedModules, config.extraVariables as Record<string, string>, seed)

@@ -8,6 +8,8 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
 import { queueManager } from './services/batch/queue-manager'
+import { SettingsRepository, BatchJobRepository, BatchTaskRepository } from './services/database/repositories'
+import { comfyuiManager } from './services/comfyui/manager'
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -83,7 +85,6 @@ app.whenReady().then(async () => {
 
   // Auto-start MCP server if enabled
   try {
-    const { SettingsRepository } = require('./services/database/repositories')
     const settingsRepo = new SettingsRepository()
     const mcpEnabled = settingsRepo.get('mcp_enabled')
     if (mcpEnabled === 'true') {
@@ -111,7 +112,6 @@ app.on('before-quit', () => {
   // Clean up running job state so it can be recovered on next startup
   try {
     if (queueManager.isProcessing && queueManager.currentJobId) {
-      const { BatchJobRepository, BatchTaskRepository } = require('./services/database/repositories')
       const batchJobRepo = new BatchJobRepository()
       const batchTaskRepo = new BatchTaskRepository()
       batchTaskRepo.resetRunningTasksByJob(queueManager.currentJobId)
@@ -127,7 +127,6 @@ app.on('before-quit', () => {
 
   // Disconnect from ComfyUI and save database
   try {
-    const { comfyuiManager } = require('./services/comfyui/manager')
     comfyuiManager.disconnect()
   } catch { /* ignore */ }
   closeDatabase()

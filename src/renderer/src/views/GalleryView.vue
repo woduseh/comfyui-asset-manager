@@ -470,9 +470,6 @@ onUnmounted(() => {
                 size="small"
                 @update:value="(val: number) => { galleryStore.rateImage(detailImage!.id, val); detailImage!.rating = val }"
               />
-              <span class="detail-meta-text">
-                {{ [detailImage.character_name, detailImage.outfit_name, detailImage.emotion_name, detailImage.style_name].filter(Boolean).join(' · ') || '-' }}
-              </span>
               <span class="detail-meta-text detail-meta-right">
                 {{ formatFileSize(detailImage.file_size) }}
                 <template v-if="detailImage.width && detailImage.height">
@@ -480,6 +477,32 @@ onUnmounted(() => {
                 </template>
                 · {{ detailImage.created_at?.split('T')[0] || detailImage.created_at }}
               </span>
+            </div>
+
+            <!-- Metadata table -->
+            <div class="detail-metadata" v-if="detailImage.character_name || detailImage.outfit_name || detailImage.emotion_name || detailImage.style_name">
+              <div class="metadata-item" v-if="detailImage.character_name">
+                <span class="metadata-label">캐릭터</span>
+                <span class="metadata-value">{{ detailImage.character_name }}</span>
+              </div>
+              <div class="metadata-item" v-if="detailImage.outfit_name">
+                <span class="metadata-label">복장</span>
+                <span class="metadata-value">{{ detailImage.outfit_name }}</span>
+              </div>
+              <div class="metadata-item" v-if="detailImage.emotion_name">
+                <span class="metadata-label">감정</span>
+                <span class="metadata-value">{{ detailImage.emotion_name }}</span>
+              </div>
+              <div class="metadata-item" v-if="detailImage.style_name">
+                <span class="metadata-label">스타일</span>
+                <span class="metadata-value">{{ detailImage.style_name }}</span>
+              </div>
+            </div>
+
+            <!-- File path -->
+            <div class="detail-filepath">
+              <span class="metadata-label">파일</span>
+              <span class="filepath-text" :title="detailImage.file_path">{{ detailImage.file_path }}</span>
             </div>
 
             <!-- Prompt info (collapsible) -->
@@ -607,6 +630,53 @@ onUnmounted(() => {
 }
 .detail-meta-right {
   margin-left: auto;
+}
+
+.detail-metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px 16px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+.metadata-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.metadata-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.45;
+  flex-shrink: 0;
+  min-width: 40px;
+}
+.metadata-value {
+  font-size: 12px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-filepath {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+.filepath-text {
+  font-size: 11px;
+  opacity: 0.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
 }
 
 .prompt-block {

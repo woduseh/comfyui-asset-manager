@@ -165,6 +165,12 @@ const varTypeLabels: Record<string, string> = {
   lora: 'LoRA'
 }
 
+type TagType = 'info' | 'warning' | 'success' | 'default'
+const varTypeTagColors: Record<string, TagType> = { text: 'info', seed: 'warning', model: 'success' }
+function getVarTypeTagType(varType: string): TagType {
+  return varTypeTagColors[varType] || 'default'
+}
+
 async function handleRoleChange(variableId: string, role: string): Promise<void> {
   await window.electron.ipcRenderer.invoke('workflow:update-variable-role', { variableId, role })
   const v = detailVariables.value.find((v) => v.id === variableId)
@@ -232,7 +238,7 @@ onMounted(() => {
               style="padding: 10px 12px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 6px;"
             >
               <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <NTag size="small" round :type="(variable.var_type === 'text' ? 'info' : variable.var_type === 'seed' ? 'warning' : variable.var_type === 'model' ? 'success' : 'default') as 'info' | 'warning' | 'success' | 'default'">
+                <NTag size="small" round :type="getVarTypeTagType(variable.var_type as string)">
                   {{ varTypeLabels[variable.var_type as string] || variable.var_type }}
                 </NTag>
                 <strong style="font-size: 13px;">{{ variable.display_name }}</strong>

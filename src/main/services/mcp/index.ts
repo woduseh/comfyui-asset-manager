@@ -7,8 +7,9 @@ import { randomUUID } from 'crypto'
 
 const DEFAULT_PORT = 39464
 const SERVER_NAME = 'comfyui-asset-manager'
-const SERVER_VERSION = '0.7.0'
+const SERVER_VERSION = '0.7.1'
 
+// Stored per-session: transport + the McpServer instance driving it
 interface McpSession {
   transport: StreamableHTTPServerTransport
   server: McpServer
@@ -32,26 +33,6 @@ class McpServerManager {
     return `http://localhost:${this._port}/mcp`
   }
 
-  private createSession(): McpSession {
-    const server = new McpServer({
-      name: SERVER_NAME,
-      version: SERVER_VERSION
-    })
-    registerMcpTools(server)
-
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID()
-    })
-
-    transport.onclose = () => {
-      const sid = transport.sessionId
-      if (sid) this.sessions.delete(sid)
-      server.close().catch(() => {})
-    }
-
-    return { transport, server }
-  }
-
   async start(port?: number): Promise<void> {
     if (this._isRunning) return
 
@@ -73,7 +54,19 @@ class McpServerManager {
       const url = new URL(req.url || '/', `http://localhost:${this._port}`)
 
       if (url.pathname === '/mcp') {
-        await this.handleMcpRequest(req, res)
+        try {
+          await this.handleMcpRequest(req, res)
+        } catch (error) {
+          console.error('[MCP] Unhandled error:', error)
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32603, message: 'Internal server error' },
+              id: null
+            }))
+          }
+        }
       } else if (url.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok', name: SERVER_NAME, version: SERVER_VERSION }))
@@ -87,7 +80,6 @@ class McpServerManager {
       this.httpServer!.listen(this._port, '127.0.0.1', () => {
         this._isRunning = true
         console.log(`[MCP] Server started on ${this.url}`)
-        // Auto-generate CLI config files
         try {
           const configPath = writeMcpJsonConfig(this.url)
           console.log(`[MCP] Config written to ${configPath}`)
@@ -99,7 +91,6 @@ class McpServerManager {
 
       this.httpServer!.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') {
-          // Try alternate port
           this._port = this._port + 1
           console.log(`[MCP] Port in use, trying ${this._port}`)
           this.httpServer!.listen(this._port, '127.0.0.1')
@@ -110,35 +101,51 @@ class McpServerManager {
     })
   }
 
-  private async handleMcpRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  private async handleMcpRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined
 
     if (req.method === 'POST') {
-      // Reuse existing session if available
+      // ── Existing session → delegate ──
       if (sessionId && this.sessions.has(sessionId)) {
         const session = this.sessions.get(sessionId)!
         await session.transport.handleRequest(req, res)
         return
       }
 
-      // Create new session
-      try {
-        const session = this.createSession()
-        await session.server.connect(session.transport)
+      // ── New session (initialization) ──
+      // Following the official SDK example pattern:
+      // 1. Create transport with onsessioninitialized callback for session storage
+      // 2. Connect server to transport
+      // 3. handleRequest() triggers session init → callback stores session
+      const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
+      registerMcpTools(server)
 
-        if (session.transport.sessionId) {
-          this.sessions.set(session.transport.sessionId, session)
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid: string) => {
+          console.log(`[MCP] Session initialized: ${sid}`)
+          this.sessions.set(sid, { transport, server })
         }
+      })
 
-        await session.transport.handleRequest(req, res)
-      } catch (error) {
-        console.error('[MCP] Request error:', error)
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Internal server error' }))
+      transport.onclose = () => {
+        const sid = transport.sessionId
+        if (sid && this.sessions.has(sid)) {
+          console.log(`[MCP] Session closed: ${sid}`)
+          this.sessions.delete(sid)
         }
+        server.close().catch(() => {})
       }
-    } else if (req.method === 'GET') {
+
+      await server.connect(transport)
+      await transport.handleRequest(req, res)
+      return
+    }
+
+    if (req.method === 'GET') {
       // SSE stream — requires existing session
       if (sessionId && this.sessions.has(sessionId)) {
         const session = this.sessions.get(sessionId)!
@@ -146,30 +153,36 @@ class McpServerManager {
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
-          error: 'Invalid or missing session. Send a POST request to initialize an MCP session.'
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+          id: null
         }))
       }
-    } else if (req.method === 'DELETE') {
-      // Session cleanup
+      return
+    }
+
+    if (req.method === 'DELETE') {
       if (sessionId && this.sessions.has(sessionId)) {
         const session = this.sessions.get(sessionId)!
         await session.transport.handleRequest(req, res)
-        this.sessions.delete(sessionId)
-        await session.server.close().catch(() => {})
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'Invalid or missing session' }))
+        res.end(JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+          id: null
+        }))
       }
-    } else {
-      res.writeHead(405)
-      res.end('Method not allowed')
+      return
     }
+
+    res.writeHead(405)
+    res.end('Method not allowed')
   }
 
   async stop(): Promise<void> {
     if (!this._isRunning) return
 
-    // Close all active sessions
     for (const [id, session] of this.sessions) {
       try {
         await session.transport.close()
@@ -184,7 +197,6 @@ class McpServerManager {
           this._isRunning = false
           this.httpServer = null
           console.log('[MCP] Server stopped')
-          // Remove CLI config entry
           try {
             removeMcpJsonConfig()
           } catch { /* ignore */ }

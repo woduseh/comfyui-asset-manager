@@ -84,7 +84,40 @@
       "custom": "커스텀"
     },
     "variables": "변수",
-    "noVariables": "감지된 변수가 없습니다"
+    "noVariables": "감지된 변수가 없습니다",
+    "msg": {
+      "importSuccess": "워크플로우 \"{name}\" 가져오기 완료 (변수 {count}개)",
+      "deleted": "삭제되었습니다",
+      "updated": "워크플로우가 수정되었습니다",
+      "updateFailed": "수정 실패: {error}"
+    },
+    "role": {
+      "promptPositive": "긍정 프롬프트",
+      "promptNegative": "부정 프롬프트",
+      "seed": "시드",
+      "fixed": "고정값",
+      "custom": "사용자 정의"
+    },
+    "roleShort": {
+      "promptPositive": "긍정",
+      "promptNegative": "부정",
+      "seed": "시드",
+      "fixed": "고정",
+      "custom": "사용자"
+    },
+    "varType": {
+      "text": "텍스트",
+      "number": "숫자",
+      "boolean": "불리언",
+      "seed": "시드",
+      "image": "이미지",
+      "model": "모델",
+      "lora": "LoRA"
+    },
+    "variableList": "변수 목록 ({count})",
+    "roleLabel": "역할:",
+    "defaultValue": "기본값: {value}",
+    "defaultValueNone": "(없음)"
   },
   "module": {
     "title": "프롬프트 모듈",
@@ -111,7 +144,35 @@
       "add": "변형 추가",
       "name": "변형 이름",
       "empty": "변형이 없습니다. 같은 아이템에 대해 슬롯별로 다른 프롬프트를 제공하려면 변형을 추가하세요."
-    }
+    },
+    "msg": {
+      "created": "모듈이 생성되었습니다",
+      "createFailed": "모듈 생성 실패: {error}",
+      "updated": "모듈이 수정되었습니다",
+      "updateFailed": "모듈 수정 실패: {error}",
+      "deleted": "삭제되었습니다",
+      "nameAndPromptRequired": "이름과 프롬프트를 입력해주세요",
+      "itemAdded": "아이템이 추가되었습니다",
+      "itemUpdated": "아이템이 수정되었습니다",
+      "itemDeleted": "아이템이 삭제되었습니다",
+      "copiedToClipboard": "클립보드에 복사되었습니다",
+      "importSuccess": "모듈 \"{name}\" 가져오기 완료",
+      "importFailed": "클립보드에서 모듈 데이터를 읽을 수 없습니다"
+    },
+    "importClipboard": "가져오기 (클립보드)",
+    "export": "내보내기",
+    "selectAll": "전체",
+    "confirmDelete": "삭제하시겠습니까?",
+    "addItemsHint": "아이템을 추가하세요",
+    "promptPreview": "프롬프트 미리보기",
+    "editModule": "모듈 수정",
+    "item": {
+      "namePlaceholder": "아이템 이름",
+      "promptPlaceholder": "프롬프트 입력... 와일드카드 사용 가능: {red|blue|green}, 변수: {{character_name}}",
+      "negativePlaceholder": "네거티브 프롬프트 (선택사항)",
+      "variantNamePlaceholder": "변형 이름 (예: 자연어, 태그)"
+    },
+    "enabled": "활성화"
   },
   "batch": {
     "title": "배치 작업",
@@ -140,19 +201,140 @@
       "pause": "일시정지",
       "resume": "재개",
       "cancel": "취소",
-      "delete": "삭제"
+      "delete": "삭제",
+      "edit": "수정",
+      "rerun": "재실행",
+      "clone": "복제"
     },
     "slot": {
       "variantPlaceholder": "프롬프트 변형 (비워두면 기본 프롬프트 사용)",
       "variant": "프롬프트 변형"
-    }
+    },
+    "msg": {
+      "deleted": "삭제되었습니다",
+      "nameRequired": "배치 작업 이름을 입력해주세요",
+      "workflowRequired": "워크플로우를 선택해주세요",
+      "itemsRequired": "최소 하나의 모듈에서 아이템을 선택해주세요",
+      "editSuccess": "배치 작업 수정 완료: {count}개 태스크",
+      "createSuccess": "배치 작업 생성 완료: {count}개 태스크",
+      "editFailed": "배치 작업 수정 실패: {error}",
+      "createFailed": "배치 작업 생성 실패: {error}",
+      "rerunStarted": "배치 작업 재실행을 시작합니다",
+      "rerunFailed": "재실행 실패: {error}",
+      "cloneFailed": "배치 작업 복제 실패: {error}",
+      "cloneRestored": "배치 설정을 복원했습니다. 수정 후 새로 생성해주세요.",
+      "started": "배치 작업이 시작되었습니다",
+      "startFailed": "시작 실패: {error}",
+      "paused": "일시정지됨",
+      "resumed": "재개됨",
+      "cancelled": "취소됨",
+      "restoreFailed": "설정 복원 실패: {error}",
+      "jobCreateFailed": "작업 생성 실패: {error}",
+      "rerunStartedShort": "재실행을 시작합니다"
+    },
+    "column": {
+      "progress": "진행",
+      "createdAt": "생성일",
+      "failed": "실패"
+    },
+    "wizard": {
+      "editTitle": "배치 작업 수정",
+      "createTitle": "새 배치 작업",
+      "namePlaceholder": "배치 작업 이름",
+      "nameExamplePlaceholder": "예: 캐릭터A 감정 세트",
+      "workflowLabel": "워크플로우",
+      "workflowPlaceholder": "생성용 워크플로우 선택",
+      "descriptionPlaceholder": "설명 (선택사항)",
+      "optionalPlaceholder": "선택사항",
+      "moduleSection": "모듈 선택 (매트릭스)",
+      "addModuleLabel": "모듈 추가",
+      "addModulePlaceholder": "매트릭스에 추가할 모듈 선택",
+      "addModuleShortPlaceholder": "모듈 추가...",
+      "selectAll": "전체 선택",
+      "deselectAll": "전체 해제",
+      "selectAllShort": "전체",
+      "deselectAllShort": "해제",
+      "remove": "제거",
+      "noItems": "이 모듈에 아이템이 없습니다. 프롬프트 모듈 관리에서 아이템을 추가해주세요.",
+      "noItemsShort": "아이템이 없습니다. 모듈 관리에서 추가해주세요.",
+      "slotSection": "프롬프트 슬롯 매핑",
+      "slotSectionShort": "프롬프트 슬롯",
+      "noSlots": "워크플로우에 감지된 프롬프트 슬롯이 없습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.",
+      "noSlotsShort": "워크플로우에서 프롬프트 슬롯이 감지되지 않았습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.",
+      "positive": "긍정",
+      "negative": "부정",
+      "actionInject": "모듈 프롬프트 주입",
+      "actionInjectShort": "모듈 주입",
+      "actionFixed": "고정값 사용",
+      "actionFixedShort": "고정값",
+      "fixedPlaceholder": "고정 프롬프트 텍스트",
+      "prefixModules": "고정 모듈 (프리픽스):",
+      "prefixModulesShort": "고정 모듈:",
+      "prefixModulePlaceholder": "품질, 스타일, 아티스트 등 고정 모듈 선택",
+      "prefixModuleShortPlaceholder": "+ 모듈 추가",
+      "prefixTextPlaceholder": "추가 텍스트 (예: 1girl, ...)",
+      "matrixModules": "조합 모듈 (매트릭스):",
+      "matrixModulesShort": "조합 모듈:",
+      "noModulesHint": "매트릭스에 모듈을 추가하면 이 슬롯에 주입할 모듈을 선택할 수 있습니다.",
+      "suffixPlaceholder": "서픽스 텍스트 (선택사항)",
+      "suffixShortPlaceholder": "서픽스 (선택사항)",
+      "overrideSection": "워크플로우 변수 오버라이드",
+      "overrideOptional": "변수 오버라이드 (선택사항)",
+      "overrideCount": "{count}개 활성",
+      "noOverrides": "오버라이드 가능한 변수가 없습니다.",
+      "defaultValue": "기본값: {value}",
+      "defaultValueNone": "(없음)",
+      "defaultValueShort": "(기본값)",
+      "checkpointPlaceholder": "체크포인트 선택",
+      "loraPlaceholder": "LoRA 선택",
+      "overrideValuePlaceholder": "오버라이드 값",
+      "valuePlaceholder": "값 입력",
+      "generationSettings": "생성 설정",
+      "seedValue": "시드 값",
+      "outputSettings": "출력 설정",
+      "folderPattern": "폴더 패턴",
+      "filePattern": "파일명 패턴",
+      "availableVars": "사용 가능한 변수: {lbrace}job{rbrace}, {lbrace}character{rbrace}, {lbrace}outfit{rbrace}, {lbrace}emotion{rbrace}, {lbrace}style{rbrace}, {lbrace}seed{rbrace}, {lbrace}date{rbrace}, {lbrace}index{rbrace}",
+      "preview": "미리보기",
+      "moduleDimensions": "모듈 차원",
+      "totalCombinations": "총 조합 수",
+      "totalCombinationsShort": "총 조합",
+      "totalImages": "총 생성 이미지 수",
+      "totalImagesShort": "총 이미지 수",
+      "needItems": "선택된 아이템이 있는 모듈이 필요합니다. 모듈에 아이템을 추가하고 체크해주세요.",
+      "addModulesHint": "위에서 모듈을 추가하면 조합 매트릭스가 생성됩니다.",
+      "addModulesHintShort": "모듈을 추가하면 아이템 조합으로 매트릭스가 생성됩니다.",
+      "tooManyWarning": "⚠️ 생성할 이미지가 {count}장으로 매우 많습니다. 실행 시간이 오래 걸릴 수 있습니다.",
+      "tooManyWarningShort": "⚠️ {count}장은 매우 많습니다. 실행 시간이 오래 걸릴 수 있습니다.",
+      "submitEdit": "배치 작업 수정",
+      "submitCreate": "배치 작업 생성",
+      "submitCount": "({count}장)",
+      "stepBasic": "기본 설정",
+      "stepModules": "모듈 & 프롬프트",
+      "stepConfirm": "확인 & 생성",
+      "jobNameLabel": "작업 이름",
+      "descriptionLabel": "설명",
+      "countLabel": "조합당 생성 수",
+      "seedModeLabel": "시드 모드",
+      "seedValueLabel": "시드 값",
+      "prev": "← 이전",
+      "next": "다음 →"
+    },
+    "copySuffix": "(복사)"
   },
   "queue": {
     "title": "큐 모니터",
     "empty": "실행 중인 작업이 없습니다",
     "progress": "진행률",
     "eta": "예상 남은 시간",
-    "currentTask": "현재 작업"
+    "currentTask": "현재 작업",
+    "refresh": "새로고침",
+    "currentRunning": "현재 실행 중",
+    "totalProgress": "전체 진행률",
+    "jobList": "배치 작업 목록",
+    "statusPaused": "일시정지",
+    "statusRunning": "실행 중",
+    "statusWaiting": "대기"
   },
   "gallery": {
     "title": "갤러리",
@@ -164,7 +346,47 @@
     "export": "내보내기",
     "delete": "삭제",
     "metadata": "메타데이터",
-    "compare": "비교"
+    "compare": "비교",
+    "sortOptions": {
+      "createdDesc": "생성일 (최신)",
+      "createdAsc": "생성일 (오래된)",
+      "ratingDesc": "평점 (높은순)",
+      "ratingAsc": "평점 (낮은순)"
+    },
+    "all": "전체",
+    "msg": {
+      "bulkDeleted": "{count}장 삭제됨",
+      "copiedToClipboard": "클립보드에 복사됨",
+      "copyFailed": "복사 실패",
+      "imageDeleted": "이미지 삭제됨"
+    },
+    "ratingPlaceholder": "평점",
+    "favoriteOn": "♥ 즐겨찾기",
+    "favoriteOff": "♡ 즐겨찾기",
+    "resetFilters": "필터 초기화",
+    "selectionModeOff": "선택 해제",
+    "selectionModeOn": "선택 모드",
+    "selectAll": "전체 선택",
+    "deleteCount": "삭제 ({count})",
+    "confirmBulkDelete": "선택한 {count}장을 삭제하시겠습니까?",
+    "viewer": {
+      "prevImage": "이전 이미지 (←)",
+      "nextImage": "다음 이미지 (→)",
+      "copyToClipboard": "클립보드에 복사 (Ctrl+C)",
+      "openInExplorer": "파일 탐색기에서 열기",
+      "removeFavorite": "즐겨찾기 해제",
+      "addFavorite": "즐겨찾기 추가",
+      "deleteImage": "이미지 삭제",
+      "confirmDelete": "이 이미지를 삭제하시겠습니까?"
+    },
+    "meta": {
+      "character": "캐릭터",
+      "outfit": "복장",
+      "emotion": "감정",
+      "style": "스타일",
+      "file": "파일"
+    },
+    "promptInfo": "프롬프트 정보"
   },
   "common": {
     "save": "저장",
@@ -198,5 +420,46 @@
       "stop": "MCP 중지",
       "copyUrl": "URL 복사"
     }
+  },
+  "jobs": {
+    "title": "작업 관리",
+    "newBatch": "+ 새 배치 작업",
+    "emptyHint": "배치 작업이 없습니다. 새 배치 작업을 만들어보세요.",
+    "remainingTime": "남은 시간: {time}",
+    "imageCount": "{count}장",
+    "taskCount": "{completed}/{total}장",
+    "failedCount": "실패 {count}",
+    "statusLabel": {
+      "draft": "대기",
+      "queued": "큐잉",
+      "running": "실행 중",
+      "paused": "일시정지",
+      "completed": "완료",
+      "failed": "실패",
+      "cancelled": "취소"
+    },
+    "time": {
+      "hours": "{hours}시간 {mins}분",
+      "minutes": "{mins}분 {secs}초",
+      "seconds": "{secs}초"
+    }
+  },
+  "dashboard": {
+    "activeJobs": "실행 중 작업",
+    "totalProgress": "전체 진행률",
+    "gpu": "GPU",
+    "gpuAvailable": "사용 가능",
+    "totalImages": "총 이미지",
+    "favorites": "즐겨찾기",
+    "batchJobs": "배치 작업",
+    "completedJobs": "완료된 작업",
+    "workflows": "워크플로우",
+    "modules": "모듈",
+    "recentImages": "최근 생성 이미지",
+    "image": "이미지",
+    "emptyHint": "아직 생성된 이미지가 없습니다. 워크플로우를 등록하고 배치 작업을 시작해보세요.",
+    "registerWorkflow": "워크플로우 등록",
+    "manageModules": "모듈 관리",
+    "createBatch": "배치 작업 만들기"
   }
 }

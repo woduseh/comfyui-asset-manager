@@ -84,7 +84,40 @@
       "custom": "Custom"
     },
     "variables": "Variables",
-    "noVariables": "No variables detected"
+    "noVariables": "No variables detected",
+    "msg": {
+      "importSuccess": "Workflow \"{name}\" imported ({count} variables)",
+      "deleted": "Deleted",
+      "updated": "Workflow updated",
+      "updateFailed": "Update failed: {error}"
+    },
+    "role": {
+      "promptPositive": "Positive Prompt",
+      "promptNegative": "Negative Prompt",
+      "seed": "Seed",
+      "fixed": "Fixed Value",
+      "custom": "Custom"
+    },
+    "roleShort": {
+      "promptPositive": "Positive",
+      "promptNegative": "Negative",
+      "seed": "Seed",
+      "fixed": "Fixed",
+      "custom": "Custom"
+    },
+    "varType": {
+      "text": "Text",
+      "number": "Number",
+      "boolean": "Boolean",
+      "seed": "Seed",
+      "image": "Image",
+      "model": "Model",
+      "lora": "LoRA"
+    },
+    "variableList": "Variables ({count})",
+    "roleLabel": "Role:",
+    "defaultValue": "Default: {value}",
+    "defaultValueNone": "(none)"
   },
   "module": {
     "title": "Prompt Modules",
@@ -111,7 +144,35 @@
       "add": "Add Variant",
       "name": "Variant Name",
       "empty": "No variants. Add variants to provide different prompts per slot for the same item."
-    }
+    },
+    "msg": {
+      "created": "Module created",
+      "createFailed": "Module creation failed: {error}",
+      "updated": "Module updated",
+      "updateFailed": "Module update failed: {error}",
+      "deleted": "Deleted",
+      "nameAndPromptRequired": "Name and prompt are required",
+      "itemAdded": "Item added",
+      "itemUpdated": "Item updated",
+      "itemDeleted": "Item deleted",
+      "copiedToClipboard": "Copied to clipboard",
+      "importSuccess": "Module \"{name}\" imported",
+      "importFailed": "Cannot read module data from clipboard"
+    },
+    "importClipboard": "Import (Clipboard)",
+    "export": "Export",
+    "selectAll": "All",
+    "confirmDelete": "Delete this?",
+    "addItemsHint": "Add items",
+    "promptPreview": "Prompt Preview",
+    "editModule": "Edit Module",
+    "item": {
+      "namePlaceholder": "Item name",
+      "promptPlaceholder": "Enter prompt... Wildcards: {red|blue|green}, Variables: {{character_name}}",
+      "negativePlaceholder": "Negative prompt (optional)",
+      "variantNamePlaceholder": "Variant name (e.g., natural, tags)"
+    },
+    "enabled": "Enabled"
   },
   "batch": {
     "title": "Batch Jobs",
@@ -140,19 +201,140 @@
       "pause": "Pause",
       "resume": "Resume",
       "cancel": "Cancel",
-      "delete": "Delete"
+      "delete": "Delete",
+      "edit": "Edit",
+      "rerun": "Rerun",
+      "clone": "Clone"
     },
     "slot": {
       "variantPlaceholder": "Prompt variant (leave empty for default prompt)",
       "variant": "Prompt Variant"
-    }
+    },
+    "msg": {
+      "deleted": "Deleted",
+      "nameRequired": "Please enter a batch job name",
+      "workflowRequired": "Please select a workflow",
+      "itemsRequired": "Select at least one item from a module",
+      "editSuccess": "Batch job updated: {count} tasks",
+      "createSuccess": "Batch job created: {count} tasks",
+      "editFailed": "Batch update failed: {error}",
+      "createFailed": "Batch creation failed: {error}",
+      "rerunStarted": "Batch job rerun started",
+      "rerunFailed": "Rerun failed: {error}",
+      "cloneFailed": "Batch clone failed: {error}",
+      "cloneRestored": "Batch settings restored. Edit and create a new job.",
+      "started": "Batch job started",
+      "startFailed": "Start failed: {error}",
+      "paused": "Paused",
+      "resumed": "Resumed",
+      "cancelled": "Cancelled",
+      "restoreFailed": "Settings restore failed: {error}",
+      "jobCreateFailed": "Job creation failed: {error}",
+      "rerunStartedShort": "Rerun started"
+    },
+    "column": {
+      "progress": "Progress",
+      "createdAt": "Created",
+      "failed": "Failed"
+    },
+    "wizard": {
+      "editTitle": "Edit Batch Job",
+      "createTitle": "New Batch Job",
+      "namePlaceholder": "Batch job name",
+      "nameExamplePlaceholder": "e.g., CharacterA Emotion Set",
+      "workflowLabel": "Workflow",
+      "workflowPlaceholder": "Select a generation workflow",
+      "descriptionPlaceholder": "Description (optional)",
+      "optionalPlaceholder": "Optional",
+      "moduleSection": "Module Selection (Matrix)",
+      "addModuleLabel": "Add Module",
+      "addModulePlaceholder": "Select module to add to matrix",
+      "addModuleShortPlaceholder": "Add module...",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectAllShort": "All",
+      "deselectAllShort": "None",
+      "remove": "Remove",
+      "noItems": "No items in this module. Add items in Prompt Module management.",
+      "noItemsShort": "No items. Add them in module management.",
+      "slotSection": "Prompt Slot Mapping",
+      "slotSectionShort": "Prompt Slots",
+      "noSlots": "No prompt slots detected in workflow. Set variable roles in workflow details.",
+      "noSlotsShort": "No prompt slots detected. Set variable roles in workflow details.",
+      "positive": "Positive",
+      "negative": "Negative",
+      "actionInject": "Inject Module Prompt",
+      "actionInjectShort": "Module Inject",
+      "actionFixed": "Use Fixed Value",
+      "actionFixedShort": "Fixed",
+      "fixedPlaceholder": "Fixed prompt text",
+      "prefixModules": "Fixed Modules (Prefix):",
+      "prefixModulesShort": "Fixed Modules:",
+      "prefixModulePlaceholder": "Select quality, style, artist modules",
+      "prefixModuleShortPlaceholder": "+ Add module",
+      "prefixTextPlaceholder": "Additional text (e.g., 1girl, ...)",
+      "matrixModules": "Combination Modules (Matrix):",
+      "matrixModulesShort": "Combination Modules:",
+      "noModulesHint": "Add modules to the matrix to select which to inject into this slot.",
+      "suffixPlaceholder": "Suffix text (optional)",
+      "suffixShortPlaceholder": "Suffix (optional)",
+      "overrideSection": "Workflow Variable Override",
+      "overrideOptional": "Variable Override (optional)",
+      "overrideCount": "{count} active",
+      "noOverrides": "No overridable variables.",
+      "defaultValue": "Default: {value}",
+      "defaultValueNone": "(none)",
+      "defaultValueShort": "(default)",
+      "checkpointPlaceholder": "Select checkpoint",
+      "loraPlaceholder": "Select LoRA",
+      "overrideValuePlaceholder": "Override value",
+      "valuePlaceholder": "Enter value",
+      "generationSettings": "Generation Settings",
+      "seedValue": "Seed Value",
+      "outputSettings": "Output Settings",
+      "folderPattern": "Folder Pattern",
+      "filePattern": "Filename Pattern",
+      "availableVars": "Available variables: {lbrace}job{rbrace}, {lbrace}character{rbrace}, {lbrace}outfit{rbrace}, {lbrace}emotion{rbrace}, {lbrace}style{rbrace}, {lbrace}seed{rbrace}, {lbrace}date{rbrace}, {lbrace}index{rbrace}",
+      "preview": "Preview",
+      "moduleDimensions": "Module Dimensions",
+      "totalCombinations": "Total Combinations",
+      "totalCombinationsShort": "Total Combos",
+      "totalImages": "Total Images to Generate",
+      "totalImagesShort": "Total Images",
+      "needItems": "Need modules with selected items. Add items to modules and check them.",
+      "addModulesHint": "Add modules above to create a combination matrix.",
+      "addModulesHintShort": "Add modules to create a combination matrix.",
+      "tooManyWarning": "⚠️ {count} images is very large. Execution may take a long time.",
+      "tooManyWarningShort": "⚠️ {count} images is very large. May take a long time.",
+      "submitEdit": "Update Batch Job",
+      "submitCreate": "Create Batch Job",
+      "submitCount": "({count} images)",
+      "stepBasic": "Basic Settings",
+      "stepModules": "Modules & Prompts",
+      "stepConfirm": "Confirm & Create",
+      "jobNameLabel": "Job Name",
+      "descriptionLabel": "Description",
+      "countLabel": "Count per Combination",
+      "seedModeLabel": "Seed Mode",
+      "seedValueLabel": "Seed Value",
+      "prev": "← Previous",
+      "next": "Next →"
+    },
+    "copySuffix": "(copy)"
   },
   "queue": {
     "title": "Queue Monitor",
     "empty": "No running tasks",
     "progress": "Progress",
     "eta": "Estimated Time Remaining",
-    "currentTask": "Current Task"
+    "currentTask": "Current Task",
+    "refresh": "Refresh",
+    "currentRunning": "Currently Running",
+    "totalProgress": "Overall Progress",
+    "jobList": "Batch Job List",
+    "statusPaused": "Paused",
+    "statusRunning": "Running",
+    "statusWaiting": "Waiting"
   },
   "gallery": {
     "title": "Gallery",
@@ -164,7 +346,47 @@
     "export": "Export",
     "delete": "Delete",
     "metadata": "Metadata",
-    "compare": "Compare"
+    "compare": "Compare",
+    "sortOptions": {
+      "createdDesc": "Created (Newest)",
+      "createdAsc": "Created (Oldest)",
+      "ratingDesc": "Rating (Highest)",
+      "ratingAsc": "Rating (Lowest)"
+    },
+    "all": "All",
+    "msg": {
+      "bulkDeleted": "{count} images deleted",
+      "copiedToClipboard": "Copied to clipboard",
+      "copyFailed": "Copy failed",
+      "imageDeleted": "Image deleted"
+    },
+    "ratingPlaceholder": "Rating",
+    "favoriteOn": "♥ Favorite",
+    "favoriteOff": "♡ Favorite",
+    "resetFilters": "Reset Filters",
+    "selectionModeOff": "Deselect",
+    "selectionModeOn": "Selection Mode",
+    "selectAll": "Select All",
+    "deleteCount": "Delete ({count})",
+    "confirmBulkDelete": "Delete {count} selected images?",
+    "viewer": {
+      "prevImage": "Previous Image (←)",
+      "nextImage": "Next Image (→)",
+      "copyToClipboard": "Copy to Clipboard (Ctrl+C)",
+      "openInExplorer": "Open in File Explorer",
+      "removeFavorite": "Remove Favorite",
+      "addFavorite": "Add Favorite",
+      "deleteImage": "Delete Image",
+      "confirmDelete": "Delete this image?"
+    },
+    "meta": {
+      "character": "Character",
+      "outfit": "Outfit",
+      "emotion": "Emotion",
+      "style": "Style",
+      "file": "File"
+    },
+    "promptInfo": "Prompt Info"
   },
   "common": {
     "save": "Save",
@@ -198,5 +420,46 @@
       "stop": "Stop MCP",
       "copyUrl": "Copy URL"
     }
+  },
+  "jobs": {
+    "title": "Job Management",
+    "newBatch": "+ New Batch Job",
+    "emptyHint": "No batch jobs. Create a new batch job to get started.",
+    "remainingTime": "Remaining: {time}",
+    "imageCount": "{count} images",
+    "taskCount": "{completed}/{total} images",
+    "failedCount": "Failed {count}",
+    "statusLabel": {
+      "draft": "Draft",
+      "queued": "Queued",
+      "running": "Running",
+      "paused": "Paused",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "time": {
+      "hours": "{hours}h {mins}m",
+      "minutes": "{mins}m {secs}s",
+      "seconds": "{secs}s"
+    }
+  },
+  "dashboard": {
+    "activeJobs": "Active Jobs",
+    "totalProgress": "Overall Progress",
+    "gpu": "GPU",
+    "gpuAvailable": "Available",
+    "totalImages": "Total Images",
+    "favorites": "Favorites",
+    "batchJobs": "Batch Jobs",
+    "completedJobs": "Completed Jobs",
+    "workflows": "Workflows",
+    "modules": "Modules",
+    "recentImages": "Recent Images",
+    "image": "Image",
+    "emptyHint": "No images yet. Register a workflow and start a batch job.",
+    "registerWorkflow": "Register Workflow",
+    "manageModules": "Manage Modules",
+    "createBatch": "Create Batch Job"
   }
 }

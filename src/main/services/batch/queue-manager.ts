@@ -17,6 +17,14 @@ import {
   SettingsRepository
 } from '../database/repositories'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import log from '../../logger'
+import {
+  TASK_CHUNK_SIZE,
+  PAUSE_CHECK_INTERVAL_MS,
+  TASK_EXECUTION_TIMEOUT_MS,
+  COMPLETION_POLL_INTERVAL_MS,
+  MAX_DUPLICATE_FILE_SUFFIX
+} from '../../constants'
 import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
 import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
 
@@ -61,12 +69,12 @@ class QueueManager {
     const runningJobs = batchJobRepo.list('running')
     for (const job of runningJobs) {
       const jobId = job.id as string
-      console.log(`[QueueManager] Recovering interrupted job: ${jobId}`)
+      log.info(`[QueueManager] Recovering interrupted job: ${jobId}`)
       batchTaskRepo.resetRunningTasksByJob(jobId)
       batchJobRepo.updateStatus(jobId, 'paused')
     }
     if (runningJobs.length > 0) {
-      console.log(`[QueueManager] Recovered ${runningJobs.length} interrupted job(s)`)
+      log.info(`[QueueManager] Recovered ${runningJobs.length} interrupted job(s)`)
     }
   }
 
@@ -96,7 +104,7 @@ class QueueManager {
     try {
       await this.processJob(jobId)
     } catch (error) {
-      console.error('Job execution error:', error)
+      log.error('Job execution error:', error)
       batchJobRepo.updateStatus(jobId, 'failed')
     } finally {
       this._isProcessing = false
@@ -132,9 +140,9 @@ class QueueManager {
       const pausedJobs = batchJobRepo.list('paused')
       if (pausedJobs.length > 0) {
         const jobId = pausedJobs[0].id as string
-        console.log(`[QueueManager] Cold resuming job: ${jobId}`)
+        log.info(`[QueueManager] Cold resuming job: ${jobId}`)
         this.startJob(jobId).catch((err) => {
-          console.error('[QueueManager] Cold resume failed:', err)
+          log.error('[QueueManager] Cold resume failed:', err)
         })
       }
     }
@@ -151,19 +159,18 @@ class QueueManager {
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'cancelled')
       batchTaskRepo.cancelRemainingTasksByJob(this._currentJobId)
-      comfyuiManager.restClient.interrupt().catch(() => {})
+      comfyuiManager.restClient.interrupt().catch((e) => {
+        log.debug('[Queue] ComfyUI interrupt failed during cancel:', e)
+      })
       return
     }
 
     // Cold cancel: no active loop, find running/paused job and cancel directly in DB
     if (!this._isProcessing) {
-      const staleJobs = [
-        ...batchJobRepo.list('running'),
-        ...batchJobRepo.list('paused')
-      ]
+      const staleJobs = [...batchJobRepo.list('running'), ...batchJobRepo.list('paused')]
       for (const job of staleJobs) {
         const jobId = job.id as string
-        console.log(`[QueueManager] Cold cancelling job: ${jobId}`)
+        log.info(`[QueueManager] Cold cancelling job: ${jobId}`)
         batchTaskRepo.cancelRemainingTasksByJob(jobId)
         batchJobRepo.updateStatus(jobId, 'cancelled')
       }
@@ -178,7 +185,9 @@ class QueueManager {
     if (!workflow) throw new Error(`Workflow not found for job`)
 
     const apiJson = JSON.parse(workflow.api_json as string)
-    const outputRoot = settingsRepo.get('output.directory') || join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
+    const outputRoot =
+      settingsRepo.get('output.directory') ||
+      join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
     const jobConfig = JSON.parse(job.config as string) as BatchConfig
 
     let completedCount = (job.completed_tasks as number) || 0
@@ -187,7 +196,7 @@ class QueueManager {
 
     // ETA tracking
     const taskDurations: number[] = []
-    const CHUNK_SIZE = 50
+    const CHUNK_SIZE = TASK_CHUNK_SIZE
 
     // Determine execution mode: lazy (has snapshot) or legacy (pre-created tasks)
     const hasSnapshot = !!job.module_data_snapshot
@@ -211,7 +220,7 @@ class QueueManager {
 
         for (const genTask of generatedTasks) {
           while (this._isPaused) {
-            await this.sleep(1000)
+            await this.sleep(PAUSE_CHECK_INTERVAL_MS)
             if (this._isCancelled) break
           }
           if (this._isCancelled) break
@@ -234,7 +243,13 @@ class QueueManager {
           const taskStartTime = Date.now()
 
           try {
-            await this.processTask(taskRecord, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+            await this.processTask(
+              taskRecord,
+              apiJson,
+              jobId,
+              jobConfig as unknown as Record<string, unknown>,
+              outputRoot
+            )
             completedCount++
             taskDurations.push(Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
@@ -248,7 +263,13 @@ class QueueManager {
               })
               const retryStartTime = Date.now()
               try {
-                await this.processTask(taskRecord, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+                await this.processTask(
+                  taskRecord,
+                  apiJson,
+                  jobId,
+                  jobConfig as unknown as Record<string, unknown>,
+                  outputRoot
+                )
                 completedCount++
                 taskDurations.push(Date.now() - retryStartTime)
               } catch (retryError) {
@@ -265,11 +286,13 @@ class QueueManager {
             }
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
-            const avgDuration = taskDurations.length > 0
-              ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-              : 0
+            const avgDuration =
+              taskDurations.length > 0
+                ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+                : 0
             const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+            const etaMs =
+              taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
 
             this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
               jobId,
@@ -297,7 +320,7 @@ class QueueManager {
 
         for (const task of tasks) {
           while (this._isPaused) {
-            await this.sleep(1000)
+            await this.sleep(PAUSE_CHECK_INTERVAL_MS)
             if (this._isCancelled) break
           }
           if (this._isCancelled) break
@@ -305,12 +328,24 @@ class QueueManager {
           const taskStartTime = Date.now()
 
           try {
-            await this.processTask(task, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+            await this.processTask(
+              task,
+              apiJson,
+              jobId,
+              jobConfig as unknown as Record<string, unknown>,
+              outputRoot
+            )
             completedCount++
             taskDurations.push(Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
-            this.sendTaskCompletedEvent(jobId, task.id as string, completedCount, totalTasks, taskDurations)
+            this.sendTaskCompletedEvent(
+              jobId,
+              task.id as string,
+              completedCount,
+              totalTasks,
+              taskDurations
+            )
           } catch (error) {
             const retryCount = (task.retry_count as number) || 0
             if (retryCount < this._maxRetries) {
@@ -319,7 +354,13 @@ class QueueManager {
               })
               const retryStartTime = Date.now()
               try {
-                await this.processTask(task, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+                await this.processTask(
+                  task,
+                  apiJson,
+                  jobId,
+                  jobConfig as unknown as Record<string, unknown>,
+                  outputRoot
+                )
                 completedCount++
                 taskDurations.push(Date.now() - retryStartTime)
               } catch (retryError) {
@@ -336,11 +377,13 @@ class QueueManager {
             }
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
-            const avgDuration = taskDurations.length > 0
-              ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-              : 0
+            const avgDuration =
+              taskDurations.length > 0
+                ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+                : 0
             const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+            const etaMs =
+              taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
 
             this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
               jobId,
@@ -365,7 +408,11 @@ class QueueManager {
   }
 
   private sendTaskCompletedEvent(
-    jobId: string, taskId: string, completedCount: number, totalTasks: number, taskDurations: number[]
+    jobId: string,
+    taskId: string,
+    completedCount: number,
+    totalTasks: number,
+    taskDurations: number[]
   ): void {
     const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
     const remainingTasks = totalTasks - completedCount
@@ -411,16 +458,14 @@ class QueueManager {
     const historyResult = await this.waitForCompletion(promptId)
 
     // Download result images
-    const outputDir = this.resolveAndCreateOutputDir(
-      outputRoot,
-      jobConfig,
-      metadata
-    )
+    const outputDir = this.resolveAndCreateOutputDir(outputRoot, jobConfig, metadata)
 
     const savedPaths: string[] = []
     if (historyResult?.outputs) {
       for (const nodeOutput of Object.values(historyResult.outputs)) {
-        const nodeOut = nodeOutput as { images?: Array<{ filename: string; type: string; subfolder: string }> }
+        const nodeOut = nodeOutput as {
+          images?: Array<{ filename: string; type: string; subfolder: string }>
+        }
         if (nodeOut.images) {
           for (const img of nodeOut.images) {
             const imageData = await comfyuiManager.restClient.getImage(
@@ -595,7 +640,7 @@ class QueueManager {
    */
   private async waitForCompletion(
     promptId: string,
-    timeoutMs = 600000 // 10 minute timeout per image
+    timeoutMs = TASK_EXECUTION_TIMEOUT_MS
   ): Promise<{ outputs: Record<string, unknown> } | null> {
     const ws = comfyuiManager.webSocket
 
@@ -677,7 +722,7 @@ class QueueManager {
           cleanup()
           reject(new Error('Cancelled'))
         }
-      }, 1000)
+      }, PAUSE_CHECK_INTERVAL_MS)
     })
   }
 
@@ -690,7 +735,7 @@ class QueueManager {
     timeoutMs: number
   ): Promise<{ outputs: Record<string, unknown> } | null> {
     const startTime = Date.now()
-    const POLL_INTERVAL = 5000
+    const POLL_INTERVAL = COMPLETION_POLL_INTERVAL_MS
 
     while (Date.now() - startTime < timeoutMs) {
       if (this._isCancelled) throw new Error('Cancelled')
@@ -730,7 +775,8 @@ class QueueManager {
     jobConfig: Record<string, unknown>,
     metadata: Record<string, string>
   ): string {
-    const pattern = (jobConfig.outputFolderPattern as string) || '{job}/{character}/{outfit}/{emotion}'
+    const pattern =
+      (jobConfig.outputFolderPattern as string) || '{job}/{character}/{outfit}/{emotion}'
     const vars: Record<string, string> = {
       job: (jobConfig.name as string) || 'unnamed',
       character: metadata.characterName || 'default',
@@ -768,7 +814,10 @@ class QueueManager {
 
     let fileName = pattern
     for (const [key, value] of Object.entries(vars)) {
-      fileName = fileName.replace(new RegExp(`\\{${key}\\}`, 'g'), value.replace(/[<>:"/\\|?*]/g, '_'))
+      fileName = fileName.replace(
+        new RegExp(`\\{${key}\\}`, 'g'),
+        value.replace(/[<>:"/\\|?*]/g, '_')
+      )
     }
 
     return fileName + ext
@@ -782,7 +831,7 @@ class QueueManager {
     const ext = extname(filePath)
     const name = basename(filePath, ext)
 
-    for (let i = 1; i <= 999; i++) {
+    for (let i = 1; i <= MAX_DUPLICATE_FILE_SUFFIX; i++) {
       const candidate = join(dir, `${name}_${String(i).padStart(3, '0')}${ext}`)
       if (!existsSync(candidate)) return candidate
     }

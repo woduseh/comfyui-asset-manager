@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { ComfyUIClient } from './client'
 import { ComfyUIWebSocket } from './websocket'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import { PREVIEW_THROTTLE_MS } from '../../constants'
 
 /**
  * Singleton manager that coordinates the ComfyUI REST client and WebSocket connection.
@@ -12,7 +13,6 @@ class ComfyUIManager {
   private ws: ComfyUIWebSocket
   private _isConnected = false
   private _lastPreviewTime = 0
-  private readonly PREVIEW_THROTTLE_MS = 500
 
   constructor() {
     this.client = new ComfyUIClient()
@@ -82,7 +82,7 @@ class ComfyUIManager {
 
     this.ws.on('preview', (data: Buffer) => {
       const now = Date.now()
-      if (now - this._lastPreviewTime < this.PREVIEW_THROTTLE_MS) return
+      if (now - this._lastPreviewTime < PREVIEW_THROTTLE_MS) return
       this._lastPreviewTime = now
       const base64 = data.toString('base64')
       this.sendToRenderer(IPC_CHANNELS.COMFYUI_PREVIEW, base64)

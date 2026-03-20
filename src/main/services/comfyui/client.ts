@@ -1,4 +1,5 @@
 import { ofetch } from 'ofetch'
+import { COMFYUI_PING_TIMEOUT_MS } from '../../constants'
 import type {
   ComfyUIPromptRequest,
   ComfyUIPromptResponse,
@@ -26,7 +27,7 @@ export class ComfyUIClient {
   /** Check if the server is reachable */
   async ping(): Promise<boolean> {
     try {
-      await ofetch(`${this.baseUrl}/system_stats`, { timeout: 5000 })
+      await ofetch(`${this.baseUrl}/system_stats`, { timeout: COMFYUI_PING_TIMEOUT_MS })
       return true
     } catch {
       return false

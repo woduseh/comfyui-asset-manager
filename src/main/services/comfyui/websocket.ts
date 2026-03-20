@@ -2,6 +2,11 @@ import WebSocket from 'ws'
 import { EventEmitter } from 'events'
 import { v4 as uuidv4 } from 'uuid'
 import type { ComfyUIWSMessage } from './types'
+import {
+  WS_RECONNECT_INTERVAL_MS,
+  WS_MAX_RECONNECT_INTERVAL_MS,
+  WS_BACKOFF_MULTIPLIER
+} from '../../constants'
 
 export interface ComfyUIWebSocketEvents {
   connected: () => void
@@ -12,7 +17,12 @@ export interface ComfyUIWebSocketEvents {
   executing: (data: { promptId: string; node: string | null }) => void
   executed: (data: { promptId: string; node: string; output: Record<string, unknown> }) => void
   executionComplete: (data: { promptId: string }) => void
-  executionError: (data: { promptId: string; nodeId: string; message: string; type: string }) => void
+  executionError: (data: {
+    promptId: string
+    nodeId: string
+    message: string
+    type: string
+  }) => void
   executionInterrupted: (data: { promptId: string }) => void
   preview: (data: Buffer) => void
   queueRemaining: (count: number) => void
@@ -24,8 +34,8 @@ export class ComfyUIWebSocket extends EventEmitter {
   private port: number
   private _clientId: string
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private reconnectInterval = 3000
-  private maxReconnectInterval = 30000
+  private reconnectInterval = WS_RECONNECT_INTERVAL_MS
+  private maxReconnectInterval = WS_MAX_RECONNECT_INTERVAL_MS
   private currentReconnectInterval: number
   private _isConnected = false
   private shouldReconnect = true
@@ -174,7 +184,7 @@ export class ComfyUIWebSocket extends EventEmitter {
       this.doConnect()
       // Exponential backoff
       this.currentReconnectInterval = Math.min(
-        this.currentReconnectInterval * 1.5,
+        this.currentReconnectInterval * WS_BACKOFF_MULTIPLIER,
         this.maxReconnectInterval
       )
     }, this.currentReconnectInterval)

@@ -2,16 +2,41 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NButton, NEmpty, NSpace, NTag, NModal, NForm, NFormItem,
-  NInput, NSelect, NInputNumber, NDataTable, NGrid, NGridItem,
-  NDivider, NStatistic, NCheckboxGroup, NCheckbox, NAlert,
-  NScrollbar, NSwitch, NSlider, useMessage
+  NCard,
+  NButton,
+  NEmpty,
+  NSpace,
+  NTag,
+  NModal,
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NInputNumber,
+  NDataTable,
+  NGrid,
+  NGridItem,
+  NDivider,
+  NStatistic,
+  NCheckboxGroup,
+  NCheckbox,
+  NAlert,
+  NScrollbar,
+  NSwitch,
+  NSlider,
+  useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { toPlain } from '@renderer/utils/ipc'
+import {
+  addModuleToMatrix as addModuleToMatrixShared,
+  restoreModuleSelections,
+  restoreSlotMappings,
+  restoreVariableOverrides
+} from '@renderer/composables/useBatchWizard'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -85,8 +110,13 @@ const batchResources = ref<{
 } | null>(null)
 
 const varTypeLabels: Record<string, string> = {
-  text: '텍스트', number: '숫자', boolean: '불리언',
-  seed: '시드', image: '이미지', model: '모델', lora: 'LoRA'
+  text: t('workflow.varType.text'),
+  number: t('workflow.varType.number'),
+  boolean: t('workflow.varType.boolean'),
+  seed: t('workflow.varType.seed'),
+  image: t('workflow.varType.image'),
+  model: t('workflow.varType.model'),
+  lora: t('workflow.varType.lora')
 }
 
 watch(selectedWorkflowId, async (id) => {
@@ -95,9 +125,13 @@ watch(selectedWorkflowId, async (id) => {
     variableOverrides.value = []
     return
   }
-  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
+  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', {
+    workflowId: id
+  })
   slotMappings.value = variables
-    .filter((v: Record<string, unknown>) => v.role === 'prompt_positive' || v.role === 'prompt_negative')
+    .filter(
+      (v: Record<string, unknown>) => v.role === 'prompt_positive' || v.role === 'prompt_negative'
+    )
     .map((v: Record<string, unknown>) => ({
       variableId: v.id as string,
       nodeId: v.node_id as string,
@@ -121,8 +155,9 @@ watch(selectedWorkflowId, async (id) => {
 
   // Set up variable overrides for non-prompt variables
   variableOverrides.value = variables
-    .filter((v: Record<string, unknown>) =>
-      v.role !== 'prompt_positive' && v.role !== 'prompt_negative' && v.var_type !== 'seed'
+    .filter(
+      (v: Record<string, unknown>) =>
+        v.role !== 'prompt_positive' && v.role !== 'prompt_negative' && v.var_type !== 'seed'
     )
     .map((v: Record<string, unknown>) => ({
       variableId: v.id as string,
@@ -178,41 +213,88 @@ const jobColumns: DataTableColumns = [
         failed: 'error',
         cancelled: 'default'
       }
-      return h(NTag, { type: (statusColors[row.status as string] || 'default') as 'success' | 'info' | 'warning' | 'error' | 'default', size: 'small' }, {
-        default: () => t(`batch.status.${row.status}`)
-      })
+      return h(
+        NTag,
+        {
+          type: (statusColors[row.status as string] || 'default') as
+            | 'success'
+            | 'info'
+            | 'warning'
+            | 'error'
+            | 'default',
+          size: 'small'
+        },
+        {
+          default: () => t(`batch.status.${row.status}`)
+        }
+      )
     }
   },
   {
-    title: '진행',
+    title: t('batch.column.progress'),
     key: 'progress',
     width: 150,
     render(row) {
       return `${row.completed_tasks ?? 0}/${row.total_tasks ?? 0}`
     }
   },
-  { title: '생성일', key: 'created_at', width: 180 },
+  { title: t('batch.column.createdAt'), key: 'created_at', width: 180 },
   {
     title: t('common.actions'),
     key: 'actions',
     width: 300,
     render(row) {
-      return h(NSpace, { size: 'small' }, {
-        default: () => [
-          h(NButton, { size: 'tiny', quaternary: true, type: 'default', onClick: () => handleEditJob(row) }, {
-            default: () => '수정'
-          }),
-          h(NButton, { size: 'tiny', quaternary: true, type: 'warning', onClick: () => handleRerunJob(row) }, {
-            default: () => '재실행'
-          }),
-          h(NButton, { size: 'tiny', quaternary: true, type: 'info', onClick: () => handleCloneJob(row) }, {
-            default: () => '복제'
-          }),
-          h(NButton, { size: 'tiny', quaternary: true, type: 'error', onClick: () => handleDeleteJob(row.id as string) }, {
-            default: () => t('common.delete')
-          })
-        ]
-      })
+      return h(
+        NSpace,
+        { size: 'small' },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: 'tiny',
+                quaternary: true,
+                type: 'default',
+                onClick: () => handleEditJob(row)
+              },
+              {
+                default: () => t('batch.actions.edit')
+              }
+            ),
+            h(
+              NButton,
+              {
+                size: 'tiny',
+                quaternary: true,
+                type: 'warning',
+                onClick: () => handleRerunJob(row)
+              },
+              {
+                default: () => t('batch.actions.rerun')
+              }
+            ),
+            h(
+              NButton,
+              { size: 'tiny', quaternary: true, type: 'info', onClick: () => handleCloneJob(row) },
+              {
+                default: () => t('batch.actions.clone')
+              }
+            ),
+            h(
+              NButton,
+              {
+                size: 'tiny',
+                quaternary: true,
+                type: 'error',
+                onClick: () => handleDeleteJob(row.id as string)
+              },
+              {
+                default: () => t('common.delete')
+              }
+            )
+          ]
+        }
+      )
     }
   }
 ]
@@ -230,7 +312,7 @@ async function loadBatchJobs(): Promise<void> {
 async function handleDeleteJob(id: string): Promise<void> {
   await window.electron.ipcRenderer.invoke('batch:delete', { id })
   await loadBatchJobs()
-  message.success('삭제되었습니다')
+  message.success(t('batch.msg.deleted'))
 }
 
 async function openBuilder(): Promise<void> {
@@ -243,25 +325,19 @@ async function openBuilder(): Promise<void> {
   batchResources.value = null
   batchName.value = ''
   batchDescription.value = ''
-  selectedWorkflowId.value = workflowOptions.value.length > 0 ? workflowOptions.value[0].value : null
+  selectedWorkflowId.value =
+    workflowOptions.value.length > 0 ? workflowOptions.value[0].value : null
   showBuilderModal.value = true
 }
 
 async function addModuleToMatrix(moduleId: string): Promise<void> {
-  if (!moduleId) return
-  if (moduleSelections.value.some((s) => s.moduleId === moduleId)) return
-  const mod = availableModules.value.find((m) => m.id === moduleId)
-  if (!mod) return
-  await moduleStore.loadItems(moduleId)
-  const items = [...moduleStore.currentItems]
-  moduleSelections.value.push({
+  await addModuleToMatrixShared(
     moduleId,
-    moduleName: mod.name,
-    moduleType: mod.type,
-    items,
-    selectedItemIds: items.filter((i) => i.enabled).map((i) => i.id)
-  })
-  moduleToAdd.value = null
+    moduleSelections,
+    availableModules,
+    moduleStore,
+    moduleToAdd
+  )
 }
 
 function removeModuleFromMatrix(moduleId: string): void {
@@ -270,15 +346,15 @@ function removeModuleFromMatrix(moduleId: string): void {
 
 async function handleCreateBatch(): Promise<void> {
   if (!batchName.value) {
-    message.warning('배치 작업 이름을 입력해주세요')
+    message.warning(t('batch.msg.nameRequired'))
     return
   }
   if (!selectedWorkflowId.value) {
-    message.warning('워크플로우를 선택해주세요')
+    message.warning(t('batch.msg.workflowRequired'))
     return
   }
   if (taskPreview.value.totalTasks === 0) {
-    message.warning('최소 하나의 모듈에서 아이템을 선택해주세요')
+    message.warning(t('batch.msg.itemsRequired'))
     return
   }
 
@@ -289,48 +365,59 @@ async function handleCreateBatch(): Promise<void> {
       await window.electron.ipcRenderer.invoke('batch:delete', { id: editingJobId.value })
     }
 
-    const result = await window.electron.ipcRenderer.invoke('batch:create', toPlain({
-      name: batchName.value,
-      description: batchDescription.value,
-      workflowId: selectedWorkflowId.value,
-      moduleSelections: moduleSelections.value.map((s) => ({
-        moduleId: s.moduleId,
-        moduleType: s.moduleType,
-        selectedItemIds: s.selectedItemIds
-      })),
-      countPerCombination: countPerCombination.value,
-      seedMode: seedMode.value,
-      fixedSeed: fixedSeed.value,
-      outputFolderPattern: outputPattern.value,
-      fileNamePattern: filePattern.value,
-      slotMappings: slotMappings.value.map((s) => ({
-        variableId: s.variableId,
-        nodeId: s.nodeId,
-        fieldName: s.fieldName,
-        role: s.role,
-        action: s.action,
-        fixedValue: s.fixedValue,
-        assignedModuleIds: s.assignedModuleIds,
-        prefixModuleIds: s.prefixModuleIds,
-        prefixText: s.prefixText,
-        suffixText: s.suffixText
-      })),
-      variableOverrides: variableOverrides.value
-        .filter(vo => vo.enabled)
-        .map(vo => ({
-          nodeId: vo.nodeId,
-          fieldName: vo.fieldName,
-          value: vo.value
-        }))
-    }))
+    const result = await window.electron.ipcRenderer.invoke(
+      'batch:create',
+      toPlain({
+        name: batchName.value,
+        description: batchDescription.value,
+        workflowId: selectedWorkflowId.value,
+        moduleSelections: moduleSelections.value.map((s) => ({
+          moduleId: s.moduleId,
+          moduleType: s.moduleType,
+          selectedItemIds: s.selectedItemIds
+        })),
+        countPerCombination: countPerCombination.value,
+        seedMode: seedMode.value,
+        fixedSeed: fixedSeed.value,
+        outputFolderPattern: outputPattern.value,
+        fileNamePattern: filePattern.value,
+        slotMappings: slotMappings.value.map((s) => ({
+          variableId: s.variableId,
+          nodeId: s.nodeId,
+          fieldName: s.fieldName,
+          role: s.role,
+          action: s.action,
+          fixedValue: s.fixedValue,
+          assignedModuleIds: s.assignedModuleIds,
+          prefixModuleIds: s.prefixModuleIds,
+          prefixText: s.prefixText,
+          suffixText: s.suffixText
+        })),
+        variableOverrides: variableOverrides.value
+          .filter((vo) => vo.enabled)
+          .map((vo) => ({
+            nodeId: vo.nodeId,
+            fieldName: vo.fieldName,
+            value: vo.value
+          }))
+      })
+    )
 
     const isEdit = editingJobId.value !== null
     editingJobId.value = null
-    message.success(isEdit ? `배치 작업 수정 완료: ${result.totalTasks}개 태스크` : `배치 작업 생성 완료: ${result.totalTasks}개 태스크`)
+    message.success(
+      isEdit
+        ? t('batch.msg.editSuccess', { count: result.totalTasks })
+        : t('batch.msg.createSuccess', { count: result.totalTasks })
+    )
     showBuilderModal.value = false
     await loadBatchJobs()
   } catch (error) {
-    message.error((editingJobId.value ? '배치 작업 수정 실패: ' : '배치 작업 생성 실패: ') + (error as Error).message)
+    message.error(
+      editingJobId.value
+        ? t('batch.msg.editFailed', { error: (error as Error).message })
+        : t('batch.msg.createFailed', { error: (error as Error).message })
+    )
   }
 }
 
@@ -354,61 +441,17 @@ async function handleEditJob(job: Record<string, unknown>): Promise<void> {
     filePattern.value = config.fileNamePattern || '{character}_{outfit}_{emotion}_{index}'
 
     // Restore module selections
-    moduleSelections.value = []
-    if (config.moduleSelections && Array.isArray(config.moduleSelections)) {
-      for (const sel of config.moduleSelections) {
-        const mod = availableModules.value.find(m => m.id === sel.moduleId)
-        if (mod) {
-          await moduleStore.loadItems(sel.moduleId)
-          const items = [...moduleStore.currentItems]
-          moduleSelections.value.push({
-            moduleId: sel.moduleId,
-            moduleName: mod.name,
-            moduleType: sel.moduleType || mod.type,
-            items,
-            selectedItemIds: sel.selectedItemIds || items.map(i => i.id)
-          })
-        }
-      }
-    }
+    await restoreModuleSelections(config, moduleSelections, availableModules, moduleStore)
 
     showBuilderModal.value = true
 
     // Restore slot mapping actions after watcher runs
-    if (config.slotMappings && Array.isArray(config.slotMappings)) {
-      setTimeout(() => {
-        for (const savedSlot of config.slotMappings) {
-          const slot = slotMappings.value.find(s =>
-            s.nodeId === savedSlot.nodeId && s.fieldName === savedSlot.fieldName
-          )
-          if (slot) {
-            slot.action = savedSlot.action || 'inject'
-            slot.fixedValue = savedSlot.fixedValue || ''
-            slot.assignedModuleIds = savedSlot.assignedModuleIds || []
-            slot.prefixModuleIds = savedSlot.prefixModuleIds || []
-            slot.prefixText = savedSlot.prefixText || ''
-            slot.suffixText = savedSlot.suffixText || ''
-          }
-        }
-      }, 500)
-    }
+    restoreSlotMappings(config.slotMappings, slotMappings)
 
     // Restore variable overrides after watcher runs
-    if (config.variableOverrides && Array.isArray(config.variableOverrides)) {
-      setTimeout(() => {
-        for (const savedOverride of config.variableOverrides) {
-          const vo = variableOverrides.value.find(v =>
-            v.nodeId === savedOverride.nodeId && v.fieldName === savedOverride.fieldName
-          )
-          if (vo) {
-            vo.enabled = true
-            vo.value = savedOverride.value || ''
-          }
-        }
-      }, 500)
-    }
+    restoreVariableOverrides(config.variableOverrides, variableOverrides)
   } catch (e) {
-    message.error('배치 작업 수정 실패: ' + (e instanceof Error ? e.message : String(e)))
+    message.error(t('batch.msg.editFailed', { error: e instanceof Error ? e.message : String(e) }))
   }
 }
 
@@ -416,13 +459,13 @@ async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
   try {
     const result = await window.electron.ipcRenderer.invoke('batch:rerun', { id: job.id as string })
     if (result.success) {
-      message.success('배치 작업 재실행을 시작합니다')
+      message.success(t('batch.msg.rerunStarted'))
       await loadBatchJobs()
     } else {
-      message.error('재실행 실패: ' + result.error)
+      message.error(t('batch.msg.rerunFailed', { error: result.error }))
     }
   } catch (e) {
-    message.error('재실행 실패: ' + (e instanceof Error ? e.message : String(e)))
+    message.error(t('batch.msg.rerunFailed', { error: e instanceof Error ? e.message : String(e) }))
   }
 }
 
@@ -434,7 +477,7 @@ async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
     availableModules.value = moduleStore.modules
 
     // Restore basic settings
-    batchName.value = `${job.name as string} (복사)`
+    batchName.value = `${job.name as string} ${t('batch.copySuffix')}`
     batchDescription.value = config.description || ''
     selectedWorkflowId.value = config.workflowId || null
     countPerCombination.value = config.countPerCombination || 1
@@ -444,63 +487,19 @@ async function handleCloneJob(job: Record<string, unknown>): Promise<void> {
     filePattern.value = config.fileNamePattern || '{character}_{outfit}_{emotion}_{index}'
 
     // Restore module selections
-    moduleSelections.value = []
-    if (config.moduleSelections && Array.isArray(config.moduleSelections)) {
-      for (const sel of config.moduleSelections) {
-        const mod = availableModules.value.find(m => m.id === sel.moduleId)
-        if (mod) {
-          await moduleStore.loadItems(sel.moduleId)
-          const items = [...moduleStore.currentItems]
-          moduleSelections.value.push({
-            moduleId: sel.moduleId,
-            moduleName: mod.name,
-            moduleType: sel.moduleType || mod.type,
-            items,
-            selectedItemIds: sel.selectedItemIds || items.map(i => i.id)
-          })
-        }
-      }
-    }
+    await restoreModuleSelections(config, moduleSelections, availableModules, moduleStore)
 
     showBuilderModal.value = true
 
     // Restore slot mapping actions after watcher runs
-    if (config.slotMappings && Array.isArray(config.slotMappings)) {
-      setTimeout(() => {
-        for (const savedSlot of config.slotMappings) {
-          const slot = slotMappings.value.find(s =>
-            s.nodeId === savedSlot.nodeId && s.fieldName === savedSlot.fieldName
-          )
-          if (slot) {
-            slot.action = savedSlot.action || 'inject'
-            slot.fixedValue = savedSlot.fixedValue || ''
-            slot.assignedModuleIds = savedSlot.assignedModuleIds || []
-            slot.prefixModuleIds = savedSlot.prefixModuleIds || []
-            slot.prefixText = savedSlot.prefixText || ''
-            slot.suffixText = savedSlot.suffixText || ''
-          }
-        }
-      }, 500)
-    }
+    restoreSlotMappings(config.slotMappings, slotMappings)
 
     // Restore variable overrides after watcher runs
-    if (config.variableOverrides && Array.isArray(config.variableOverrides)) {
-      setTimeout(() => {
-        for (const savedOverride of config.variableOverrides) {
-          const vo = variableOverrides.value.find(v =>
-            v.nodeId === savedOverride.nodeId && v.fieldName === savedOverride.fieldName
-          )
-          if (vo) {
-            vo.enabled = true
-            vo.value = savedOverride.value || ''
-          }
-        }
-      }, 500)
-    }
+    restoreVariableOverrides(config.variableOverrides, variableOverrides)
 
-    message.info('배치 설정을 복원했습니다. 수정 후 새로 생성해주세요.')
+    message.info(t('batch.msg.cloneRestored'))
   } catch (e) {
-    message.error('배치 작업 복제 실패: ' + (e instanceof Error ? e.message : String(e)))
+    message.error(t('batch.msg.cloneFailed', { error: e instanceof Error ? e.message : String(e) }))
   }
 }
 
@@ -517,14 +516,14 @@ onMounted(() => {
 
 <template>
   <div class="batch-view">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center">
       <h2>{{ t('batch.title') }}</h2>
       <NButton type="primary" @click="openBuilder">
         {{ t('batch.create') }}
       </NButton>
     </div>
 
-    <NCard style="margin-top: 16px;">
+    <NCard style="margin-top: 16px">
       <NDataTable
         v-if="batchJobs.length > 0"
         :columns="jobColumns"
@@ -539,96 +538,138 @@ onMounted(() => {
     <NModal
       v-model:show="showBuilderModal"
       preset="card"
-      style="width: 900px; max-height: 85vh;"
-      :title="editingJobId ? '배치 작업 수정' : t('batch.builder')"
+      style="width: 900px; max-height: 85vh"
+      :title="editingJobId ? t('batch.wizard.editTitle') : t('batch.builder')"
       :bordered="false"
     >
-      <NScrollbar style="max-height: 70vh;">
+      <NScrollbar style="max-height: 70vh">
         <NForm label-placement="left" :label-width="140">
           <!-- Basic info -->
           <NGrid :cols="2" :x-gap="16">
             <NGridItem>
               <NFormItem :label="t('common.name')">
-                <NInput v-model:value="batchName" placeholder="배치 작업 이름" />
+                <NInput
+                  v-model:value="batchName"
+                  :placeholder="t('batch.wizard.namePlaceholder')"
+                />
               </NFormItem>
             </NGridItem>
             <NGridItem>
-              <NFormItem label="워크플로우">
+              <NFormItem :label="t('batch.wizard.workflowLabel')">
                 <NSelect
                   v-model:value="selectedWorkflowId"
                   :options="workflowOptions"
-                  placeholder="생성용 워크플로우 선택"
+                  :placeholder="t('batch.wizard.workflowPlaceholder')"
                 />
               </NFormItem>
             </NGridItem>
           </NGrid>
 
           <NFormItem :label="t('common.description')">
-            <NInput v-model:value="batchDescription" placeholder="설명 (선택사항)" />
+            <NInput
+              v-model:value="batchDescription"
+              :placeholder="t('batch.wizard.descriptionPlaceholder')"
+            />
           </NFormItem>
 
-          <NDivider>모듈 선택 (매트릭스)</NDivider>
+          <NDivider>{{ t('batch.wizard.moduleSection') }}</NDivider>
 
           <!-- Module selection -->
-          <NFormItem label="모듈 추가">
+          <NFormItem :label="t('batch.wizard.addModuleLabel')">
             <NSelect
               v-model:value="moduleToAdd"
-              placeholder="매트릭스에 추가할 모듈 선택"
-              :options="availableModules.filter(m => !moduleSelections.some(s => s.moduleId === m.id)).map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
+              :placeholder="t('batch.wizard.addModulePlaceholder')"
+              :options="
+                availableModules
+                  .filter((m) => !moduleSelections.some((s) => s.moduleId === m.id))
+                  .map((m) => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))
+              "
               @update:value="addModuleToMatrix"
             />
           </NFormItem>
 
           <!-- Selected modules with item checkboxes -->
           <template v-for="sel in moduleSelections" :key="sel.moduleId">
-            <NCard size="small" style="margin-bottom: 12px;">
+            <NCard size="small" style="margin-bottom: 12px">
               <template #header>
                 <NSpace align="center">
                   <NTag size="small">{{ t('module.type.' + sel.moduleType) }}</NTag>
                   <span>{{ sel.moduleName }}</span>
-                  <NTag size="tiny" round>{{ sel.selectedItemIds.length }}/{{ sel.items.length }}</NTag>
+                  <NTag size="tiny" round
+                    >{{ sel.selectedItemIds.length }}/{{ sel.items.length }}</NTag
+                  >
                 </NSpace>
               </template>
               <template #header-extra>
                 <NSpace :size="4">
-                  <NButton size="tiny" quaternary @click="sel.selectedItemIds = sel.items.map(i => i.id)">전체 선택</NButton>
-                  <NButton size="tiny" quaternary @click="sel.selectedItemIds = []">전체 해제</NButton>
-                  <NButton size="tiny" quaternary type="error" @click="removeModuleFromMatrix(sel.moduleId)">제거</NButton>
+                  <NButton
+                    size="tiny"
+                    quaternary
+                    @click="sel.selectedItemIds = sel.items.map((i) => i.id)"
+                    >{{ t('batch.wizard.selectAll') }}</NButton
+                  >
+                  <NButton size="tiny" quaternary @click="sel.selectedItemIds = []">{{
+                    t('batch.wizard.deselectAll')
+                  }}</NButton>
+                  <NButton
+                    size="tiny"
+                    quaternary
+                    type="error"
+                    @click="removeModuleFromMatrix(sel.moduleId)"
+                    >{{ t('batch.wizard.remove') }}</NButton
+                  >
                 </NSpace>
               </template>
               <NCheckboxGroup v-model:value="sel.selectedItemIds">
                 <NSpace>
-                  <NCheckbox v-for="item in sel.items" :key="item.id" :value="item.id" :label="item.name" />
+                  <NCheckbox
+                    v-for="item in sel.items"
+                    :key="item.id"
+                    :value="item.id"
+                    :label="item.name"
+                  />
                 </NSpace>
               </NCheckboxGroup>
-              <NAlert v-if="sel.items.length === 0" type="warning" style="margin-top: 8px; font-size: 12px;">
-                이 모듈에 아이템이 없습니다. 프롬프트 모듈 관리에서 아이템을 추가해주세요.
+              <NAlert
+                v-if="sel.items.length === 0"
+                type="warning"
+                style="margin-top: 8px; font-size: 12px"
+              >
+                {{ t('batch.wizard.noItems') }}
               </NAlert>
             </NCard>
           </template>
 
-          <NDivider>프롬프트 슬롯 매핑</NDivider>
+          <NDivider>{{ t('batch.wizard.slotSection') }}</NDivider>
 
-          <NAlert v-if="slotMappings.length === 0" type="info" style="margin-bottom: 12px; font-size: 12px;">
-            워크플로우에 감지된 프롬프트 슬롯이 없습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.
+          <NAlert
+            v-if="slotMappings.length === 0"
+            type="info"
+            style="margin-bottom: 12px; font-size: 12px"
+          >
+            {{ t('batch.wizard.noSlots') }}
           </NAlert>
           <template v-for="slot in slotMappings" :key="slot.variableId">
-            <NCard size="small" style="margin-bottom: 8px;">
+            <NCard size="small" style="margin-bottom: 8px">
               <NSpace align="center" justify="space-between">
                 <NSpace align="center">
                   <NTag size="small" :type="slot.role === 'prompt_positive' ? 'success' : 'error'">
-                    {{ slot.role === 'prompt_positive' ? '긍정' : '부정' }}
+                    {{
+                      slot.role === 'prompt_positive'
+                        ? t('batch.wizard.positive')
+                        : t('batch.wizard.negative')
+                    }}
                   </NTag>
                   <span>{{ slot.displayName }}</span>
                 </NSpace>
                 <NSelect
                   v-model:value="slot.action"
                   :options="[
-                    { label: '모듈 프롬프트 주입', value: 'inject' },
-                    { label: '고정값 사용', value: 'fixed' }
+                    { label: t('batch.wizard.actionInject'), value: 'inject' },
+                    { label: t('batch.wizard.actionFixed'), value: 'fixed' }
                   ]"
                   size="small"
-                  style="width: 180px;"
+                  style="width: 180px"
                 />
               </NSpace>
 
@@ -638,22 +679,29 @@ onMounted(() => {
                 v-model:value="slot.fixedValue"
                 type="textarea"
                 :rows="2"
-                placeholder="고정 프롬프트 텍스트"
-                style="margin-top: 8px;"
+                :placeholder="t('batch.wizard.fixedPlaceholder')"
+                style="margin-top: 8px"
               />
 
               <!-- Inject mode with per-slot module control -->
               <template v-if="slot.action === 'inject'">
                 <!-- Fixed (prefix) modules -->
-                <div style="margin-top: 8px;">
-                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">고정 모듈 (프리픽스):</span>
+                <div style="margin-top: 8px">
+                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block">{{
+                    t('batch.wizard.prefixModules')
+                  }}</span>
                   <NSelect
                     v-model:value="slot.prefixModuleIds"
                     multiple
                     filterable
-                    placeholder="품질, 스타일, 아티스트 등 고정 모듈 선택"
+                    :placeholder="t('batch.wizard.prefixModulePlaceholder')"
                     size="small"
-                    :options="availableModules.map(m => ({ label: `${m.name} (${t('module.type.' + m.type)})`, value: m.id }))"
+                    :options="
+                      availableModules.map((m) => ({
+                        label: `${m.name} (${t('module.type.' + m.type)})`,
+                        value: m.id
+                      }))
+                    "
                   />
                 </div>
 
@@ -662,14 +710,16 @@ onMounted(() => {
                   v-model:value="slot.prefixText"
                   type="textarea"
                   :rows="2"
-                  placeholder="추가 텍스트 (예: 1girl, ...)"
+                  :placeholder="t('batch.wizard.prefixTextPlaceholder')"
                   size="small"
-                  style="margin-top: 8px;"
+                  style="margin-top: 8px"
                 />
 
                 <!-- Matrix module assignment -->
-                <div v-if="moduleSelections.length > 0" style="margin-top: 8px;">
-                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block;">조합 모듈 (매트릭스):</span>
+                <div v-if="moduleSelections.length > 0" style="margin-top: 8px">
+                  <span style="font-size: 12px; opacity: 0.7; margin-bottom: 4px; display: block">{{
+                    t('batch.wizard.matrixModules')
+                  }}</span>
                   <NCheckboxGroup v-model:value="slot.assignedModuleIds">
                     <NSpace>
                       <NCheckbox
@@ -681,8 +731,8 @@ onMounted(() => {
                     </NSpace>
                   </NCheckboxGroup>
                 </div>
-                <NAlert v-else type="info" style="margin-top: 8px; font-size: 12px;">
-                  매트릭스에 모듈을 추가하면 이 슬롯에 주입할 모듈을 선택할 수 있습니다.
+                <NAlert v-else type="info" style="margin-top: 8px; font-size: 12px">
+                  {{ t('batch.wizard.noModulesHint') }}
                 </NAlert>
 
                 <!-- Suffix text -->
@@ -690,41 +740,60 @@ onMounted(() => {
                   v-model:value="slot.suffixText"
                   type="textarea"
                   :rows="2"
-                  placeholder="서픽스 텍스트 (선택사항)"
+                  :placeholder="t('batch.wizard.suffixPlaceholder')"
                   size="small"
-                  style="margin-top: 8px;"
+                  style="margin-top: 8px"
                 />
               </template>
             </NCard>
           </template>
 
-          <NDivider>워크플로우 변수 오버라이드</NDivider>
+          <NDivider>{{ t('batch.wizard.overrideSection') }}</NDivider>
 
-          <NAlert v-if="variableOverrides.length === 0" type="info" style="margin-bottom: 12px; font-size: 12px;">
-            오버라이드 가능한 변수가 없습니다.
+          <NAlert
+            v-if="variableOverrides.length === 0"
+            type="info"
+            style="margin-bottom: 12px; font-size: 12px"
+          >
+            {{ t('batch.wizard.noOverrides') }}
           </NAlert>
 
           <template v-for="vo in variableOverrides" :key="vo.variableId">
-            <NCard size="small" style="margin-bottom: 8px;">
+            <NCard size="small" style="margin-bottom: 8px">
               <NSpace align="center" justify="space-between">
                 <NSpace align="center">
                   <NSwitch v-model:value="vo.enabled" size="small" />
-                  <NTag size="small" :type="vo.varType === 'model' ? 'success' : vo.varType === 'lora' ? 'warning' : 'default'">
+                  <NTag
+                    size="small"
+                    :type="
+                      vo.varType === 'model'
+                        ? 'success'
+                        : vo.varType === 'lora'
+                          ? 'warning'
+                          : 'default'
+                    "
+                  >
                     {{ varTypeLabels[vo.varType] || vo.varType }}
                   </NTag>
                   <span :style="{ opacity: vo.enabled ? 1 : 0.5 }">{{ vo.displayName }}</span>
                 </NSpace>
-                <span v-if="!vo.enabled" style="font-size: 12px; opacity: 0.5;">기본값: {{ vo.defaultValue || '(없음)' }}</span>
+                <span v-if="!vo.enabled" style="font-size: 12px; opacity: 0.5">{{
+                  vo.defaultValue
+                    ? t('batch.wizard.defaultValue', { value: vo.defaultValue })
+                    : t('batch.wizard.defaultValueNone')
+                }}</span>
               </NSpace>
 
               <template v-if="vo.enabled">
-                <div style="margin-top: 8px;">
+                <div style="margin-top: 8px">
                   <!-- Model dropdown -->
                   <NSelect
                     v-if="vo.varType === 'model'"
                     v-model:value="vo.value"
-                    :options="(batchResources?.checkpoints || []).map(c => ({ label: c, value: c }))"
-                    placeholder="체크포인트 선택"
+                    :options="
+                      (batchResources?.checkpoints || []).map((c) => ({ label: c, value: c }))
+                    "
+                    :placeholder="t('batch.wizard.checkpointPlaceholder')"
                     filterable
                     size="small"
                     :fallback-option="(v: string) => ({ label: v, value: v })"
@@ -733,62 +802,92 @@ onMounted(() => {
                   <NSelect
                     v-else-if="vo.varType === 'lora'"
                     v-model:value="vo.value"
-                    :options="(batchResources?.loras || []).map(l => ({ label: l, value: l }))"
-                    placeholder="LoRA 선택"
+                    :options="(batchResources?.loras || []).map((l) => ({ label: l, value: l }))"
+                    :placeholder="t('batch.wizard.loraPlaceholder')"
                     filterable
                     size="small"
                     :fallback-option="(v: string) => ({ label: v, value: v })"
                   />
                   <!-- LoRA weights -->
-                  <NSpace v-else-if="vo.varType === 'number' && (vo.fieldName === 'strength_model' || vo.fieldName === 'strength_clip')" align="center">
+                  <NSpace
+                    v-else-if="
+                      vo.varType === 'number' &&
+                      (vo.fieldName === 'strength_model' || vo.fieldName === 'strength_clip')
+                    "
+                    align="center"
+                  >
                     <NSlider
                       :value="Number(vo.value) || 1"
-                      :min="0" :max="2" :step="0.05"
-                      style="width: 200px;"
-                      @update:value="(v: number) => { vo.value = String(v) }"
+                      :min="0"
+                      :max="2"
+                      :step="0.05"
+                      style="width: 200px"
+                      @update:value="
+                        (v: number) => {
+                          vo.value = String(v)
+                        }
+                      "
                     />
                     <NInputNumber
                       :value="Number(vo.value) || 1"
-                      :min="0" :max="2" :step="0.05"
-                      size="small" style="width: 100px;"
-                      @update:value="(v: number | null) => { vo.value = String(v ?? 1) }"
+                      :min="0"
+                      :max="2"
+                      :step="0.05"
+                      size="small"
+                      style="width: 100px"
+                      @update:value="
+                        (v: number | null) => {
+                          vo.value = String(v ?? 1)
+                        }
+                      "
                     />
                   </NSpace>
                   <!-- Sampler/Scheduler dropdowns -->
                   <NSelect
                     v-else-if="vo.fieldName === 'sampler_name'"
                     v-model:value="vo.value"
-                    :options="(batchResources?.samplers || []).map(s => ({ label: s, value: s }))"
-                    filterable size="small"
+                    :options="(batchResources?.samplers || []).map((s) => ({ label: s, value: s }))"
+                    filterable
+                    size="small"
                     :fallback-option="(v: string) => ({ label: v, value: v })"
                   />
                   <NSelect
                     v-else-if="vo.fieldName === 'scheduler'"
                     v-model:value="vo.value"
-                    :options="(batchResources?.schedulers || []).map(s => ({ label: s, value: s }))"
-                    filterable size="small"
+                    :options="
+                      (batchResources?.schedulers || []).map((s) => ({ label: s, value: s }))
+                    "
+                    filterable
+                    size="small"
                     :fallback-option="(v: string) => ({ label: v, value: v })"
                   />
                   <!-- Number -->
                   <NInputNumber
                     v-else-if="vo.varType === 'number'"
                     :value="Number(vo.value) || 0"
-                    size="small" style="width: 200px;"
-                    @update:value="(v: number | null) => { vo.value = String(v ?? 0) }"
+                    size="small"
+                    style="width: 200px"
+                    @update:value="
+                      (v: number | null) => {
+                        vo.value = String(v ?? 0)
+                      }
+                    "
                   />
                   <!-- Text -->
                   <NInput
                     v-else
                     v-model:value="vo.value"
-                    type="textarea" :rows="2" size="small"
-                    placeholder="오버라이드 값"
+                    type="textarea"
+                    :rows="2"
+                    size="small"
+                    :placeholder="t('batch.wizard.overrideValuePlaceholder')"
                   />
                 </div>
               </template>
             </NCard>
           </template>
 
-          <NDivider>생성 설정</NDivider>
+          <NDivider>{{ t('batch.wizard.generationSettings') }}</NDivider>
 
           <NGrid :cols="3" :x-gap="16">
             <NGridItem>
@@ -802,67 +901,77 @@ onMounted(() => {
               </NFormItem>
             </NGridItem>
             <NGridItem v-if="seedMode !== 'random'">
-              <NFormItem label="시드 값">
+              <NFormItem :label="t('batch.wizard.seedValue')">
                 <NInputNumber v-model:value="fixedSeed" :min="0" :max="2147483647" />
               </NFormItem>
             </NGridItem>
           </NGrid>
 
-          <NDivider>출력 설정</NDivider>
+          <NDivider>{{ t('batch.wizard.outputSettings') }}</NDivider>
 
           <NGrid :cols="2" :x-gap="16">
             <NGridItem>
-              <NFormItem label="폴더 패턴">
-                <NInput v-model:value="outputPattern" placeholder="{job}/{character}/{outfit}/{emotion}" />
+              <NFormItem :label="t('batch.wizard.folderPattern')">
+                <NInput
+                  v-model:value="outputPattern"
+                  placeholder="{job}/{character}/{outfit}/{emotion}"
+                />
               </NFormItem>
             </NGridItem>
             <NGridItem>
-              <NFormItem label="파일명 패턴">
-                <NInput v-model:value="filePattern" placeholder="{character}_{outfit}_{emotion}_{index}" />
+              <NFormItem :label="t('batch.wizard.filePattern')">
+                <NInput
+                  v-model:value="filePattern"
+                  placeholder="{character}_{outfit}_{emotion}_{index}"
+                />
               </NFormItem>
             </NGridItem>
           </NGrid>
 
-          <NAlert type="info" style="margin-top: 8px; font-size: 12px;">
-            사용 가능한 변수: {job}, {character}, {outfit}, {emotion}, {style}, {seed}, {date}, {index}
+          <NAlert type="info" style="margin-top: 8px; font-size: 12px">
+            {{ t('batch.wizard.availableVars', { lbrace: '{', rbrace: '}' }) }}
           </NAlert>
 
           <!-- Preview Stats -->
-          <NDivider>미리보기</NDivider>
+          <NDivider>{{ t('batch.wizard.preview') }}</NDivider>
           <NGrid :cols="3" :x-gap="16">
             <NGridItem>
-              <NStatistic label="모듈 차원" :value="moduleSelections.filter(s => s.selectedItemIds.length > 0).length" />
+              <NStatistic
+                :label="t('batch.wizard.moduleDimensions')"
+                :value="moduleSelections.filter((s) => s.selectedItemIds.length > 0).length"
+              />
             </NGridItem>
             <NGridItem>
-              <NStatistic label="총 조합 수" :value="taskPreview.totalCombinations" />
+              <NStatistic
+                :label="t('batch.wizard.totalCombinations')"
+                :value="taskPreview.totalCombinations"
+              />
             </NGridItem>
             <NGridItem>
-              <NStatistic label="총 생성 이미지 수" :value="taskPreview.totalTasks" />
+              <NStatistic :label="t('batch.wizard.totalImages')" :value="taskPreview.totalTasks" />
             </NGridItem>
           </NGrid>
 
           <NAlert
             v-if="taskPreview.totalTasks === 0 && moduleSelections.length > 0"
             type="info"
-            style="margin-top: 12px; font-size: 12px;"
+            style="margin-top: 12px; font-size: 12px"
           >
-            선택된 아이템이 있는 모듈이 필요합니다. 모듈에 아이템을 추가하고 체크해주세요.
+            {{ t('batch.wizard.needItems') }}
           </NAlert>
 
           <NAlert
             v-if="moduleSelections.length === 0"
             type="info"
-            style="margin-top: 12px; font-size: 12px;"
+            style="margin-top: 12px; font-size: 12px"
           >
-            위에서 모듈을 추가하면 조합 매트릭스가 생성됩니다.
+            {{ t('batch.wizard.addModulesHint') }}
           </NAlert>
 
-          <NAlert
-            v-if="taskPreview.totalTasks > 10000"
-            type="warning"
-            style="margin-top: 12px;"
-          >
-            ⚠️ 생성할 이미지가 {{ taskPreview.totalTasks.toLocaleString() }}장으로 매우 많습니다. 실행 시간이 오래 걸릴 수 있습니다.
+          <NAlert v-if="taskPreview.totalTasks > 10000" type="warning" style="margin-top: 12px">
+            {{
+              t('batch.wizard.tooManyWarning', { count: taskPreview.totalTasks.toLocaleString() })
+            }}
           </NAlert>
         </NForm>
       </NScrollbar>
@@ -870,8 +979,13 @@ onMounted(() => {
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showBuilderModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :disabled="taskPreview.totalTasks === 0" @click="handleCreateBatch">
-            {{ editingJobId ? '배치 작업 수정' : '배치 작업 생성' }} ({{ taskPreview.totalTasks.toLocaleString() }}장)
+          <NButton
+            type="primary"
+            :disabled="taskPreview.totalTasks === 0"
+            @click="handleCreateBatch"
+          >
+            {{ editingJobId ? t('batch.wizard.submitEdit') : t('batch.wizard.submitCreate') }}
+            {{ t('batch.wizard.submitCount', { count: taskPreview.totalTasks.toLocaleString() }) }}
           </NButton>
         </NSpace>
       </template>

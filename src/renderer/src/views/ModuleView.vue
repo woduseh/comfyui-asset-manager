@@ -2,10 +2,23 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NButton, NEmpty, NSpace, NTag,
-  NModal, NForm, NFormItem, NInput, NSelect,
-  NInputNumber, NSwitch, NGrid, NGridItem, NDivider,
-  NPopconfirm, useMessage
+  NCard,
+  NButton,
+  NEmpty,
+  NSpace,
+  NTag,
+  NModal,
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NInputNumber,
+  NSwitch,
+  NGrid,
+  NGridItem,
+  NDivider,
+  NPopconfirm,
+  useMessage
 } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
@@ -96,9 +109,11 @@ async function handleCreate(): Promise<void> {
     await moduleStore.createModule(newModule.value)
     showCreateModal.value = false
     newModule.value = { name: '', type: 'custom', description: '' }
-    message.success('모듈이 생성되었습니다')
+    message.success(t('module.msg.created'))
   } catch (e) {
-    message.error(`모듈 생성 실패: ${e instanceof Error ? e.message : String(e)}`)
+    message.error(
+      t('module.msg.createFailed', { error: e instanceof Error ? e.message : String(e) })
+    )
   }
 }
 
@@ -107,7 +122,12 @@ const showEditModuleModal = ref(false)
 const editModule = ref({ id: '', name: '', type: 'custom' as string, description: '' })
 
 function openEditModule(mod: PromptModule): void {
-  editModule.value = { id: mod.id, name: mod.name, type: mod.type, description: mod.description || '' }
+  editModule.value = {
+    id: mod.id,
+    name: mod.name,
+    type: mod.type,
+    description: mod.description || ''
+  }
   showEditModuleModal.value = true
 }
 
@@ -123,16 +143,18 @@ async function handleEditModule(): Promise<void> {
     if (selectedModuleId.value === editModule.value.id) {
       selectedModule.value = await moduleStore.getModule(editModule.value.id)
     }
-    message.success('모듈이 수정되었습니다')
+    message.success(t('module.msg.updated'))
   } catch (e) {
-    message.error(`모듈 수정 실패: ${e instanceof Error ? e.message : String(e)}`)
+    message.error(
+      t('module.msg.updateFailed', { error: e instanceof Error ? e.message : String(e) })
+    )
   }
 }
 
 async function handleDeleteModule(id: string): Promise<void> {
   if (selectedModuleId.value === id) selectedModuleId.value = null
   await moduleStore.deleteModule(id)
-  message.success('삭제되었습니다')
+  message.success(t('module.msg.deleted'))
 }
 
 function selectModule(id: string): void {
@@ -189,7 +211,7 @@ function variantsToRecord(): Record<string, { prompt: string; negative: string }
 async function handleSaveItem(): Promise<void> {
   const item = editingItem.value
   if (!item.name || !item.prompt) {
-    message.warning('이름과 프롬프트를 입력해주세요')
+    message.warning(t('module.msg.nameAndPromptRequired'))
     return
   }
 
@@ -205,7 +227,7 @@ async function handleSaveItem(): Promise<void> {
       sort_order: item.sort_order,
       prompt_variants: promptVariants
     })
-    message.success('아이템이 추가되었습니다')
+    message.success(t('module.msg.itemAdded'))
   } else if (item.id && selectedModuleId.value) {
     await moduleStore.updateItem(item.id, selectedModuleId.value, {
       name: item.name,
@@ -216,7 +238,7 @@ async function handleSaveItem(): Promise<void> {
       enabled: item.enabled,
       prompt_variants: JSON.stringify(promptVariants)
     })
-    message.success('아이템이 수정되었습니다')
+    message.success(t('module.msg.itemUpdated'))
   }
 
   showItemModal.value = false
@@ -226,7 +248,7 @@ async function handleSaveItem(): Promise<void> {
 async function handleDeleteItem(item: ModuleItem): Promise<void> {
   if (!selectedModuleId.value) return
   await moduleStore.deleteItem(item.id, selectedModuleId.value)
-  message.success('아이템이 삭제되었습니다')
+  message.success(t('module.msg.itemDeleted'))
   await updatePreview()
 }
 
@@ -245,28 +267,30 @@ async function handleExport(): Promise<void> {
   })
   if (data) {
     await navigator.clipboard.writeText(data)
-    message.success('클립보드에 복사되었습니다')
+    message.success(t('module.msg.copiedToClipboard'))
   }
 }
 
 async function handleImportModule(): Promise<void> {
   try {
     const text = await navigator.clipboard.readText()
-    const result = await window.electron.ipcRenderer.invoke('module:import-data', { jsonData: text })
+    const result = await window.electron.ipcRenderer.invoke('module:import-data', {
+      jsonData: text
+    })
     if (result.error) {
       message.error(result.error)
     } else {
       await moduleStore.loadModules()
-      message.success(`모듈 "${result.name}" 가져오기 완료`)
+      message.success(t('module.msg.importSuccess', { name: result.name }))
     }
   } catch {
-    message.error('클립보드에서 모듈 데이터를 읽을 수 없습니다')
+    message.error(t('module.msg.importFailed'))
   }
 }
 
 async function handleReorderItems(): Promise<void> {
   if (!selectedModuleId.value) return
-  const itemIds = moduleStore.currentItems.map(item => item.id)
+  const itemIds = moduleStore.currentItems.map((item) => item.id)
   await window.electron.ipcRenderer.invoke('module-item:reorder', { itemIds })
 }
 
@@ -277,10 +301,12 @@ onMounted(() => {
 
 <template>
   <div class="module-view">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; justify-content: space-between; align-items: center">
       <h2>{{ t('module.title') }}</h2>
       <NSpace>
-        <NButton size="small" @click="handleImportModule">가져오기 (클립보드)</NButton>
+        <NButton size="small" @click="handleImportModule">{{
+          t('module.importClipboard')
+        }}</NButton>
         <NButton type="primary" @click="showCreateModal = true">
           {{ t('module.create') }}
         </NButton>
@@ -288,7 +314,7 @@ onMounted(() => {
     </div>
 
     <!-- Filter bar -->
-    <div style="margin: 12px 0;">
+    <div style="margin: 12px 0">
       <NSpace :size="4" :wrap="true">
         <NButton
           size="small"
@@ -296,7 +322,8 @@ onMounted(() => {
           :tertiary="!!filterType"
           round
           @click="filterType = null"
-        >전체</NButton>
+          >{{ t('module.selectAll') }}</NButton
+        >
         <NButton
           v-for="opt in moduleTypeOptions"
           :key="opt.value"
@@ -305,14 +332,22 @@ onMounted(() => {
           :tertiary="filterType !== opt.value"
           round
           @click="filterType = opt.value"
-        >{{ opt.label }}</NButton>
+          >{{ opt.label }}</NButton
+        >
       </NSpace>
     </div>
 
-    <NGrid :cols="selectedModuleId ? 2 : 1" :x-gap="16" style="margin-top: 16px;">
+    <NGrid :cols="selectedModuleId ? 2 : 1" :x-gap="16" style="margin-top: 16px">
       <!-- Module list (card grid) -->
       <NGridItem>
-        <div v-if="filteredModules.length > 0" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+        <div
+          v-if="filteredModules.length > 0"
+          style="
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 10px;
+          "
+        >
           <NCard
             v-for="mod in filteredModules"
             :key="mod.id"
@@ -326,10 +361,21 @@ onMounted(() => {
             }"
             @click="selectModule(mod.id)"
           >
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start">
               <div>
-                <div style="font-weight: 600; font-size: 14px;">{{ mod.name }}</div>
-                <div v-if="mod.description" style="font-size: 12px; opacity: 0.6; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px;">
+                <div style="font-weight: 600; font-size: 14px">{{ mod.name }}</div>
+                <div
+                  v-if="mod.description"
+                  style="
+                    font-size: 12px;
+                    opacity: 0.6;
+                    margin-top: 2px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    max-width: 160px;
+                  "
+                >
                   {{ mod.description }}
                 </div>
               </div>
@@ -337,7 +383,7 @@ onMounted(() => {
                 {{ t(`module.type.${mod.type}`) }}
               </NTag>
             </div>
-            <NSpace size="small" style="margin-top: 8px;" @click.stop>
+            <NSpace size="small" style="margin-top: 8px" @click.stop>
               <NButton size="tiny" quaternary @click.stop="openEditModule(mod)">
                 {{ t('common.edit') }}
               </NButton>
@@ -347,7 +393,7 @@ onMounted(() => {
                     {{ t('common.delete') }}
                   </NButton>
                 </template>
-                삭제하시겠습니까?
+                {{ t('module.confirmDelete') }}
               </NPopconfirm>
             </NSpace>
           </NCard>
@@ -360,7 +406,7 @@ onMounted(() => {
         <NCard :title="selectedModule.name">
           <template #header-extra>
             <NSpace>
-              <NButton size="small" @click="handleExport">내보내기</NButton>
+              <NButton size="small" @click="handleExport">{{ t('module.export') }}</NButton>
               <NButton type="primary" size="small" @click="openAddItem">
                 {{ t('module.addItem') }}
               </NButton>
@@ -378,12 +424,23 @@ onMounted(() => {
             <div
               v-for="item in moduleStore.currentItems"
               :key="item.id"
-              style="display: flex; align-items: center; padding: 10px; border-radius: 10px; background: rgba(128,128,128,0.06); margin-bottom: 6px;"
+              style="
+                display: flex;
+                align-items: center;
+                padding: 10px;
+                border-radius: 10px;
+                background: rgba(128, 128, 128, 0.06);
+                margin-bottom: 6px;
+              "
             >
-              <span class="drag-handle" style="cursor: grab; padding: 0 8px 0 0; opacity: 0.4; font-size: 16px;">⠿</span>
-              <div style="flex: 1; min-width: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-weight: 600; font-size: 13px;">{{ item.name }}</span>
+              <span
+                class="drag-handle"
+                style="cursor: grab; padding: 0 8px 0 0; opacity: 0.4; font-size: 16px"
+                >⠿</span
+              >
+              <div style="flex: 1; min-width: 0">
+                <div style="display: flex; justify-content: space-between; align-items: center">
+                  <span style="font-weight: 600; font-size: 13px">{{ item.name }}</span>
                   <NSpace align="center" :size="4">
                     <NTag v-if="item.weight !== 1.0" size="tiny" round>w:{{ item.weight }}</NTag>
                     <NSwitch
@@ -400,25 +457,53 @@ onMounted(() => {
                           {{ t('common.delete') }}
                         </NButton>
                       </template>
-                      삭제하시겠습니까?
+                      {{ t('module.confirmDelete') }}
                     </NPopconfirm>
                   </NSpace>
                 </div>
-                <div style="font-size: 12px; opacity: 0.5; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <div
+                  style="
+                    font-size: 12px;
+                    opacity: 0.5;
+                    margin-top: 2px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                  "
+                >
                   {{ item.prompt.length > 80 ? item.prompt.substring(0, 80) + '...' : item.prompt }}
                 </div>
               </div>
             </div>
           </VueDraggable>
-          <NEmpty v-else description="아이템을 추가하세요" />
+          <NEmpty v-else :description="t('module.addItemsHint')" />
 
           <!-- Prompt Preview -->
           <template v-if="promptPreview && (promptPreview.positive || promptPreview.negative)">
-            <NDivider>프롬프트 미리보기</NDivider>
-            <div v-if="promptPreview.positive" style="padding: 8px; border-radius: 4px; background: rgba(99, 226, 183, 0.1); margin-bottom: 8px; font-size: 13px; word-break: break-all;">
+            <NDivider>{{ t('module.promptPreview') }}</NDivider>
+            <div
+              v-if="promptPreview.positive"
+              style="
+                padding: 8px;
+                border-radius: 4px;
+                background: rgba(99, 226, 183, 0.1);
+                margin-bottom: 8px;
+                font-size: 13px;
+                word-break: break-all;
+              "
+            >
               <strong>Positive:</strong> {{ promptPreview.positive }}
             </div>
-            <div v-if="promptPreview.negative" style="padding: 8px; border-radius: 4px; background: rgba(255, 107, 107, 0.1); font-size: 13px; word-break: break-all;">
+            <div
+              v-if="promptPreview.negative"
+              style="
+                padding: 8px;
+                border-radius: 4px;
+                background: rgba(255, 107, 107, 0.1);
+                font-size: 13px;
+                word-break: break-all;
+              "
+            >
               <strong>Negative:</strong> {{ promptPreview.negative }}
             </div>
           </template>
@@ -430,7 +515,7 @@ onMounted(() => {
     <NModal
       v-model:show="showCreateModal"
       preset="card"
-      style="width: 500px;"
+      style="width: 500px"
       :title="t('module.create')"
       :bordered="false"
     >
@@ -442,13 +527,19 @@ onMounted(() => {
           <NSelect v-model:value="newModule.type" :options="moduleTypeOptions" />
         </NFormItem>
         <NFormItem :label="t('common.description')">
-          <NInput v-model:value="newModule.description" type="textarea" :placeholder="t('common.description')" />
+          <NInput
+            v-model:value="newModule.description"
+            type="textarea"
+            :placeholder="t('common.description')"
+          />
         </NFormItem>
       </NForm>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showCreateModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :disabled="!newModule.name" @click="handleCreate">{{ t('common.create') }}</NButton>
+          <NButton type="primary" :disabled="!newModule.name" @click="handleCreate">{{
+            t('common.create')
+          }}</NButton>
         </NSpace>
       </template>
     </NModal>
@@ -457,8 +548,8 @@ onMounted(() => {
     <NModal
       v-model:show="showEditModuleModal"
       preset="card"
-      style="width: 500px;"
-      title="모듈 수정"
+      style="width: 500px"
+      :title="t('module.editModule')"
       :bordered="false"
     >
       <NForm>
@@ -469,13 +560,19 @@ onMounted(() => {
           <NSelect v-model:value="editModule.type" :options="moduleTypeOptions" />
         </NFormItem>
         <NFormItem :label="t('common.description')">
-          <NInput v-model:value="editModule.description" type="textarea" :placeholder="t('common.description')" />
+          <NInput
+            v-model:value="editModule.description"
+            type="textarea"
+            :placeholder="t('common.description')"
+          />
         </NFormItem>
       </NForm>
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showEditModuleModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :disabled="!editModule.name" @click="handleEditModule">{{ t('common.save') }}</NButton>
+          <NButton type="primary" :disabled="!editModule.name" @click="handleEditModule">{{
+            t('common.save')
+          }}</NButton>
         </NSpace>
       </template>
     </NModal>
@@ -484,20 +581,23 @@ onMounted(() => {
     <NModal
       v-model:show="showItemModal"
       preset="card"
-      style="width: 600px;"
+      style="width: 600px"
       :title="editingItem.isNew ? t('module.addItem') : t('common.edit')"
       :bordered="false"
     >
       <NForm>
         <NFormItem :label="t('common.name')">
-          <NInput v-model:value="editingItem.name" placeholder="아이템 이름" />
+          <NInput
+            v-model:value="editingItem.name"
+            :placeholder="t('module.item.namePlaceholder')"
+          />
         </NFormItem>
         <NFormItem :label="t('module.prompt')">
           <NInput
             v-model:value="editingItem.prompt"
             type="textarea"
             :rows="4"
-            placeholder="프롬프트 입력... 와일드카드 사용 가능: {red|blue|green}, 변수: {{character_name}}"
+            :placeholder="t('module.item.promptPlaceholder')"
           />
         </NFormItem>
         <NFormItem :label="t('module.negative')">
@@ -505,19 +605,29 @@ onMounted(() => {
             v-model:value="editingItem.negative"
             type="textarea"
             :rows="2"
-            placeholder="네거티브 프롬프트 (선택사항)"
+            :placeholder="t('module.item.negativePlaceholder')"
           />
         </NFormItem>
         <!-- Prompt Variants -->
-        <NDivider style="margin: 12px 0 8px;">
-          <span style="font-size: 12px; opacity: 0.7;">{{ t('module.variant.title') }}</span>
+        <NDivider style="margin: 12px 0 8px">
+          <span style="font-size: 12px; opacity: 0.7">{{ t('module.variant.title') }}</span>
         </NDivider>
-        <div v-for="(variant, idx) in editingVariants" :key="idx" style="padding: 8px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <div
+          v-for="(variant, idx) in editingVariants"
+          :key="idx"
+          style="
+            padding: 8px;
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.06);
+            margin-bottom: 8px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px">
             <NInput
               v-model:value="variant.name"
-              size="small" placeholder="변형 이름 (예: 자연어, 태그)"
-              style="flex: 1;"
+              size="small"
+              :placeholder="t('module.item.variantNamePlaceholder')"
+              style="flex: 1"
             />
             <NButton size="small" quaternary type="error" @click="removeVariant(idx)">
               {{ t('common.delete') }}
@@ -525,17 +635,21 @@ onMounted(() => {
           </div>
           <NInput
             v-model:value="variant.prompt"
-            type="textarea" :rows="2" size="small"
+            type="textarea"
+            :rows="2"
+            size="small"
             :placeholder="t('module.prompt')"
-            style="margin-bottom: 4px;"
+            style="margin-bottom: 4px"
           />
           <NInput
             v-model:value="variant.negative"
-            type="textarea" :rows="1" size="small"
+            type="textarea"
+            :rows="1"
+            size="small"
             :placeholder="t('module.negative')"
           />
         </div>
-        <NButton size="small" dashed block @click="addVariant" style="margin-bottom: 12px;">
+        <NButton size="small" dashed block style="margin-bottom: 12px" @click="addVariant">
           + {{ t('module.variant.add') }}
         </NButton>
         <NGrid :cols="2" :x-gap="12">
@@ -545,8 +659,12 @@ onMounted(() => {
             </NFormItem>
           </NGridItem>
           <NGridItem>
-            <NFormItem label="활성화">
-              <NSwitch v-model:value="editingItem.enabled" :checked-value="1" :unchecked-value="0" />
+            <NFormItem :label="t('module.enabled')">
+              <NSwitch
+                v-model:value="editingItem.enabled"
+                :checked-value="1"
+                :unchecked-value="0"
+              />
             </NFormItem>
           </NGridItem>
         </NGrid>

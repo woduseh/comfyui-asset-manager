@@ -2,6 +2,30 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.0] - 2026-03-21
+
+보안 감사 기반 전면 개선 — Electron 보안 하드닝, IPC 입력 검증, 코드 품질 강화, i18n 완성, 구조화 로깅, pre-commit 훅, 테스트 확대.
+
+### Added
+
+- **IPC 입력 검증 시스템**: `src/main/ipc/validators.ts` — `validateString`, `validateId`, `validatePositiveInt`, `validateRating`, `validateSettingsKey`, `validateStringArray`, `validatePromptVariants` 7개 검증 함수. 6개 주요 IPC 핸들러에 적용
+- **Repository 필드 화이트리스트**: `ALLOWED_UPDATE_FIELDS`로 테이블별 허용 필드만 UPDATE 가능. SQL 필드명 주입 방지
+- **JSON 스키마 검증**: `validatePromptVariants()`가 `parsePromptVariants()`를 대체하여 파싱 후 구조 검증 (객체 타입, prompt/negative 문자열 필드)
+- **중앙 상수 파일**: `src/main/constants.ts` (30+ 상수), `src/renderer/src/constants.ts` — 매직 넘버 전면 제거
+- **배치 위자드 Composable**: `src/renderer/src/composables/useBatchWizard.ts` — BatchView/JobsView 간 ~200줄 중복 로직 추출
+- **구조화 로깅**: `electron-log` 도입. `src/main/logger.ts` — 파일 로테이션(5MB), 레벨별 출력. main 프로세스 전체 `console.*` → `log.*` 교체
+- **Pre-commit 훅**: `husky` + `lint-staged` — 커밋 시 자동 ESLint + Prettier 실행
+- **IPC 검증 유틸리티 테스트**: `tests/main/ipc/validators.test.ts` — 32개 테스트 케이스
+- **i18n 완성**: 6개 뷰(WorkflowView, ModuleView, GalleryView, BatchView, JobsView, QueueView)의 하드코딩 한국어 문자열 전면 추출. `ko.json`/`en.json` ~200개 키 추가
+
+### Changed
+
+- **Electron 보안 하드닝**: `sandbox: true`, `webSecurity: true`, `bypassCSP: false`로 변경
+- **로컬 에셋 프로토콜 보안**: `local-asset://` 핸들러에 `path.normalize()` + 허용 디렉토리 화이트리스트 검증 추가. 경로 순회 공격 차단 (403 응답)
+- **에러 핸들링 개선**: 5개 문제적 `catch {}` 블록에 `log.warn`/`log.debug` 로깅 추가. 의도적 무시 블록에 사유 주석 보강
+- **커버리지 설정 문서화**: `vitest.config.ts`에 `websocket.ts`, `queue-manager.ts` 제외 사유 주석 추가, validators.ts 포함
+- **테스트**: 197개 → 229개 (8개 파일)
+
 ## [0.11.0] - 2026-03-20
 
 갤러리 이미지 상세 뷰어 대폭 개선 — 좌우 네비게이션, 클립보드 복사, 파일 탐색기 열기, 프롬프트 정보 표시 등 편의 기능 추가.
@@ -24,7 +48,7 @@
 
 ## [0.10.7] - 2026-03-20
 
-배치 재실행 시 기존 이미지 파일 덮어쓰기 방지 — 동일한 경로에 파일이 존재하면 자동으로 숫자 접미사(_001, _002, ...)를 추가합니다.
+배치 재실행 시 기존 이미지 파일 덮어쓰기 방지 — 동일한 경로에 파일이 존재하면 자동으로 숫자 접미사(\_001, \_002, ...)를 추가합니다.
 
 ### Fixed
 
@@ -436,6 +460,7 @@ UI 버그 수정 3건.
 - **워크플로우 편집 모달 기능 부족**: 유형(카테고리)만 변경 가능하던 편집 모달에 이름·설명 편집 기능 추가. 저장 버튼 추가. 테이블 버튼 레이블 "편집" → "상세"로 변경
 
 ### Changed
+
 - `common.detail` i18n 키 추가 (ko: "상세", en: "Detail")
 
 ## [0.2.0] - 2026-03-19
@@ -445,11 +470,13 @@ UI 버그 수정 3건.
 ### Added
 
 #### 테스트 프레임워크
+
 - Vitest 테스트 러너 설정 (`vitest.config.ts`)
 - `npm test` / `npm run test:watch` / `npm run test:coverage` 스크립트
 - 5개 테스트 파일, **146개 테스트 케이스** 전체 통과
 
 #### 프롬프트 조합 엔진 테스트 (34개)
+
 - `applyWeight`: 가중치 적용, 빈 텍스트, 소수점 포맷팅
 - `resolveWildcards`: 시드 기반 결정적 선택, 다중 와일드카드, 공백 트리밍
 - `interpolateVariables`: 변수 치환, 미정의 변수 보존, 빈 맵 처리
@@ -458,17 +485,20 @@ UI 버그 수정 3건.
 - `previewPrompt`: 와일드카드 미해석 확인, 변수 보간만 수행
 
 #### 배치 태스크 생성기 테스트 (23개)
+
 - `cartesianProduct`: 빈 배열, 단일 배열, 다차원 조합
 - `calculateTaskCount`: 조합 수 계산, 빈 선택, 다차원 곱
 - `resolveOutputPath`: 변수 치환, 특수문자 새니타이즈, 미매칭 변수 보존
 - `expandBatchToTasks`: 태스크 수 검증, 메타데이터 추출, 시드 모드 (fixed/incremental), 비활성 필터링
 
 #### 워크플로우 파서 테스트 (23개)
+
 - `parseWorkflow`: KSampler/CLIPTextEncode/EmptyLatentImage 변수 감지, 카테고리 자동 분류 (generation/upscale/detailer/custom), 알 수 없는 노드 타입 추론, 링크 배열 스킵
 - `applyVariables`: 변수 값 적용, 미존재 노드 무시, 원본 보존
 - `getPromptNodes`: CLIPTextEncode 노드 탐지, 네거티브 프롬프트 휴리스틱 감지
 
 #### 데이터베이스 리포지토리 테스트 (51개)
+
 - 8개 리포지토리 전체 CRUD 테스트 (sql.js in-memory DB 사용)
 - `SettingsRepository`: get/set/getAll/delete, 기본값 확인
 - `WorkflowRepository`: 생성/조회/수정/삭제, 카테고리 필터, 변수 관리
@@ -480,6 +510,7 @@ UI 버그 수정 3건.
 - `GeneratedImageRepository`: 페이지네이션, 필터링 (캐릭터/평점/즐겨찾기), 정렬, 평점/즐겨찾기 업데이트
 
 #### ComfyUI REST 클라이언트 테스트 (15개)
+
 - `ping`: 성공/실패 시나리오
 - `queuePrompt`: POST 요청 검증
 - `getHistory`/`getHistoryEntry`: 전체/개별 히스토리 조회
@@ -487,6 +518,7 @@ UI 버그 수정 3건.
 - `interrupt`/`deleteFromQueue`/`clearQueue`: 큐 관리 API 호출 검증
 
 ### Changed
+
 - `package.json`: 버전 0.2.0, 불필요한 drizzle-kit 스크립트 제거
 - `package.json`: vitest, @vitest/coverage-v8, happy-dom, @vue/test-utils 의존성 추가
 
@@ -497,18 +529,21 @@ UI 버그 수정 3건.
 ### Added
 
 #### ComfyUI 연결 (Phase 2)
+
 - ComfyUI REST API 클라이언트 (`/prompt`, `/queue`, `/history`, `/system_stats`, `/object_info`, `/view`, `/upload/image`)
 - WebSocket 연결 (실시간 진행률, 실행 완료/에러 이벤트, 미리보기 이미지)
 - 자동 재연결 (지수 백오프: 3초 → 최대 30초)
 - 서버 연결 상태 모니터링 및 시스템 통계 조회
 
 #### 워크플로우 관리 (Phase 2)
+
 - ComfyUI API 형식 JSON 워크플로우 가져오기
 - 자동 변수 감지 (KSampler, CLIPTextEncode, CheckpointLoader 등 알려진 노드 타입)
 - 카테고리 자동 분류 (생성 / 업스케일 / 디테일러 / 커스텀)
 - 변수 편집 모달 (타입, 기본값, 설명)
 
 #### 프롬프트 모듈 시스템 (Phase 3)
+
 - 9가지 모듈 타입: character, outfit, emotion, style, artist, quality, negative, lora, custom
 - 모듈 아이템 CRUD (프롬프트, 네거티브, 가중치, 활성/비활성)
 - 프롬프트 조합 엔진 (quality → style → artist → character → outfit → emotion → lora → negative → custom 순서)
@@ -518,6 +553,7 @@ UI 버그 수정 3건.
 - 모듈 내보내기/가져오기 (클립보드 JSON)
 
 #### 배치 작업 시스템 (Phase 4)
+
 - 매트릭스 빌더 UI (모듈 선택 → 아이템 체크박스)
 - 카르테시안 곱 태스크 확장 (조합 × 조합당 생성 수)
 - 시드 모드: 랜덤, 고정, 증분
@@ -526,6 +562,7 @@ UI 버그 수정 3건.
 - 대량 작업 경고 (10,000장 초과 시)
 
 #### 큐 관리 & 실행 엔진 (Phase 5)
+
 - 순차 작업 처리 (프롬프트 제출 → 히스토리 폴링 → 이미지 다운로드 → 디스크 저장)
 - ComfyUI 워크플로우에 프롬프트·시드 자동 주입
 - 일시정지 / 재개 / 취소 지원
@@ -534,6 +571,7 @@ UI 버그 수정 3건.
 - 실시간 진행률 전송 (WebSocket 이벤트 → 렌더러)
 
 #### 갤러리 (Phase 6)
+
 - 이미지 그리드 뷰 (반응형 2~5열)
 - ⭐ 5점 평점 시스템
 - ♥ 즐겨찾기
@@ -543,6 +581,7 @@ UI 버그 수정 3건.
 - 페이지네이션
 
 #### 대시보드 (Phase 7)
+
 - 서버 연결 상태 표시 (LED 인디케이터)
 - 총 이미지 수, 즐겨찾기, 배치 작업, 워크플로우, 모듈 통계
 - 최근 생성 이미지 목록 (최대 10개)
@@ -550,6 +589,7 @@ UI 버그 수정 3건.
 - 클릭 가능한 통계 카드 (해당 페이지로 이동)
 
 #### 앱 기반 (Phase 1, 8)
+
 - Electron 39 + Vue 3 + Pinia + TypeScript 기반 구조
 - sql.js (WASM SQLite) 데이터베이스 (12개 테이블, 디바운스 영속화)
 - Naive UI 컴포넌트 라이브러리 (다크/라이트 테마)

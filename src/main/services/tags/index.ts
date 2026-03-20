@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import log from '../../logger'
 import { validateTagOnline, searchTagsOnline } from './danbooru-api'
 
 export interface DanbooruTag {
@@ -39,7 +40,10 @@ const CATEGORY_IDS: Record<string, number> = {
 
 const SEMANTIC_GROUPS: Record<string, RegExp[]> = {
   composition: [/^(1girl|1boy|solo|multiple_girls|multiple_boys|2girls|2boys|couple)$/],
-  hair_color: [/_hair$/, /^(blonde|brown|black|red|blue|green|white|silver|pink|purple|grey|orange)_hair$/],
+  hair_color: [
+    /_hair$/,
+    /^(blonde|brown|black|red|blue|green|white|silver|pink|purple|grey|orange)_hair$/
+  ],
   hair_style: [
     /^(long|short|medium)_hair$/,
     /ponytail/,
@@ -103,7 +107,8 @@ class TagService {
 
   load(customPath?: string): void {
     const tagFilePath =
-      customPath || (app.isPackaged
+      customPath ||
+      (app.isPackaged
         ? join(process.resourcesPath, 'Danbooru Tag.txt')
         : join(__dirname, '../../resources/Danbooru Tag.txt'))
 
@@ -131,9 +136,9 @@ class TagService {
 
       this.tagsByCount = Array.from(this.tags.values()).sort((a, b) => b.count - a.count)
       this.loaded = true
-      console.log(`[Tags] Loaded ${this.tags.size} tags from local database`)
+      log.info(`[Tags] Loaded ${this.tags.size} tags from local database`)
     } catch (error) {
-      console.error('[Tags] Failed to load tag file:', error)
+      log.error('[Tags] Failed to load tag file:', error)
       this.loaded = false
     }
   }
@@ -150,10 +155,7 @@ class TagService {
     return this.tags.get(name)
   }
 
-  async validate(
-    tags: string[],
-    onlineFallback = true
-  ): Promise<TagValidationResult[]> {
+  async validate(tags: string[], onlineFallback = true): Promise<TagValidationResult[]> {
     const results: TagValidationResult[] = []
 
     for (const tagName of tags) {
@@ -249,11 +251,7 @@ class TagService {
     return results
   }
 
-  async searchWithOnline(
-    query: string,
-    category?: string,
-    limit = 20
-  ): Promise<DanbooruTag[]> {
+  async searchWithOnline(query: string, category?: string, limit = 20): Promise<DanbooruTag[]> {
     const localResults = this.search(query, category, limit)
 
     if (localResults.length >= limit) return localResults
@@ -266,7 +264,12 @@ class TagService {
 
       for (const online of onlineResults) {
         if (localNames.has(online.name)) continue
-        if (category && CATEGORY_IDS[category] !== undefined && online.category !== CATEGORY_IDS[category]) continue
+        if (
+          category &&
+          CATEGORY_IDS[category] !== undefined &&
+          online.category !== CATEGORY_IDS[category]
+        )
+          continue
         localResults.push({
           id: online.id,
           name: online.name,
@@ -343,7 +346,9 @@ class TagService {
     return scored.slice(0, limit).map((s) => s.name)
   }
 
-  formatTagsForDisplay(tags: DanbooruTag[]): Array<{ name: string; category: string; post_count: number }> {
+  formatTagsForDisplay(
+    tags: DanbooruTag[]
+  ): Array<{ name: string; category: string; post_count: number }> {
     return tags.map((t) => ({
       name: t.name,
       category: CATEGORY_NAMES[t.category] || 'unknown',

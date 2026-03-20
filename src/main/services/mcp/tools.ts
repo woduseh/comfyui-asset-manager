@@ -11,11 +11,7 @@ import { queueManager } from '../batch/queue-manager'
 import { tagService } from '../tags'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-
-function parsePromptVariants(raw: unknown): Record<string, { prompt: string; negative: string }> {
-  if (!raw || typeof raw !== 'string' || raw === '{}') return {}
-  try { return JSON.parse(raw) } catch { return {} }
-}
+import { validatePromptVariants } from '../../ipc/validators'
 
 const moduleRepo = new ModuleRepository()
 const moduleItemRepo = new ModuleItemRepository()
@@ -62,7 +58,19 @@ export function registerMcpTools(server: McpServer): void {
     'Create a new prompt module.',
     {
       name: z.string().describe('Module name'),
-      type: z.enum(['character', 'outfit', 'emotion', 'style', 'artist', 'quality', 'negative', 'lora', 'custom']).describe('Module type'),
+      type: z
+        .enum([
+          'character',
+          'outfit',
+          'emotion',
+          'style',
+          'artist',
+          'quality',
+          'negative',
+          'lora',
+          'custom'
+        ])
+        .describe('Module type'),
       description: z.string().optional().describe('Module description')
     },
     async ({ name, type, description }) => {
@@ -127,10 +135,18 @@ export function registerMcpTools(server: McpServer): void {
       prompt: z.string().describe('Positive prompt text (default)'),
       negative: z.string().optional().describe('Negative prompt text (default)'),
       weight: z.number().optional().describe('Weight (default: 1.0)'),
-      prompt_variants: z.record(z.string(), z.object({
-        prompt: z.string().describe('Variant positive prompt'),
-        negative: z.string().describe('Variant negative prompt')
-      })).optional().describe('Named prompt variants, e.g. {"natural_language": {prompt: "...", negative: "..."}, "tags": {prompt: "...", negative: "..."}}')
+      prompt_variants: z
+        .record(
+          z.string(),
+          z.object({
+            prompt: z.string().describe('Variant positive prompt'),
+            negative: z.string().describe('Variant negative prompt')
+          })
+        )
+        .optional()
+        .describe(
+          'Named prompt variants, e.g. {"natural_language": {prompt: "...", negative: "..."}, "tags": {prompt: "...", negative: "..."}}'
+        )
     },
     async ({ module_id, name, prompt, negative, weight, prompt_variants }) => {
       const id = moduleItemRepo.create({
@@ -156,10 +172,16 @@ export function registerMcpTools(server: McpServer): void {
       prompt: z.string().optional().describe('New default prompt text'),
       negative: z.string().optional().describe('New default negative prompt'),
       weight: z.number().optional().describe('New weight'),
-      prompt_variants: z.record(z.string(), z.object({
-        prompt: z.string().describe('Variant positive prompt'),
-        negative: z.string().describe('Variant negative prompt')
-      })).optional().describe('Named prompt variants (replaces all existing variants)')
+      prompt_variants: z
+        .record(
+          z.string(),
+          z.object({
+            prompt: z.string().describe('Variant positive prompt'),
+            negative: z.string().describe('Variant negative prompt')
+          })
+        )
+        .optional()
+        .describe('Named prompt variants (replaces all existing variants)')
     },
     async ({ id, name, prompt, negative, weight, prompt_variants }) => {
       const data: Record<string, unknown> = {}
@@ -229,29 +251,61 @@ export function registerMcpTools(server: McpServer): void {
       name: z.string().describe('Job name'),
       description: z.string().optional().describe('Job description'),
       workflow_id: z.string().describe('Workflow ID to use'),
-      module_selections: z.array(z.object({
-        moduleId: z.string().describe('Module ID'),
-        moduleType: z.string().describe('Module type'),
-        selectedItemIds: z.array(z.string()).optional().describe('Selected item IDs (all if omitted)')
-      })).describe('Module selections for batch combinations'),
+      module_selections: z
+        .array(
+          z.object({
+            moduleId: z.string().describe('Module ID'),
+            moduleType: z.string().describe('Module type'),
+            selectedItemIds: z
+              .array(z.string())
+              .optional()
+              .describe('Selected item IDs (all if omitted)')
+          })
+        )
+        .describe('Module selections for batch combinations'),
       count_per_combination: z.number().default(1).describe('Images per combination'),
       seed_mode: z.enum(['random', 'fixed', 'incremental']).default('random').describe('Seed mode'),
       fixed_seed: z.number().optional().describe('Fixed seed value (for fixed/incremental mode)'),
-      slot_mappings: z.array(z.object({
-        variableId: z.string().describe('Workflow variable ID'),
-        nodeId: z.string().describe('ComfyUI node ID'),
-        fieldName: z.string().describe('Node field name'),
-        role: z.string().describe('Slot role: prompt_positive or prompt_negative'),
-        action: z.enum(['inject', 'fixed']).default('inject').describe('Action: inject modules or use fixed value'),
-        fixedValue: z.string().optional().describe('Fixed prompt text (when action=fixed)'),
-        assignedModuleIds: z.array(z.string()).optional().describe('Module IDs to inject into this slot'),
-        prefixModuleIds: z.array(z.string()).optional().describe('Module IDs for prefix'),
-        prefixText: z.string().optional().describe('Additional prefix text'),
-        suffixText: z.string().optional().describe('Additional suffix text'),
-        promptVariant: z.string().optional().describe('Prompt variant name to use for this slot (e.g. "natural_language" or "tags")')
-      })).optional().describe('Slot mappings for multi-model workflows with per-slot prompt variant selection')
+      slot_mappings: z
+        .array(
+          z.object({
+            variableId: z.string().describe('Workflow variable ID'),
+            nodeId: z.string().describe('ComfyUI node ID'),
+            fieldName: z.string().describe('Node field name'),
+            role: z.string().describe('Slot role: prompt_positive or prompt_negative'),
+            action: z
+              .enum(['inject', 'fixed'])
+              .default('inject')
+              .describe('Action: inject modules or use fixed value'),
+            fixedValue: z.string().optional().describe('Fixed prompt text (when action=fixed)'),
+            assignedModuleIds: z
+              .array(z.string())
+              .optional()
+              .describe('Module IDs to inject into this slot'),
+            prefixModuleIds: z.array(z.string()).optional().describe('Module IDs for prefix'),
+            prefixText: z.string().optional().describe('Additional prefix text'),
+            suffixText: z.string().optional().describe('Additional suffix text'),
+            promptVariant: z
+              .string()
+              .optional()
+              .describe(
+                'Prompt variant name to use for this slot (e.g. "natural_language" or "tags")'
+              )
+          })
+        )
+        .optional()
+        .describe('Slot mappings for multi-model workflows with per-slot prompt variant selection')
     },
-    async ({ name, description, workflow_id, module_selections, count_per_combination, seed_mode, fixed_seed, slot_mappings }) => {
+    async ({
+      name,
+      description,
+      workflow_id,
+      module_selections,
+      count_per_combination,
+      seed_mode,
+      fixed_seed,
+      slot_mappings
+    }) => {
       // Validate workflow exists
       const workflow = workflowRepo.get(workflow_id)
       if (!workflow) {
@@ -266,17 +320,18 @@ export function registerMcpTools(server: McpServer): void {
         name,
         description,
         workflowId: workflow_id,
-        moduleSelections: module_selections.map(sel => ({
+        moduleSelections: module_selections.map((sel) => ({
           moduleId: sel.moduleId,
           moduleType: sel.moduleType,
-          selectedItemIds: sel.selectedItemIds || moduleItemRepo.list(sel.moduleId).map(i => i.id as string)
+          selectedItemIds:
+            sel.selectedItemIds || moduleItemRepo.list(sel.moduleId).map((i) => i.id as string)
         })),
         countPerCombination: count_per_combination,
         seedMode: seed_mode,
         fixedSeed: fixed_seed,
         outputFolderPattern: '{job}/{character}/{outfit}/{emotion}',
         fileNamePattern: '{character}_{outfit}_{emotion}_{index}',
-        slotMappings: slot_mappings?.map(sm => ({
+        slotMappings: slot_mappings?.map((sm) => ({
           variableId: sm.variableId,
           nodeId: sm.nodeId,
           fieldName: sm.fieldName,
@@ -304,7 +359,7 @@ export function registerMcpTools(server: McpServer): void {
             negative: (item.negative as string) || '',
             weight: (item.weight as number) || 1.0,
             enabled: (item.enabled as number) !== 0,
-            prompt_variants: parsePromptVariants(item.prompt_variants as string)
+            prompt_variants: validatePromptVariants(item.prompt_variants as string)
           }))
         }
       })
@@ -384,7 +439,16 @@ export function registerMcpTools(server: McpServer): void {
       }
       const tasks = batchTaskRepo.listByJob(id)
       return {
-        content: [{ type: 'text', text: JSON.stringify({ job, taskCount: tasks.length, tasks: tasks.slice(0, 10) }, null, 2) }]
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              { job, taskCount: tasks.length, tasks: tasks.slice(0, 10) },
+              null,
+              2
+            )
+          }
+        ]
       }
     }
   )
@@ -395,8 +459,14 @@ export function registerMcpTools(server: McpServer): void {
     'validate_danbooru_tags',
     'Validate whether given tags are valid Danbooru tags. Returns validation result for each tag with suggestions for invalid ones. IMPORTANT: Always use this tool to verify your tags before creating module items with prompts.',
     {
-      tags: z.array(z.string()).describe('List of tags to validate (e.g. ["blue_eyes", "long_hair", "school_uniform"])'),
-      online_fallback: z.boolean().optional().default(true).describe('If true, check Danbooru API for tags not found locally (default: true)')
+      tags: z
+        .array(z.string())
+        .describe('List of tags to validate (e.g. ["blue_eyes", "long_hair", "school_uniform"])'),
+      online_fallback: z
+        .boolean()
+        .optional()
+        .default(true)
+        .describe('If true, check Danbooru API for tags not found locally (default: true)')
     },
     async ({ tags, online_fallback }) => {
       if (!tagService.isLoaded()) {
@@ -411,13 +481,19 @@ export function registerMcpTools(server: McpServer): void {
       const invalidCount = results.filter((r) => !r.valid).length
 
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            summary: `${validCount}/${tags.length} tags valid${invalidCount > 0 ? `, ${invalidCount} invalid` : ''}`,
-            results
-          }, null, 2)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                summary: `${validCount}/${tags.length} tags valid${invalidCount > 0 ? `, ${invalidCount} invalid` : ''}`,
+                results
+              },
+              null,
+              2
+            )
+          }
+        ]
       }
     }
   )
@@ -426,8 +502,12 @@ export function registerMcpTools(server: McpServer): void {
     'search_danbooru_tags',
     'Search for Danbooru tags matching a query. Use this to find the correct tag name for a concept. Supports wildcard (*) patterns. Results are sorted by popularity (post count).',
     {
-      query: z.string().describe('Search query (e.g. "blue_eye", "long_h*", "school"). Supports * wildcard.'),
-      category: z.enum(['general', 'artist', 'copyright', 'character', 'meta']).optional()
+      query: z
+        .string()
+        .describe('Search query (e.g. "blue_eye", "long_h*", "school"). Supports * wildcard.'),
+      category: z
+        .enum(['general', 'artist', 'copyright', 'character', 'meta'])
+        .optional()
         .describe('Filter by tag category'),
       limit: z.number().optional().default(20).describe('Max results (default: 20, max: 50)')
     },
@@ -443,14 +523,20 @@ export function registerMcpTools(server: McpServer): void {
       const results = await tagService.searchWithOnline(query, category, clampedLimit)
 
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            query,
-            count: results.length,
-            tags: tagService.formatTagsForDisplay(results)
-          }, null, 2)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                query,
+                count: results.length,
+                tags: tagService.formatTagsForDisplay(results)
+              },
+              null,
+              2
+            )
+          }
+        ]
       }
     }
   )
@@ -459,11 +545,22 @@ export function registerMcpTools(server: McpServer): void {
     'get_popular_danbooru_tags',
     'Get popular Danbooru tags sorted by usage count. Use group_by_semantic=true to get tags organized by category (hair, eyes, clothing, pose, etc.) — very useful when writing character prompts.',
     {
-      category: z.enum(['general', 'artist', 'copyright', 'character', 'meta']).optional()
+      category: z
+        .enum(['general', 'artist', 'copyright', 'character', 'meta'])
+        .optional()
         .describe('Filter by tag category (most character-related tags are "general")'),
-      limit: z.number().optional().default(100).describe('Max results per group or total (default: 100, max: 500)'),
-      group_by_semantic: z.boolean().optional().default(false)
-        .describe('If true, returns tags grouped by semantic category (hair_color, eye_color, clothing, pose, etc.)')
+      limit: z
+        .number()
+        .optional()
+        .default(100)
+        .describe('Max results per group or total (default: 100, max: 500)'),
+      group_by_semantic: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          'If true, returns tags grouped by semantic category (hair_color, eye_color, clothing, pose, etc.)'
+        )
     },
     async ({ category, limit, group_by_semantic }) => {
       if (!tagService.isLoaded()) {
@@ -476,13 +573,20 @@ export function registerMcpTools(server: McpServer): void {
       if (group_by_semantic) {
         const groups = tagService.getPopularGrouped()
         return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              description: 'Popular Danbooru tags grouped by semantic category. Use these as reference when writing prompts.',
-              groups
-            }, null, 2)
-          }]
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  description:
+                    'Popular Danbooru tags grouped by semantic category. Use these as reference when writing prompts.',
+                  groups
+                },
+                null,
+                2
+              )
+            }
+          ]
         }
       }
 
@@ -490,13 +594,19 @@ export function registerMcpTools(server: McpServer): void {
       const results = tagService.getPopular(category, clampedLimit)
 
       return {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            count: results.length,
-            tags: tagService.formatTagsForDisplay(results)
-          }, null, 2)
-        }]
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                count: results.length,
+                tags: tagService.formatTagsForDisplay(results)
+              },
+              null,
+              2
+            )
+          }
+        ]
       }
     }
   )
@@ -506,7 +616,12 @@ export function registerMcpTools(server: McpServer): void {
   server.prompt(
     'danbooru_tag_guide',
     'Guidelines and reference for writing image generation prompts using Danbooru tags. Call this before creating character prompts to get the correct tag format and popular tags.',
-    { character_description: z.string().optional().describe('Optional character description for context-aware guidance') },
+    {
+      character_description: z
+        .string()
+        .optional()
+        .describe('Optional character description for context-aware guidance')
+    },
     ({ character_description }) => {
       const groups = tagService.isLoaded() ? tagService.getPopularGrouped() : {}
 
@@ -557,10 +672,12 @@ export function registerMcpTools(server: McpServer): void {
       }
 
       return {
-        messages: [{
-          role: 'user',
-          content: { type: 'text', text: guideText }
-        }]
+        messages: [
+          {
+            role: 'user',
+            content: { type: 'text', text: guideText }
+          }
+        ]
       }
     }
   )

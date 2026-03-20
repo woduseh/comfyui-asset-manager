@@ -2,8 +2,18 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NButton, NEmpty, NSpace, NTag, NDataTable, NModal,
-  NInput, NSelect, NForm, NFormItem, NScrollbar,
+  NCard,
+  NButton,
+  NEmpty,
+  NSpace,
+  NTag,
+  NDataTable,
+  NModal,
+  NInput,
+  NSelect,
+  NForm,
+  NFormItem,
+  NScrollbar,
   useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
@@ -33,9 +43,17 @@ const columns: DataTableColumns<WorkflowItem> = [
         detailer: 'warning',
         custom: 'default'
       }
-      return h(NTag, { type: (colors[row.category] || 'default') as 'success' | 'info' | 'warning' | 'default', size: 'small', round: true }, {
-        default: () => t(`workflow.category.${row.category}`)
-      })
+      return h(
+        NTag,
+        {
+          type: (colors[row.category] || 'default') as 'success' | 'info' | 'warning' | 'default',
+          size: 'small',
+          round: true
+        },
+        {
+          default: () => t(`workflow.category.${row.category}`)
+        }
+      )
     }
   },
   {
@@ -56,16 +74,38 @@ const columns: DataTableColumns<WorkflowItem> = [
     key: 'actions',
     width: 160,
     render(row) {
-      return h(NSpace, { size: 'small' }, {
-        default: () => [
-          h(NButton, { size: 'small', quaternary: true, type: 'info', onClick: () => handleViewDetail(row.id) }, {
-            default: () => t('common.detail')
-          }),
-          h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => handleDelete(row.id) }, {
-            default: () => t('common.delete')
-          })
-        ]
-      })
+      return h(
+        NSpace,
+        { size: 'small' },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                type: 'info',
+                onClick: () => handleViewDetail(row.id)
+              },
+              {
+                default: () => t('common.detail')
+              }
+            ),
+            h(
+              NButton,
+              {
+                size: 'small',
+                quaternary: true,
+                type: 'error',
+                onClick: () => handleDelete(row.id)
+              },
+              {
+                default: () => t('common.delete')
+              }
+            )
+          ]
+        }
+      )
     }
   }
 ]
@@ -79,7 +119,9 @@ async function handleImport(): Promise<void> {
     if (result.error) {
       message.error(result.error)
     } else {
-      message.success(`워크플로우 "${result.name}" 가져오기 완료 (변수 ${result.variableCount}개)`)
+      message.success(
+        t('workflow.msg.importSuccess', { name: result.name, count: result.variableCount })
+      )
       await workflowStore.loadWorkflows()
     }
   }
@@ -90,14 +132,16 @@ async function handleViewDetail(id: string): Promise<void> {
   if (detailWorkflow.value) {
     editName.value = (detailWorkflow.value.name as string) || ''
     editDescription.value = (detailWorkflow.value.description as string) || ''
-    detailVariables.value = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId: id })
+    detailVariables.value = await window.electron.ipcRenderer.invoke('workflow:variables', {
+      workflowId: id
+    })
     showDetailModal.value = true
   }
 }
 
 async function handleDelete(id: string): Promise<void> {
   await workflowStore.deleteWorkflow(id)
-  message.success('삭제되었습니다')
+  message.success(t('workflow.msg.deleted'))
 }
 
 async function handleCategoryChange(id: string, category: string): Promise<void> {
@@ -117,10 +161,12 @@ async function handleSaveWorkflow(): Promise<void> {
     })
     detailWorkflow.value.name = editName.value
     detailWorkflow.value.description = editDescription.value
-    message.success('워크플로우가 수정되었습니다')
+    message.success(t('workflow.msg.updated'))
     showDetailModal.value = false
   } catch (e) {
-    message.error(`수정 실패: ${e instanceof Error ? e.message : String(e)}`)
+    message.error(
+      t('workflow.msg.updateFailed', { error: e instanceof Error ? e.message : String(e) })
+    )
   }
 }
 
@@ -132,11 +178,11 @@ const categoryOptions = [
 ]
 
 const roleOptions = [
-  { label: '긍정 프롬프트', value: 'prompt_positive' },
-  { label: '부정 프롬프트', value: 'prompt_negative' },
-  { label: '시드', value: 'seed' },
-  { label: '고정값', value: 'fixed' },
-  { label: '사용자 정의', value: 'custom' }
+  { label: t('workflow.role.promptPositive'), value: 'prompt_positive' },
+  { label: t('workflow.role.promptNegative'), value: 'prompt_negative' },
+  { label: t('workflow.role.seed'), value: 'seed' },
+  { label: t('workflow.role.fixed'), value: 'fixed' },
+  { label: t('workflow.role.custom'), value: 'custom' }
 ]
 
 const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
@@ -148,25 +194,29 @@ const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'def
 }
 
 const roleLabels: Record<string, string> = {
-  prompt_positive: '긍정',
-  prompt_negative: '부정',
-  seed: '시드',
-  fixed: '고정',
-  custom: '사용자'
+  prompt_positive: t('workflow.roleShort.promptPositive'),
+  prompt_negative: t('workflow.roleShort.promptNegative'),
+  seed: t('workflow.roleShort.seed'),
+  fixed: t('workflow.roleShort.fixed'),
+  custom: t('workflow.roleShort.custom')
 }
 
 const varTypeLabels: Record<string, string> = {
-  text: '텍스트',
-  number: '숫자',
-  boolean: '불리언',
-  seed: '시드',
-  image: '이미지',
-  model: '모델',
+  text: t('workflow.varType.text'),
+  number: t('workflow.varType.number'),
+  boolean: t('workflow.varType.boolean'),
+  seed: t('workflow.varType.seed'),
+  image: t('workflow.varType.image'),
+  model: t('workflow.varType.model'),
   lora: 'LoRA'
 }
 
 type TagType = 'info' | 'warning' | 'success' | 'default'
-const varTypeTagColors: Record<string, TagType> = { text: 'info', seed: 'warning', model: 'success' }
+const varTypeTagColors: Record<string, TagType> = {
+  text: 'info',
+  seed: 'warning',
+  model: 'success'
+}
 function getVarTypeTagType(varType: string): TagType {
   return varTypeTagColors[varType] || 'default'
 }
@@ -184,8 +234,15 @@ onMounted(() => {
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h2 style="margin: 0;">{{ t('workflow.title') }}</h2>
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      "
+    >
+      <h2 style="margin: 0">{{ t('workflow.title') }}</h2>
       <NButton type="primary" @click="handleImport">
         {{ t('workflow.import') }}
       </NButton>
@@ -206,7 +263,7 @@ onMounted(() => {
     <NModal
       v-model:show="showDetailModal"
       preset="card"
-      style="width: 640px;"
+      style="width: 640px"
       :title="(detailWorkflow?.name as string) || ''"
       :bordered="false"
     >
@@ -220,51 +277,75 @@ onMounted(() => {
           </NFormItem>
           <NFormItem :label="t('common.type')">
             <NSelect
-              :value="(detailWorkflow.category as string)"
+              :value="detailWorkflow.category as string"
               :options="categoryOptions"
               @update:value="(v: string) => handleCategoryChange(detailWorkflow!.id as string, v)"
             />
           </NFormItem>
         </NForm>
 
-        <div style="margin-top: 16px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-weight: 600;">변수 목록 ({{ detailVariables.length }})</span>
+        <div style="margin-top: 16px">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            "
+          >
+            <span style="font-weight: 600">{{
+              t('workflow.variableList', { count: detailVariables.length })
+            }}</span>
           </div>
-          <NScrollbar style="max-height: 300px;" v-if="detailVariables.length > 0">
+          <NScrollbar v-if="detailVariables.length > 0" style="max-height: 300px">
             <div
               v-for="variable in detailVariables"
-              :key="(variable.id as string)"
-              style="padding: 10px 12px; border-radius: 8px; background: rgba(128,128,128,0.06); margin-bottom: 6px;"
+              :key="variable.id as string"
+              style="
+                padding: 10px 12px;
+                border-radius: 8px;
+                background: rgba(128, 128, 128, 0.06);
+                margin-bottom: 6px;
+              "
             >
-              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
                 <NTag size="small" round :type="getVarTypeTagType(variable.var_type as string)">
                   {{ varTypeLabels[variable.var_type as string] || variable.var_type }}
                 </NTag>
-                <strong style="font-size: 13px;">{{ variable.display_name }}</strong>
-                <span style="opacity: 0.45; font-size: 11px; margin-left: auto;">
+                <strong style="font-size: 13px">{{ variable.display_name }}</strong>
+                <span style="opacity: 0.45; font-size: 11px; margin-left: auto">
                   {{ variable.node_id }}:{{ variable.field_name }}
                 </span>
               </div>
-              <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
-                <span style="font-size: 12px; opacity: 0.6;">역할:</span>
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px">
+                <span style="font-size: 12px; opacity: 0.6">{{ t('workflow.roleLabel') }}</span>
                 <NSelect
                   :value="(variable.role as string) || 'custom'"
                   :options="roleOptions"
                   size="small"
-                  style="width: 150px;"
+                  style="width: 150px"
                   @update:value="(v: string) => handleRoleChange(variable.id as string, v)"
                 />
                 <NTag size="small" :type="roleColors[(variable.role as string) || 'custom']" round>
                   {{ roleLabels[(variable.role as string) || 'custom'] }}
                 </NTag>
               </div>
-              <div v-if="variable.default_val" style="margin-top: 4px; font-size: 11px; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                기본값: {{ variable.default_val }}
+              <div
+                v-if="variable.default_val"
+                style="
+                  margin-top: 4px;
+                  font-size: 11px;
+                  opacity: 0.5;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+              >
+                {{ t('workflow.defaultValue', { value: variable.default_val }) }}
               </div>
             </div>
           </NScrollbar>
-          <NEmpty v-else :description="t('workflow.noVariables')" style="padding: 20px 0;" />
+          <NEmpty v-else :description="t('workflow.noVariables')" style="padding: 20px 0" />
         </div>
       </template>
       <template #footer>

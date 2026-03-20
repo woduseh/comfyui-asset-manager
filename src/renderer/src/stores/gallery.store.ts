@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GalleryQuery } from '@renderer/types/ipc'
 import { toPlain } from '@renderer/utils/ipc'
+import { DEFAULT_GALLERY_PAGE_SIZE } from '@renderer/constants'
 
 export interface GalleryImage {
   id: string
@@ -27,7 +28,7 @@ export const useGalleryStore = defineStore('gallery', () => {
   const total = ref(0)
   const loading = ref(false)
   const page = ref(1)
-  const pageSize = ref(50)
+  const pageSize = ref(DEFAULT_GALLERY_PAGE_SIZE)
 
   const filters = ref<Partial<GalleryQuery>>({
     sortBy: 'created_at',

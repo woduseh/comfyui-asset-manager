@@ -2,12 +2,11 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { DB_SAVE_DEBOUNCE_MS } from '../../constants'
 
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-const SAVE_DEBOUNCE_MS = 1000
 
 function getDbPath(): string {
   const userDataPath = app.getPath('userData')
@@ -61,7 +60,7 @@ export function saveDatabase(): void {
     const buffer = Buffer.from(data)
     writeFileSync(dbPath, buffer)
     saveTimer = null
-  }, SAVE_DEBOUNCE_MS)
+  }, DB_SAVE_DEBOUNCE_MS)
 }
 
 export function saveDatabaseSync(): void {
@@ -116,7 +115,9 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add role column for existing databases
   try {
     database.run(`ALTER TABLE workflow_variables ADD COLUMN role TEXT NOT NULL DEFAULT 'custom'`)
-  } catch { /* Column already exists */ }
+  } catch {
+    /* Column already exists */
+  }
 
   database.run(`
     CREATE TABLE IF NOT EXISTS prompt_modules (
@@ -150,7 +151,9 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add prompt_variants column for existing databases
   try {
     database.run(`ALTER TABLE module_items ADD COLUMN prompt_variants TEXT DEFAULT '{}'`)
-  } catch { /* Column already exists */ }
+  } catch {
+    /* Column already exists */
+  }
 
   database.run(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -185,12 +188,16 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add module_data_snapshot column for lazy task expansion
   try {
     database.run(`ALTER TABLE batch_jobs ADD COLUMN module_data_snapshot TEXT`)
-  } catch { /* Column already exists */ }
+  } catch {
+    /* Column already exists */
+  }
 
   // Migration: add sort_order column for batch_jobs
   try {
     database.run(`ALTER TABLE batch_jobs ADD COLUMN sort_order INTEGER DEFAULT 0`)
-  } catch { /* Column already exists */ }
+  } catch {
+    /* Column already exists */
+  }
 
   database.run(`
     CREATE TABLE IF NOT EXISTS batch_tasks (
@@ -273,15 +280,9 @@ function createTables(database: SqlJsDatabase): void {
   `)
 
   // Create indexes
-  database.run(
-    'CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id);'
-  )
-  database.run(
-    'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id);'
-  )
-  database.run(
-    'CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);'
-  )
+  database.run('CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id);')
+  database.run('CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id);')
+  database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);')
   database.run(
     'CREATE INDEX IF NOT EXISTS idx_generated_images_character ON generated_images(character_name);'
   )

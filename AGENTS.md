@@ -61,12 +61,40 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 - Repository 패턴: `src/main/services/database/repositories/index.ts`
 - 새 테이블 추가 시 `createTables()` 함수에 `CREATE TABLE IF NOT EXISTS` 추가
 - `module_items.prompt_variants`: JSON 컬럼 — `Record<string, { prompt, negative }>` 형식으로 슬롯별 변형 프롬프트 저장
+- **Repository 필드 화이트리스트**: `ALLOWED_UPDATE_FIELDS`로 update() 시 허용 필드만 통과. 새 필드 추가 시 화이트리스트에도 반영 필수
 
 ### 컴포넌트 & 스토어
 
 - Naive UI 컴포넌트는 개별 import (tree-shaking)
 - Pinia 스토어는 Composition API 패턴 (`defineStore(name, setupFn)`)
 - 스토어에서 main process와 통신 시 `window.electron.ipcRenderer.invoke()` 사용
+
+### IPC 입력 검증
+
+- **검증 유틸리티**: `src/main/ipc/validators.ts` — 모든 새 IPC 핸들러에서 사용
+- `validateString(val, maxLen?)` / `validateId(val)` / `validatePositiveInt(val)` / `validateRating(val)`
+- `validateSettingsKey(key)` — `ALLOWED_SETTINGS_KEYS` 화이트리스트 기반
+- `validatePromptVariants(json)` — JSON 파싱 + 스키마 검증 (`Record<string, { prompt, negative }>`)
+- 데이터 변경 핸들러(`UPDATE`, `CREATE`, `SETTINGS_SET`)에 반드시 검증 적용
+
+### 상수 관리
+
+- **Main 프로세스 상수**: `src/main/constants.ts` — 매직 넘버 중앙 관리 (타임아웃, 한도, 크기 등)
+- **Renderer 상수**: `src/renderer/src/constants.ts` — UI 관련 상수
+- 새 상수 추가 시 해당 파일에 정의 후 import 사용. 인라인 숫자 리터럴 금지
+
+### 로깅
+
+- **라이브러리**: `electron-log` — `src/main/logger.ts`
+- main 프로세스에서 `import log from './logger'` (또는 상대 경로)
+- `console.log/error/warn/debug` 사용 금지 → `log.info/error/warn/debug` 사용
+- 파일 로테이션: 5MB, 레벨: 파일=info, 콘솔=debug
+
+### Composable 패턴
+
+- `src/renderer/src/composables/` — 뷰 간 공유 로직을 composable로 추출
+- `useBatchWizard.ts`: 배치 위자드 공통 함수 (모듈 매트릭스 추가, 슬롯 복원, 변수 오버라이드 복원)
+- 새 공유 로직 발견 시 composable로 추출하여 중복 제거
 
 ### ComfyUI
 
@@ -88,10 +116,17 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 6개 파일, 187개 테스트 케이스.
-- 테스트 위치: `tests/main/services/` (소스 구조와 미러링)
+**테스트 프레임워크: Vitest** — 8개 파일, 229개 테스트 케이스.
+
+- 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
+- IPC 검증 테스트: `tests/main/ipc/validators.test.ts` — 32개 테스트 케이스
+
+### 코드 품질 도구
+
+- **Pre-commit 훅**: `husky` + `lint-staged` — 커밋 시 자동 ESLint(`*.ts,*.vue`) + Prettier(`*.ts,*.vue,*.json,*.md`) 실행
+- **실행**: `npx husky init` 후 `.husky/pre-commit` 파일이 `npx lint-staged` 실행
 
 ## 현재 구조
 
@@ -99,14 +134,14 @@ npm run format           # Prettier
 
 v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
-| 페이지 | 뷰 | 설명 |
-|--------|-----|------|
-| 워크플로우 | `WorkflowView` | 워크플로우 가져오기·관리, 역할 설정 (변수 값 편집 제거됨) |
-| 모듈 | `ModuleView` | 프롬프트 모듈 카드 그리드, 필 스타일 필터, 아이템별 프롬프트 변형 편집 |
-| 작업 | `JobsView` | 배치 생성(3단계 위자드) + 큐 관리 통합, 슬롯별 변형 선택, 실행 상태 바 + 작업 카드 그리드 |
-| 갤러리 | `GalleryView` | 생성 이미지 그리드, 상세 뷰어 (좌우 네비게이션, 클립보드 복사, 프롬프트 표시), 콤팩트 필터 바 |
-| 터미널 | `TerminalView` | 내장 터미널 (xterm.js + node-pty), 멀티 탭, MCP 서버 상태 |
-| 설정 | `SettingsView` | 서버 연결, 출력 경로, 테마, 언어, MCP 서버 설정 |
+| 페이지     | 뷰             | 설명                                                                                          |
+| ---------- | -------------- | --------------------------------------------------------------------------------------------- |
+| 워크플로우 | `WorkflowView` | 워크플로우 가져오기·관리, 역할 설정 (변수 값 편집 제거됨)                                     |
+| 모듈       | `ModuleView`   | 프롬프트 모듈 카드 그리드, 필 스타일 필터, 아이템별 프롬프트 변형 편집                        |
+| 작업       | `JobsView`     | 배치 생성(3단계 위자드) + 큐 관리 통합, 슬롯별 변형 선택, 실행 상태 바 + 작업 카드 그리드     |
+| 갤러리     | `GalleryView`  | 생성 이미지 그리드, 상세 뷰어 (좌우 네비게이션, 클립보드 복사, 프롬프트 표시), 콤팩트 필터 바 |
+| 터미널     | `TerminalView` | 내장 터미널 (xterm.js + node-pty), 멀티 탭, MCP 서버 상태                                     |
+| 설정       | `SettingsView` | 서버 연결, 출력 경로, 테마, 언어, MCP 서버 설정                                               |
 
 > **제거된 뷰**: `DashboardView` (연결 상태는 헤더 바로 이동), `BatchView`·`QueueView` (JobsView로 통합)
 
@@ -180,10 +215,47 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - 부드러운 트랜지션 및 호버 효과
 - 소프트 스크롤바 스타일
 
+## 코드 품질 원칙
+
+v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코드는 `SKILL.md` 참조.
+
+### 보안
+
+- Electron 렌더러: `sandbox: true`, `webSecurity: true`, `bypassCSP: false` — 절대 변경 금지
+- 파일 경로 접근: 반드시 `path.normalize()` + 허용 디렉토리 화이트리스트 검증 후 접근
+- IPC 핸들러: 데이터 변경(`CREATE`, `UPDATE`, `DELETE`, `SET`) 핸들러에 `validators.ts` 검증 필수
+- Repository `update()`: `ALLOWED_UPDATE_FIELDS` 화이트리스트 외 필드 거부. 새 컬럼 추가 시 화이트리스트도 갱신
+- `JSON.parse()` 결과는 반드시 구조 검증 후 사용 (`validatePromptVariants` 참고)
+
+### 에러 처리
+
+- `catch {}` 빈 블록 금지. 반드시 `log.warn`/`log.debug`로 기록하거나, 의도적 무시인 경우 사유 주석 필수
+- main 프로세스: `console.*` 사용 금지 → `import log from './logger'` 사용
+- 사용자에게 잘못된 상태를 보여줄 수 있는 에러는 무시하지 말고 전파
+
+### 코드 중복 방지
+
+- 2개 이상 뷰에서 공유하는 로직 → `src/renderer/src/composables/`로 추출
+- 2개 이상 서비스에서 공유하는 함수 → `src/main/ipc/validators.ts` 또는 별도 유틸로 추출
+- 숫자 리터럴 인라인 사용 금지 → `src/main/constants.ts` 또는 `src/renderer/src/constants.ts`에 명명 상수 정의
+
+### i18n
+
+- Vue 템플릿의 사용자 표시 문자열: `t('key')` 필수. 한국어 하드코딩 금지
+- 예외: `SettingsView.vue`의 언어 이름 (`'한국어'`, `'English'`)은 하드코딩 허용
+- 새 키 추가 시 `ko.json`과 `en.json` 모두 동시 업데이트
+
+### 테스트
+
+- 새 유틸리티/검증 함수 → 반드시 단위 테스트 작성 (`tests/` 디렉토리, 소스 구조 미러링)
+- 변경 후 검증: `npm test && npx electron-vite build` 통과 필수
+- 커버리지 제외 항목 추가 시 `vitest.config.ts`에 사유 주석 필수
+
 ## 현재 버전
 
+**0.12.0** — 보안 감사 기반 전면 개선: Electron 보안 하드닝(sandbox/webSecurity/CSP), IPC 입력 검증, Repository 필드 화이트리스트, 경로 순회 차단, 매직 넘버 상수 추출, 배치 위자드 composable, 에러 핸들링 개선, i18n 완성(6개 뷰), 구조화 로깅(electron-log), pre-commit 훅(husky+lint-staged), IPC 검증 테스트 32개. 테스트 229개
 **0.11.0** — 갤러리 뷰어 강화: 좌우 네비게이션(← →), 클립보드 복사(Ctrl+C), 파일 탐색기 열기, 상세 모달에서 삭제, 프롬프트/시드 표시, 파일 크기·해상도 표시. 테스트 197개
-**0.10.7** — 파일 덮어쓰기 방지: 재실행 시 동일 파일명이면 자동 숫자 접미사(_001~_999) 추가. 테스트 197개
+**0.10.7** — 파일 덮어쓰기 방지: 재실행 시 동일 파일명이면 자동 숫자 접미사(\_001~\_999) 추가. 테스트 197개
 **0.10.6** — 재실행 UI 수정: BATCH_RERUN 비블로킹화로 재실행 후 갤러리·작업 상태 즉시 반영. 테스트 197개
 **0.10.5** — 실시간 UI 업데이트: BATCH_START 비블로킹화로 작업 시작 즉시 상태 반영, 갤러리 태스크 완료 시 자동 갱신(2초 디바운스). 테스트 197개
 **0.10.4** — 변수 오버라이드 UI 일관성: 새 배치 생성 시에도 오버라이드 표시, 접기/펼치기 토글 추가. 테스트 197개

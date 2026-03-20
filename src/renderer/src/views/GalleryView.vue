@@ -2,9 +2,24 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NEmpty, NGrid, NGridItem, NImage, NSpace, NRate, NButton,
-  NTag, NSelect, NPagination, NModal,
-  NCheckbox, NDivider, NPopconfirm, useMessage, NTooltip, NCollapse,
+  NCard,
+  NEmpty,
+  NGrid,
+  NGridItem,
+  NImage,
+  NSpace,
+  NRate,
+  NButton,
+  NTag,
+  NSelect,
+  NPagination,
+  NModal,
+  NCheckbox,
+  NDivider,
+  NPopconfirm,
+  useMessage,
+  NTooltip,
+  NCollapse,
   NCollapseItem
 } from 'naive-ui'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
@@ -68,14 +83,14 @@ function parseGenerationParams(json: string | null): Record<string, unknown> | n
 }
 
 const sortOptions = [
-  { label: '생성일 (최신)', value: 'created_at:desc' },
-  { label: '생성일 (오래된)', value: 'created_at:asc' },
-  { label: '평점 (높은순)', value: 'rating:desc' },
-  { label: '평점 (낮은순)', value: 'rating:asc' }
+  { label: t('gallery.sortOptions.createdDesc'), value: 'created_at:desc' },
+  { label: t('gallery.sortOptions.createdAsc'), value: 'created_at:asc' },
+  { label: t('gallery.sortOptions.ratingDesc'), value: 'rating:desc' },
+  { label: t('gallery.sortOptions.ratingAsc'), value: 'rating:asc' }
 ]
 
 const ratingOptions: SelectMixedOption[] = [
-  { label: '전체', value: null as unknown as string },
+  { label: t('gallery.all'), value: null as unknown as string },
   { label: '⭐ 1+', value: 1 },
   { label: '⭐⭐ 2+', value: 2 },
   { label: '⭐⭐⭐ 3+', value: 3 },
@@ -161,7 +176,7 @@ async function deleteSelected(): Promise<void> {
   if (ids.length === 0) return
   await galleryStore.deleteImages(ids)
   selectedIds.value = new Set()
-  message.success(`${ids.length}장 삭제됨`)
+  message.success(t('gallery.msg.bulkDeleted', { count: ids.length }))
 }
 
 async function handleToggleFavorite(image: GalleryImage): Promise<void> {
@@ -172,9 +187,9 @@ async function handleCopyToClipboard(): Promise<void> {
   if (!detailImage.value) return
   const success = await galleryStore.copyToClipboard(detailImage.value.file_path)
   if (success) {
-    message.success('클립보드에 복사됨')
+    message.success(t('gallery.msg.copiedToClipboard'))
   } else {
-    message.error('복사 실패')
+    message.error(t('gallery.msg.copyFailed'))
   }
 }
 
@@ -189,7 +204,7 @@ async function handleDeleteFromDetail(): Promise<void> {
   const hadNext = canGoNext.value
 
   await galleryStore.deleteImages([id])
-  message.success('이미지 삭제됨')
+  message.success(t('gallery.msg.imageDeleted'))
 
   if (galleryStore.images.length === 0) {
     showDetail.value = false
@@ -257,29 +272,38 @@ onUnmounted(() => {
 
 <template>
   <div class="gallery-view">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h2 style="margin: 0;">
+    <div
+      style="
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      "
+    >
+      <h2 style="margin: 0">
         {{ t('gallery.title') }}
-        <NTag v-if="galleryStore.total > 0" size="small" round style="margin-left: 8px;">{{ galleryStore.total }}</NTag>
+        <NTag v-if="galleryStore.total > 0" size="small" round style="margin-left: 8px">{{
+          galleryStore.total
+        }}</NTag>
       </h2>
     </div>
 
     <!-- Filter bar -->
-    <NCard size="small" style="margin-bottom: 16px;">
+    <NCard size="small" style="margin-bottom: 16px">
       <NSpace align="center" :wrap="false" :size="12">
         <NSelect
           :value="sortBy + ':' + sortOrder"
           :options="sortOptions"
           size="small"
-          style="width: 160px;"
+          style="width: 160px"
           @update:value="handleSortChange"
         />
         <NSelect
           v-model:value="filterRating"
           :options="ratingOptions"
           size="small"
-          style="width: 120px;"
-          placeholder="평점"
+          style="width: 120px"
+          :placeholder="t('gallery.ratingPlaceholder')"
           clearable
           @update:value="applyFilters"
         />
@@ -290,37 +314,51 @@ onUnmounted(() => {
           round
           @click="filterFavorite = filterFavorite ? null : true"
         >
-          {{ filterFavorite ? '♥ 즐겨찾기' : '♡ 즐겨찾기' }}
+          {{ filterFavorite ? t('gallery.favoriteOn') : t('gallery.favoriteOff') }}
         </NButton>
-        <NButton size="small" quaternary @click="clearFilters" v-if="filterRating || filterFavorite">
-          필터 초기화
+        <NButton
+          v-if="filterRating || filterFavorite"
+          size="small"
+          quaternary
+          @click="clearFilters"
+        >
+          {{ t('gallery.resetFilters') }}
         </NButton>
-        <div style="flex: 1;" />
+        <div style="flex: 1" />
         <NButton
           size="small"
           :type="selectionMode ? 'primary' : 'default'"
           @click="toggleSelectionMode"
         >
-          {{ selectionMode ? '선택 해제' : '선택 모드' }}
+          {{ selectionMode ? t('gallery.selectionModeOff') : t('gallery.selectionModeOn') }}
         </NButton>
         <template v-if="selectionMode">
-          <NButton size="small" @click="selectAll">전체 선택</NButton>
+          <NButton size="small" @click="selectAll">{{ t('gallery.selectAll') }}</NButton>
           <NPopconfirm @positive-click="deleteSelected">
             <template #trigger>
               <NButton size="small" type="error" :disabled="selectedIds.size === 0">
-                삭제 ({{ selectedIds.size }})
+                {{ t('gallery.deleteCount', { count: selectedIds.size }) }}
               </NButton>
             </template>
-            선택한 {{ selectedIds.size }}장을 삭제하시겠습니까?
+            {{ t('gallery.confirmBulkDelete', { count: selectedIds.size }) }}
           </NPopconfirm>
         </template>
       </NSpace>
     </NCard>
 
     <!-- Image grid -->
-    <NCard style="margin-top: 0;">
+    <NCard style="margin-top: 0">
       <template v-if="galleryStore.images.length > 0">
-        <NGrid :cols="5" :x-gap="12" :y-gap="12" responsive="screen" :cols-s="2" :cols-m="3" :cols-l="4" :cols-xl="5">
+        <NGrid
+          :cols="5"
+          :x-gap="12"
+          :y-gap="12"
+          responsive="screen"
+          :cols-s="2"
+          :cols-m="3"
+          :cols-l="4"
+          :cols-xl="5"
+        >
           <NGridItem v-for="image in galleryStore.images" :key="image.id">
             <NCard
               size="small"
@@ -340,10 +378,10 @@ onUnmounted(() => {
                 :src="toFileUrl(image.thumbnail_path || image.file_path)"
                 :width="200"
                 object-fit="cover"
-                style="aspect-ratio: 1; border-radius: 8px; width: 100%;"
+                style="aspect-ratio: 1; border-radius: 8px; width: 100%"
                 preview-disabled
               />
-              <NSpace justify="space-between" align="center" style="margin-top: 8px;">
+              <NSpace justify="space-between" align="center" style="margin-top: 8px">
                 <NRate
                   :value="image.rating"
                   :count="5"
@@ -359,8 +397,22 @@ onUnmounted(() => {
                   {{ image.is_favorite ? '♥' : '♡' }}
                 </NButton>
               </NSpace>
-              <div v-if="image.character_name" style="margin-top: 4px; font-size: 11px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                {{ [image.character_name, image.outfit_name, image.emotion_name].filter(Boolean).join(' / ') }}
+              <div
+                v-if="image.character_name"
+                style="
+                  margin-top: 4px;
+                  font-size: 11px;
+                  opacity: 0.7;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                "
+              >
+                {{
+                  [image.character_name, image.outfit_name, image.emotion_name]
+                    .filter(Boolean)
+                    .join(' / ')
+                }}
               </div>
             </NCard>
           </NGridItem>
@@ -384,16 +436,16 @@ onUnmounted(() => {
       v-model:show="showDetail"
       :mask-closable="true"
       :close-on-esc="false"
-      style="padding: 0;"
+      style="padding: 0"
       transform-origin="center"
     >
-      <div class="detail-overlay" v-if="detailImage" @click.self="showDetail = false">
+      <div v-if="detailImage" class="detail-overlay" @click.self="showDetail = false">
         <!-- Navigation: Previous -->
         <button
           class="nav-btn nav-prev"
           :disabled="!canGoPrev"
+          :title="t('gallery.viewer.prevImage')"
           @click="goToPrev"
-          title="이전 이미지 (←)"
         >
           ‹
         </button>
@@ -410,7 +462,7 @@ onUnmounted(() => {
                     📋
                   </NButton>
                 </template>
-                클립보드에 복사 (Ctrl+C)
+                {{ t('gallery.viewer.copyToClipboard') }}
               </NTooltip>
               <NTooltip>
                 <template #trigger>
@@ -418,34 +470,53 @@ onUnmounted(() => {
                     📂
                   </NButton>
                 </template>
-                파일 탐색기에서 열기
+                {{ t('gallery.viewer.openInExplorer') }}
               </NTooltip>
               <NTooltip>
                 <template #trigger>
                   <NButton
-                    quaternary circle size="small"
+                    quaternary
+                    circle
+                    size="small"
                     :type="detailImage.is_favorite ? 'warning' : 'default'"
-                    @click="() => { handleToggleFavorite(detailImage!); detailImage!.is_favorite = detailImage!.is_favorite ? 0 : 1 }"
+                    @click="
+                      () => {
+                        handleToggleFavorite(detailImage!)
+                        detailImage!.is_favorite = detailImage!.is_favorite ? 0 : 1
+                      }
+                    "
                   >
                     {{ detailImage.is_favorite ? '♥' : '♡' }}
                   </NButton>
                 </template>
-                {{ detailImage.is_favorite ? '즐겨찾기 해제' : '즐겨찾기 추가' }}
+                {{
+                  detailImage.is_favorite
+                    ? t('gallery.viewer.removeFavorite')
+                    : t('gallery.viewer.addFavorite')
+                }}
               </NTooltip>
-              <NPopconfirm @positive-click="handleDeleteFromDetail" positive-text="삭제" negative-text="취소">
+              <NPopconfirm
+                :positive-text="t('common.delete')"
+                :negative-text="t('common.cancel')"
+                @positive-click="handleDeleteFromDetail"
+              >
                 <template #trigger>
                   <NTooltip>
                     <template #trigger>
-                      <NButton quaternary circle size="small" type="error">
-                        🗑️
-                      </NButton>
+                      <NButton quaternary circle size="small" type="error"> 🗑️ </NButton>
                     </template>
-                    이미지 삭제
+                    {{ t('gallery.viewer.deleteImage') }}
                   </NTooltip>
                 </template>
-                이 이미지를 삭제하시겠습니까?
+                {{ t('gallery.viewer.confirmDelete') }}
               </NPopconfirm>
-              <NButton quaternary circle size="small" @click="showDetail = false" style="margin-left: 8px;">
+              <NButton
+                quaternary
+                circle
+                size="small"
+                style="margin-left: 8px"
+                @click="showDetail = false"
+              >
                 ✕
               </NButton>
             </div>
@@ -456,7 +527,7 @@ onUnmounted(() => {
             <NImage
               :src="toFileUrl(detailImage.file_path)"
               object-fit="contain"
-              style="max-height: 65vh; max-width: 100%; border-radius: 8px;"
+              style="max-height: 65vh; max-width: 100%; border-radius: 8px"
               :preview-disabled="false"
             />
           </div>
@@ -468,7 +539,12 @@ onUnmounted(() => {
                 :value="detailImage.rating"
                 :count="5"
                 size="small"
-                @update:value="(val: number) => { galleryStore.rateImage(detailImage!.id, val); detailImage!.rating = val }"
+                @update:value="
+                  (val: number) => {
+                    galleryStore.rateImage(detailImage!.id, val)
+                    detailImage!.rating = val
+                  }
+                "
               />
               <span class="detail-meta-text detail-meta-right">
                 {{ formatFileSize(detailImage.file_size) }}
@@ -480,34 +556,51 @@ onUnmounted(() => {
             </div>
 
             <!-- Metadata table -->
-            <div class="detail-metadata" v-if="detailImage.character_name || detailImage.outfit_name || detailImage.emotion_name || detailImage.style_name">
-              <div class="metadata-item" v-if="detailImage.character_name">
-                <span class="metadata-label">캐릭터</span>
+            <div
+              v-if="
+                detailImage.character_name ||
+                detailImage.outfit_name ||
+                detailImage.emotion_name ||
+                detailImage.style_name
+              "
+              class="detail-metadata"
+            >
+              <div v-if="detailImage.character_name" class="metadata-item">
+                <span class="metadata-label">{{ t('gallery.meta.character') }}</span>
                 <span class="metadata-value">{{ detailImage.character_name }}</span>
               </div>
-              <div class="metadata-item" v-if="detailImage.outfit_name">
-                <span class="metadata-label">복장</span>
+              <div v-if="detailImage.outfit_name" class="metadata-item">
+                <span class="metadata-label">{{ t('gallery.meta.outfit') }}</span>
                 <span class="metadata-value">{{ detailImage.outfit_name }}</span>
               </div>
-              <div class="metadata-item" v-if="detailImage.emotion_name">
-                <span class="metadata-label">감정</span>
+              <div v-if="detailImage.emotion_name" class="metadata-item">
+                <span class="metadata-label">{{ t('gallery.meta.emotion') }}</span>
                 <span class="metadata-value">{{ detailImage.emotion_name }}</span>
               </div>
-              <div class="metadata-item" v-if="detailImage.style_name">
-                <span class="metadata-label">스타일</span>
+              <div v-if="detailImage.style_name" class="metadata-item">
+                <span class="metadata-label">{{ t('gallery.meta.style') }}</span>
                 <span class="metadata-value">{{ detailImage.style_name }}</span>
               </div>
             </div>
 
             <!-- File path -->
             <div class="detail-filepath">
-              <span class="metadata-label">파일</span>
-              <span class="filepath-text" :title="detailImage.file_path">{{ detailImage.file_path }}</span>
+              <span class="metadata-label">{{ t('gallery.meta.file') }}</span>
+              <span class="filepath-text" :title="detailImage.file_path">{{
+                detailImage.file_path
+              }}</span>
             </div>
 
             <!-- Prompt info (collapsible) -->
-            <NCollapse v-if="detailImage.prompt_text || detailImage.negative_text || detailImage.generation_params" style="margin-top: 8px;">
-              <NCollapseItem title="프롬프트 정보" name="prompt">
+            <NCollapse
+              v-if="
+                detailImage.prompt_text ||
+                detailImage.negative_text ||
+                detailImage.generation_params
+              "
+              style="margin-top: 8px"
+            >
+              <NCollapseItem :title="t('gallery.promptInfo')" name="prompt">
                 <div v-if="detailImage.prompt_text" class="prompt-block">
                   <div class="prompt-label">Positive</div>
                   <div class="prompt-text">{{ detailImage.prompt_text }}</div>
@@ -516,11 +609,17 @@ onUnmounted(() => {
                   <div class="prompt-label">Negative</div>
                   <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
                 </div>
-                <div v-if="parseGenerationParams(detailImage.generation_params)" class="prompt-block">
+                <div
+                  v-if="parseGenerationParams(detailImage.generation_params)"
+                  class="prompt-block"
+                >
                   <div class="prompt-label">Parameters</div>
                   <div class="prompt-text params">
-                    <template v-for="(value, key) in parseGenerationParams(detailImage.generation_params)" :key="key">
-                      <NTag size="tiny" round style="margin: 2px;">{{ key }}: {{ value }}</NTag>
+                    <template
+                      v-for="(value, key) in parseGenerationParams(detailImage.generation_params)"
+                      :key="key"
+                    >
+                      <NTag size="tiny" round style="margin: 2px">{{ key }}: {{ value }}</NTag>
                     </template>
                   </div>
                 </div>
@@ -533,8 +632,8 @@ onUnmounted(() => {
         <button
           class="nav-btn nav-next"
           :disabled="!canGoNext"
+          :title="t('gallery.viewer.nextImage')"
           @click="goToNext"
-          title="다음 이미지 (→)"
         >
           ›
         </button>
@@ -562,7 +661,9 @@ onUnmounted(() => {
   font-size: 32px;
   cursor: pointer;
   border-radius: 12px;
-  transition: background 0.2s, opacity 0.2s;
+  transition:
+    background 0.2s,
+    opacity 0.2s;
   flex-shrink: 0;
 }
 .nav-btn:hover:not(:disabled) {

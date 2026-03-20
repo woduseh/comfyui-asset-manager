@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import log from '../../logger'
 
 const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`
@@ -125,13 +126,13 @@ export function writeMcpJsonConfig(url: string, targetDir?: string): string {
   // Also configure Gemini CLI if installed
   const geminiPath = writeGeminiConfig(url)
   if (geminiPath) {
-    console.log(`[MCP] Gemini CLI config written to ${geminiPath}`)
+    log.info(`[MCP] Gemini CLI config written to ${geminiPath}`)
   }
 
   // Also configure Codex CLI if installed
   const codexPath = writeCodexConfig(url)
   if (codexPath) {
-    console.log(`[MCP] Codex CLI config written to ${codexPath}`)
+    log.info(`[MCP] Codex CLI config written to ${codexPath}`)
   }
 
   return mcpJsonPath
@@ -155,7 +156,9 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(mcpJsonPath, JSON.stringify(config, null, 2), 'utf-8')
         removed = true
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Remove from Gemini CLI settings
@@ -169,7 +172,9 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(geminiPath, JSON.stringify(settings, null, 2), 'utf-8')
         removed = true
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Remove from Codex config.toml
@@ -186,7 +191,9 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(codexPath, content ? content + '\n' : '', 'utf-8')
         removed = true
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return removed
@@ -211,7 +218,9 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(configPath, 'utf-8')
       const config: McpJsonConfig = JSON.parse(raw)
       claudeCode = !!(config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const geminiPath = join(homedir(), '.gemini', 'settings.json')
@@ -220,7 +229,9 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(geminiPath, 'utf-8')
       const settings: GeminiSettings = JSON.parse(raw)
       geminiCli = !!(settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME])
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   const codexPath = join(homedir(), '.codex', 'config.toml')
@@ -228,7 +239,9 @@ export function getMcpConfigStatus(): {
     try {
       const content = readFileSync(codexPath, 'utf-8')
       codexCli = content.includes(TOML_SECTION_HEADER)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return { claudeCode, geminiCli, codexCli, configPath }

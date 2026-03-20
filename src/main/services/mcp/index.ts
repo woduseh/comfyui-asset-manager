@@ -5,13 +5,16 @@ import { writeMcpJsonConfig, removeMcpJsonConfig } from './config-generator'
 import { tagService } from '../tags'
 import http from 'http'
 import { randomUUID } from 'crypto'
+import {
+  DEFAULT_MCP_PORT,
+  MAX_MCP_SESSIONS,
+  MCP_SESSION_TIMEOUT_MS,
+  MCP_CLEANUP_INTERVAL_MS
+} from '../../constants'
+import log from '../../logger'
 
-const DEFAULT_PORT = 39464
 const SERVER_NAME = 'comfyui-asset-manager'
 const SERVER_VERSION = '0.8.0'
-
-const MAX_SESSIONS = 10
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 
 interface McpSession {
   transport: StreamableHTTPServerTransport
@@ -23,7 +26,7 @@ class McpServerManager {
   private httpServer: http.Server | null = null
   private sessions = new Map<string, McpSession>()
   private _isRunning = false
-  private _port = DEFAULT_PORT
+  private _port = DEFAULT_MCP_PORT
   private cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   get isRunning(): boolean {
@@ -40,7 +43,7 @@ class McpServerManager {
 
   private startCleanupTimer(): void {
     this.stopCleanupTimer()
-    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 60_000)
+    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), MCP_CLEANUP_INTERVAL_MS)
   }
 
   private stopCleanupTimer(): void {
@@ -53,8 +56,8 @@ class McpServerManager {
   private cleanupStaleSessions(): void {
     const now = Date.now()
     for (const [id, session] of this.sessions) {
-      if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
-        console.log(`[MCP] Cleaning up stale session: ${id}`)
+      if (now - session.lastActivity > MCP_SESSION_TIMEOUT_MS) {
+        log.info(`[MCP] Cleaning up stale session: ${id}`)
         this.destroySession(id, session)
       }
     }
@@ -62,9 +65,15 @@ class McpServerManager {
 
   private destroySession(id: string, session: McpSession): void {
     try {
-      session.transport.close().catch(() => {})
-      session.server.close().catch(() => {})
-    } catch { /* ignore */ }
+      session.transport.close().catch((e) => {
+        log.debug(`[MCP] Transport close error for session ${id}:`, e)
+      })
+      session.server.close().catch((e) => {
+        log.debug(`[MCP] Server close error for session ${id}:`, e)
+      })
+    } catch (e) {
+      log.debug(`[MCP] Session destroy error for ${id}:`, e)
+    }
     this.sessions.delete(id)
   }
 
@@ -78,7 +87,7 @@ class McpServerManager {
       }
     }
     if (oldestId) {
-      console.log(`[MCP] Evicting oldest session: ${oldestId}`)
+      log.info(`[MCP] Evicting oldest session: ${oldestId}`)
       this.destroySession(oldestId, this.sessions.get(oldestId)!)
     }
   }
@@ -86,7 +95,7 @@ class McpServerManager {
   async start(port?: number): Promise<void> {
     if (this._isRunning) return
 
-    this._port = port || DEFAULT_PORT
+    this._port = port || DEFAULT_MCP_PORT
 
     // Load Danbooru tag database
     if (!tagService.isLoaded()) {
@@ -112,14 +121,16 @@ class McpServerManager {
         try {
           await this.handleMcpRequest(req, res)
         } catch (error) {
-          console.error('[MCP] Unhandled error:', error)
+          log.error('[MCP] Unhandled error:', error)
           if (!res.headersSent) {
             res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null
-            }))
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: { code: -32603, message: 'Internal server error' },
+                id: null
+              })
+            )
           }
         }
       } else if (url.pathname === '/health') {
@@ -135,12 +146,12 @@ class McpServerManager {
       this.httpServer!.listen(this._port, '127.0.0.1', () => {
         this._isRunning = true
         this.startCleanupTimer()
-        console.log(`[MCP] Server started on ${this.url}`)
+        log.info(`[MCP] Server started on ${this.url}`)
         try {
           const configPath = writeMcpJsonConfig(this.url)
-          console.log(`[MCP] Config written to ${configPath}`)
+          log.info(`[MCP] Config written to ${configPath}`)
         } catch (err) {
-          console.warn('[MCP] Failed to write config:', err)
+          log.warn('[MCP] Failed to write config:', err)
         }
         resolve()
       })
@@ -148,7 +159,7 @@ class McpServerManager {
       this.httpServer!.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE') {
           this._port = this._port + 1
-          console.log(`[MCP] Port in use, trying ${this._port}`)
+          log.info(`[MCP] Port in use, trying ${this._port}`)
           this.httpServer!.listen(this._port, '127.0.0.1')
         } else {
           reject(err)
@@ -174,7 +185,7 @@ class McpServerManager {
 
       // ── New session (initialization) ──
       // Evict oldest session if at capacity
-      if (this.sessions.size >= MAX_SESSIONS) {
+      if (this.sessions.size >= MAX_MCP_SESSIONS) {
         this.evictOldestSession()
       }
 
@@ -184,7 +195,7 @@ class McpServerManager {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid: string) => {
-          console.log(`[MCP] Session initialized: ${sid} (active: ${this.sessions.size + 1})`)
+          log.info(`[MCP] Session initialized: ${sid} (active: ${this.sessions.size + 1})`)
           this.sessions.set(sid, { transport, server, lastActivity: Date.now() })
         }
       })
@@ -192,10 +203,12 @@ class McpServerManager {
       transport.onclose = () => {
         const sid = transport.sessionId
         if (sid && this.sessions.has(sid)) {
-          console.log(`[MCP] Session closed: ${sid} (active: ${this.sessions.size - 1})`)
+          log.info(`[MCP] Session closed: ${sid} (active: ${this.sessions.size - 1})`)
           this.sessions.delete(sid)
         }
-        server.close().catch(() => {})
+        server.close().catch((e) => {
+          log.debug('[MCP] Server close error on transport close:', e)
+        })
       }
 
       await server.connect(transport)
@@ -211,11 +224,13 @@ class McpServerManager {
         await session.transport.handleRequest(req, res)
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
-          id: null
-        }))
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+            id: null
+          })
+        )
       }
       return
     }
@@ -226,11 +241,13 @@ class McpServerManager {
         await session.transport.handleRequest(req, res)
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
-          id: null
-        }))
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+            id: null
+          })
+        )
       }
       return
     }
@@ -253,10 +270,12 @@ class McpServerManager {
         this.httpServer.close(() => {
           this._isRunning = false
           this.httpServer = null
-          console.log('[MCP] Server stopped')
+          log.info('[MCP] Server stopped')
           try {
             removeMcpJsonConfig()
-          } catch { /* ignore */ }
+          } catch (e) {
+            log.warn('[MCP] Failed to remove config file:', e)
+          }
           resolve()
         })
       } else {

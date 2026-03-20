@@ -1,6 +1,36 @@
 import { getDatabase, saveDatabase } from '../index'
 import { v4 as uuidv4 } from 'uuid'
 
+// Allowed field names for dynamic update queries (SQL injection prevention)
+const ALLOWED_UPDATE_FIELDS = {
+  workflows: ['name', 'description', 'category', 'api_json', 'ui_json', 'variables'],
+  prompt_modules: ['name', 'type', 'description', 'parent_id'],
+  module_items: [
+    'name',
+    'prompt',
+    'negative',
+    'weight',
+    'sort_order',
+    'metadata',
+    'module_id',
+    'prompt_variants'
+  ],
+  characters: ['name', 'base_prompt', 'negative_prompt', 'metadata']
+} as const
+
+function sanitizeUpdateFields(
+  data: Partial<Record<string, unknown>>,
+  allowedFields: readonly string[]
+): Partial<Record<string, unknown>> {
+  const filtered: Partial<Record<string, unknown>> = {}
+  for (const key of Object.keys(data)) {
+    if (allowedFields.includes(key)) {
+      filtered[key] = data[key]
+    }
+  }
+  return filtered
+}
+
 interface SettingRecord {
   key: string
   value: string
@@ -48,7 +78,8 @@ export class SettingsRepository {
 export class WorkflowRepository {
   list(category?: string): Record<string, unknown>[] {
     const db = getDatabase()
-    let query = 'SELECT id, name, description, category, variables, created_at, updated_at FROM workflows'
+    let query =
+      'SELECT id, name, description, category, variables, created_at, updated_at FROM workflows'
     const params: unknown[] = []
     if (category) {
       query += ' WHERE category = ?'
@@ -107,14 +138,15 @@ export class WorkflowRepository {
 
   update(id: string, data: Partial<Record<string, unknown>>): void {
     const db = getDatabase()
-    const fields = Object.keys(data)
+    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.workflows)
+    const fields = Object.keys(sanitized)
     if (fields.length === 0) return
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
-    const values = fields.map((f) => data[f])
-    db.run(
-      `UPDATE workflows SET ${setClauses}, updated_at = datetime('now') WHERE id = ?`,
-      [...(values as string[]), id]
-    )
+    const values = fields.map((f) => sanitized[f])
+    db.run(`UPDATE workflows SET ${setClauses}, updated_at = datetime('now') WHERE id = ?`, [
+      ...(values as string[]),
+      id
+    ])
     saveDatabase()
   }
 
@@ -126,7 +158,9 @@ export class WorkflowRepository {
 
   getVariables(workflowId: string): Record<string, unknown>[] {
     const db = getDatabase()
-    const stmt = db.prepare('SELECT * FROM workflow_variables WHERE workflow_id = ? ORDER BY node_id')
+    const stmt = db.prepare(
+      'SELECT * FROM workflow_variables WHERE workflow_id = ? ORDER BY node_id'
+    )
     stmt.bind([workflowId])
     const results: Record<string, unknown>[] = []
     while (stmt.step()) {
@@ -155,7 +189,17 @@ export class WorkflowRepository {
       db.run(
         `INSERT INTO workflow_variables (id, workflow_id, node_id, field_name, display_name, var_type, default_val, description, role)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, workflowId, v.node_id, v.field_name, v.display_name, v.var_type, v.default_val || null, v.description || null, v.role || 'custom']
+        [
+          id,
+          workflowId,
+          v.node_id,
+          v.field_name,
+          v.display_name,
+          v.var_type,
+          v.default_val || null,
+          v.description || null,
+          v.role || 'custom'
+        ]
       )
     }
     saveDatabase()
@@ -221,14 +265,15 @@ export class ModuleRepository {
 
   update(id: string, data: Partial<Record<string, unknown>>): void {
     const db = getDatabase()
-    const fields = Object.keys(data)
+    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.prompt_modules)
+    const fields = Object.keys(sanitized)
     if (fields.length === 0) return
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
-    const values = fields.map((f) => data[f])
-    db.run(
-      `UPDATE prompt_modules SET ${setClauses}, updated_at = datetime('now') WHERE id = ?`,
-      [...(values as string[]), id]
-    )
+    const values = fields.map((f) => sanitized[f])
+    db.run(`UPDATE prompt_modules SET ${setClauses}, updated_at = datetime('now') WHERE id = ?`, [
+      ...(values as string[]),
+      id
+    ])
     saveDatabase()
   }
 
@@ -287,10 +332,11 @@ export class ModuleItemRepository {
 
   update(id: string, data: Partial<Record<string, unknown>>): void {
     const db = getDatabase()
-    const fields = Object.keys(data)
+    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.module_items)
+    const fields = Object.keys(sanitized)
     if (fields.length === 0) return
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
-    const values = fields.map((f) => data[f])
+    const values = fields.map((f) => sanitized[f])
     db.run(`UPDATE module_items SET ${setClauses} WHERE id = ?`, [...(values as string[]), id])
     saveDatabase()
   }
@@ -354,10 +400,11 @@ export class CharacterRepository {
 
   update(id: string, data: Partial<Record<string, unknown>>): void {
     const db = getDatabase()
-    const fields = Object.keys(data)
+    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.characters)
+    const fields = Object.keys(sanitized)
     if (fields.length === 0) return
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
-    const values = fields.map((f) => data[f])
+    const values = fields.map((f) => sanitized[f])
     db.run(`UPDATE characters SET ${setClauses} WHERE id = ?`, [...(values as string[]), id])
     saveDatabase()
   }
@@ -471,9 +518,7 @@ export class BatchJobRepository {
 export class BatchTaskRepository {
   listByJob(jobId: string): Record<string, unknown>[] {
     const db = getDatabase()
-    const stmt = db.prepare(
-      'SELECT * FROM batch_tasks WHERE job_id = ? ORDER BY sort_order ASC'
-    )
+    const stmt = db.prepare('SELECT * FROM batch_tasks WHERE job_id = ? ORDER BY sort_order ASC')
     stmt.bind([jobId])
     const results: Record<string, unknown>[] = []
     while (stmt.step()) {
@@ -539,7 +584,11 @@ export class BatchTaskRepository {
     saveDatabase()
   }
 
-  updateStatus(id: string, status: string, extra?: { comfyui_prompt_id?: string; result_path?: string; error_message?: string }): void {
+  updateStatus(
+    id: string,
+    status: string,
+    extra?: { comfyui_prompt_id?: string; result_path?: string; error_message?: string }
+  ): void {
     const db = getDatabase()
     let query = 'UPDATE batch_tasks SET status = ?'
     const params: (string | null)[] = [status]
@@ -578,7 +627,10 @@ export class BatchTaskRepository {
 
   resetByJob(jobId: string): void {
     const db = getDatabase()
-    db.run("UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL, error_message = NULL, completed_at = NULL, retry_count = 0 WHERE job_id = ?", [jobId])
+    db.run(
+      "UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL, error_message = NULL, completed_at = NULL, retry_count = 0 WHERE job_id = ?",
+      [jobId]
+    )
     saveDatabase()
   }
 
@@ -613,10 +665,9 @@ export class BatchTaskRepository {
 
   clearPromptDataForCompleted(jobId: string): void {
     const db = getDatabase()
-    db.run(
-      "UPDATE batch_tasks SET prompt_data = '{}' WHERE job_id = ? AND status = 'completed'",
-      [jobId]
-    )
+    db.run("UPDATE batch_tasks SET prompt_data = '{}' WHERE job_id = ? AND status = 'completed'", [
+      jobId
+    ])
     saveDatabase()
   }
 

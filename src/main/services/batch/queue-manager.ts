@@ -7,7 +7,7 @@
 
 import { BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { join, dirname, basename, extname } from 'path'
 import { comfyuiManager } from '../comfyui/manager'
 import {
   BatchJobRepository,
@@ -434,7 +434,7 @@ class QueueManager {
               metadata,
               img.filename
             )
-            const savePath = join(outputDir, fileName)
+            const savePath = this.getUniquePath(join(outputDir, fileName))
             writeFileSync(savePath, Buffer.from(imageData))
             savedPaths.push(savePath)
 
@@ -772,6 +772,21 @@ class QueueManager {
     }
 
     return fileName + ext
+  }
+
+  /** If filePath already exists, append _001, _002, ... until unique */
+  private getUniquePath(filePath: string): string {
+    if (!existsSync(filePath)) return filePath
+
+    const dir = dirname(filePath)
+    const ext = extname(filePath)
+    const name = basename(filePath, ext)
+
+    for (let i = 1; i <= 999; i++) {
+      const candidate = join(dir, `${name}_${String(i).padStart(3, '0')}${ext}`)
+      if (!existsSync(candidate)) return candidate
+    }
+    return filePath
   }
 
   private sleep(ms: number): Promise<void> {

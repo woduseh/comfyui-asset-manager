@@ -9,12 +9,16 @@ export interface GalleryImage {
   thumbnail_path: string | null
   width: number | null
   height: number | null
+  file_size: number | null
   rating: number
   is_favorite: number
   character_name: string | null
   outfit_name: string | null
   emotion_name: string | null
   style_name: string | null
+  prompt_text: string | null
+  negative_text: string | null
+  generation_params: string | null
   created_at: string
 }
 
@@ -78,6 +82,15 @@ export const useGalleryStore = defineStore('gallery', () => {
     page.value = 1
   }
 
+  async function copyToClipboard(filePath: string): Promise<boolean> {
+    const result = await window.electron.ipcRenderer.invoke('gallery:copy-clipboard', { filePath })
+    return result?.success === true
+  }
+
+  async function showInExplorer(filePath: string): Promise<void> {
+    await window.electron.ipcRenderer.invoke('gallery:show-in-explorer', { filePath })
+  }
+
   return {
     images,
     total,
@@ -89,6 +102,8 @@ export const useGalleryStore = defineStore('gallery', () => {
     rateImage,
     toggleFavorite,
     deleteImages,
+    copyToClipboard,
+    showInExplorer,
     setPage,
     setFilters
   }

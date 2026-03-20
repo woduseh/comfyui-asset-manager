@@ -1,5 +1,5 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { readFileSync } from 'fs'
+import { ipcMain, dialog, BrowserWindow, shell, clipboard, nativeImage } from 'electron'
+import { readFileSync, existsSync } from 'fs'
 import { basename } from 'path'
 import { IPC_CHANNELS } from './channels'
 import {
@@ -438,6 +438,24 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GALLERY_DELETE, (_event, { ids }: { ids: string[] }) => {
     imageRepo.delete(ids)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GALLERY_COPY_CLIPBOARD, (_event, { filePath }: { filePath: string }) => {
+    try {
+      if (!existsSync(filePath)) return { success: false, error: 'File not found' }
+      const img = nativeImage.createFromPath(filePath)
+      if (img.isEmpty()) return { success: false, error: 'Failed to load image' }
+      clipboard.writeImage(img)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GALLERY_SHOW_IN_EXPLORER, (_event, { filePath }: { filePath: string }) => {
+    if (!existsSync(filePath)) return false
+    shell.showItemInFolder(filePath)
     return true
   })
 

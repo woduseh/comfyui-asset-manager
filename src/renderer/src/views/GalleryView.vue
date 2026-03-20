@@ -3,8 +3,9 @@ import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NEmpty, NGrid, NGridItem, NImage, NSpace, NRate, NButton,
-  NTag, NSelect, NPagination, NModal, NDescriptions, NDescriptionsItem,
-  NCheckbox, NDivider, NPopconfirm, useMessage
+  NTag, NSelect, NPagination, NModal,
+  NCheckbox, NDivider, NPopconfirm, useMessage, NTooltip, NCollapse,
+  NCollapseItem
 } from 'naive-ui'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
@@ -26,7 +27,20 @@ const sortOrder = ref<'asc' | 'desc'>('desc')
 
 // Detail modal
 const showDetail = ref(false)
-const detailImage = ref<GalleryImage | null>(null)
+const detailIndex = ref(-1)
+
+const detailImage = computed<GalleryImage | null>(() => {
+  if (detailIndex.value < 0 || detailIndex.value >= galleryStore.images.length) return null
+  return galleryStore.images[detailIndex.value]
+})
+
+const canGoPrev = computed(() => detailIndex.value > 0)
+const canGoNext = computed(() => detailIndex.value < galleryStore.images.length - 1)
+const positionLabel = computed(() => {
+  if (!detailImage.value) return ''
+  const globalIndex = (galleryStore.page - 1) * galleryStore.pageSize + detailIndex.value + 1
+  return `${globalIndex} / ${galleryStore.total}`
+})
 
 // Selection mode
 const selectionMode = ref(false)
@@ -35,6 +49,22 @@ const selectedIds = ref<Set<string>>(new Set())
 function toFileUrl(path: string | undefined): string {
   if (!path) return ''
   return 'local-asset://image/' + encodeURIComponent(path)
+}
+
+function formatFileSize(bytes: number | null): string {
+  if (!bytes) return '-'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function parseGenerationParams(json: string | null): Record<string, unknown> | null {
+  if (!json) return null
+  try {
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
 }
 
 const sortOptions = [
@@ -92,8 +122,17 @@ function openDetail(image: GalleryImage): void {
     toggleSelection(image.id)
     return
   }
-  detailImage.value = image
+  const idx = galleryStore.images.findIndex((i) => i.id === image.id)
+  detailIndex.value = idx >= 0 ? idx : 0
   showDetail.value = true
+}
+
+function goToPrev(): void {
+  if (canGoPrev.value) detailIndex.value--
+}
+
+function goToNext(): void {
+  if (canGoNext.value) detailIndex.value++
 }
 
 function toggleSelection(id: string): void {
@@ -129,12 +168,72 @@ async function handleToggleFavorite(image: GalleryImage): Promise<void> {
   await galleryStore.toggleFavorite(image.id)
 }
 
+async function handleCopyToClipboard(): Promise<void> {
+  if (!detailImage.value) return
+  const success = await galleryStore.copyToClipboard(detailImage.value.file_path)
+  if (success) {
+    message.success('클립보드에 복사됨')
+  } else {
+    message.error('복사 실패')
+  }
+}
+
+async function handleShowInExplorer(): Promise<void> {
+  if (!detailImage.value) return
+  await galleryStore.showInExplorer(detailImage.value.file_path)
+}
+
+async function handleDeleteFromDetail(): Promise<void> {
+  if (!detailImage.value) return
+  const id = detailImage.value.id
+  const hadNext = canGoNext.value
+
+  await galleryStore.deleteImages([id])
+  message.success('이미지 삭제됨')
+
+  if (galleryStore.images.length === 0) {
+    showDetail.value = false
+    detailIndex.value = -1
+  } else if (!hadNext && detailIndex.value > 0) {
+    detailIndex.value--
+  }
+  // else: detailIndex stays the same, pointing at the next image that shifted into position
+}
+
+// Keyboard navigation for detail modal
+function handleKeydown(e: KeyboardEvent): void {
+  if (!showDetail.value) return
+
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    goToPrev()
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    goToNext()
+  } else if (e.key === 'Escape') {
+    e.preventDefault()
+    showDetail.value = false
+  } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault()
+    handleCopyToClipboard()
+  }
+}
+
 function handlePageChange(p: number): void {
   galleryStore.setPage(p)
   galleryStore.loadImages()
 }
 
 watch(filterFavorite, () => applyFilters())
+
+// Register keyboard handler when detail modal opens
+watch(showDetail, (val) => {
+  if (val) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
+})
 
 // Auto-refresh gallery when tasks complete (debounced to avoid excessive reloads)
 let galleryRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -152,6 +251,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -282,51 +382,259 @@ onUnmounted(() => {
     <!-- Detail Modal -->
     <NModal
       v-model:show="showDetail"
-      preset="card"
-      style="width: 800px; max-height: 85vh;"
-      :title="detailImage?.character_name || '이미지 상세'"
-      :bordered="false"
+      :mask-closable="true"
+      :close-on-esc="false"
+      style="padding: 0;"
+      transform-origin="center"
     >
-      <template v-if="detailImage">
-        <NGrid :cols="2" :x-gap="16">
-          <NGridItem>
+      <div class="detail-overlay" v-if="detailImage" @click.self="showDetail = false">
+        <!-- Navigation: Previous -->
+        <button
+          class="nav-btn nav-prev"
+          :disabled="!canGoPrev"
+          @click="goToPrev"
+          title="이전 이미지 (←)"
+        >
+          ‹
+        </button>
+
+        <!-- Main content -->
+        <div class="detail-container">
+          <!-- Top bar -->
+          <div class="detail-topbar">
+            <span class="detail-position">{{ positionLabel }}</span>
+            <div class="detail-actions">
+              <NTooltip>
+                <template #trigger>
+                  <NButton quaternary circle size="small" @click="handleCopyToClipboard">
+                    📋
+                  </NButton>
+                </template>
+                클립보드에 복사 (Ctrl+C)
+              </NTooltip>
+              <NTooltip>
+                <template #trigger>
+                  <NButton quaternary circle size="small" @click="handleShowInExplorer">
+                    📂
+                  </NButton>
+                </template>
+                파일 탐색기에서 열기
+              </NTooltip>
+              <NTooltip>
+                <template #trigger>
+                  <NButton
+                    quaternary circle size="small"
+                    :type="detailImage.is_favorite ? 'warning' : 'default'"
+                    @click="() => { handleToggleFavorite(detailImage!); detailImage!.is_favorite = detailImage!.is_favorite ? 0 : 1 }"
+                  >
+                    {{ detailImage.is_favorite ? '♥' : '♡' }}
+                  </NButton>
+                </template>
+                {{ detailImage.is_favorite ? '즐겨찾기 해제' : '즐겨찾기 추가' }}
+              </NTooltip>
+              <NPopconfirm @positive-click="handleDeleteFromDetail" positive-text="삭제" negative-text="취소">
+                <template #trigger>
+                  <NTooltip>
+                    <template #trigger>
+                      <NButton quaternary circle size="small" type="error">
+                        🗑️
+                      </NButton>
+                    </template>
+                    이미지 삭제
+                  </NTooltip>
+                </template>
+                이 이미지를 삭제하시겠습니까?
+              </NPopconfirm>
+              <NButton quaternary circle size="small" @click="showDetail = false" style="margin-left: 8px;">
+                ✕
+              </NButton>
+            </div>
+          </div>
+
+          <!-- Image area -->
+          <div class="detail-image-area">
             <NImage
               :src="toFileUrl(detailImage.file_path)"
-              :width="380"
               object-fit="contain"
-              style="border-radius: 8px;"
+              style="max-height: 65vh; max-width: 100%; border-radius: 8px;"
+              :preview-disabled="false"
             />
-          </NGridItem>
-          <NGridItem>
-            <NDescriptions label-placement="left" :column="1" bordered size="small">
-              <NDescriptionsItem label="캐릭터">{{ detailImage.character_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="복장">{{ detailImage.outfit_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="감정">{{ detailImage.emotion_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="스타일">{{ detailImage.style_name || '-' }}</NDescriptionsItem>
-              <NDescriptionsItem label="평점">
-                <NRate
-                  :value="detailImage.rating"
-                  :count="5"
-                  @update:value="(val: number) => { galleryStore.rateImage(detailImage!.id, val); detailImage!.rating = val }"
-                />
-              </NDescriptionsItem>
-              <NDescriptionsItem label="즐겨찾기">
-                <NButton
-                  text
-                  :type="detailImage.is_favorite ? 'warning' : 'default'"
-                  @click="() => { handleToggleFavorite(detailImage!); detailImage!.is_favorite = detailImage!.is_favorite ? 0 : 1 }"
-                >
-                  {{ detailImage.is_favorite ? '♥ 즐겨찾기' : '♡ 즐겨찾기 추가' }}
-                </NButton>
-              </NDescriptionsItem>
-              <NDescriptionsItem label="파일">
-                <span style="font-size: 11px; word-break: break-all;">{{ detailImage.file_path }}</span>
-              </NDescriptionsItem>
-              <NDescriptionsItem label="생성일">{{ detailImage.created_at }}</NDescriptionsItem>
-            </NDescriptions>
-          </NGridItem>
-        </NGrid>
-      </template>
+          </div>
+
+          <!-- Info panel -->
+          <div class="detail-info-panel">
+            <div class="detail-info-row">
+              <NRate
+                :value="detailImage.rating"
+                :count="5"
+                size="small"
+                @update:value="(val: number) => { galleryStore.rateImage(detailImage!.id, val); detailImage!.rating = val }"
+              />
+              <span class="detail-meta-text">
+                {{ [detailImage.character_name, detailImage.outfit_name, detailImage.emotion_name, detailImage.style_name].filter(Boolean).join(' · ') || '-' }}
+              </span>
+              <span class="detail-meta-text detail-meta-right">
+                {{ formatFileSize(detailImage.file_size) }}
+                <template v-if="detailImage.width && detailImage.height">
+                  · {{ detailImage.width }}×{{ detailImage.height }}
+                </template>
+                · {{ detailImage.created_at?.split('T')[0] || detailImage.created_at }}
+              </span>
+            </div>
+
+            <!-- Prompt info (collapsible) -->
+            <NCollapse v-if="detailImage.prompt_text || detailImage.negative_text || detailImage.generation_params" style="margin-top: 8px;">
+              <NCollapseItem title="프롬프트 정보" name="prompt">
+                <div v-if="detailImage.prompt_text" class="prompt-block">
+                  <div class="prompt-label">Positive</div>
+                  <div class="prompt-text">{{ detailImage.prompt_text }}</div>
+                </div>
+                <div v-if="detailImage.negative_text" class="prompt-block">
+                  <div class="prompt-label">Negative</div>
+                  <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
+                </div>
+                <div v-if="parseGenerationParams(detailImage.generation_params)" class="prompt-block">
+                  <div class="prompt-label">Parameters</div>
+                  <div class="prompt-text params">
+                    <template v-for="(value, key) in parseGenerationParams(detailImage.generation_params)" :key="key">
+                      <NTag size="tiny" round style="margin: 2px;">{{ key }}: {{ value }}</NTag>
+                    </template>
+                  </div>
+                </div>
+              </NCollapseItem>
+            </NCollapse>
+          </div>
+        </div>
+
+        <!-- Navigation: Next -->
+        <button
+          class="nav-btn nav-next"
+          :disabled="!canGoNext"
+          @click="goToNext"
+          title="다음 이미지 (→)"
+        >
+          ›
+        </button>
+      </div>
     </NModal>
   </div>
 </template>
+
+<style scoped>
+.detail-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  gap: 16px;
+}
+
+.nav-btn {
+  width: 48px;
+  height: 80px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 32px;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 0.2s, opacity 0.2s;
+  flex-shrink: 0;
+}
+.nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+.nav-btn:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.detail-container {
+  background: var(--n-color, #1e1e2e);
+  border-radius: 12px;
+  max-width: 900px;
+  width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.detail-position {
+  font-size: 13px;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-image-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-height: 300px;
+}
+
+.detail-info-panel {
+  padding: 12px 16px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.detail-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-meta-text {
+  font-size: 12px;
+  opacity: 0.7;
+}
+.detail-meta-right {
+  margin-left: auto;
+}
+
+.prompt-block {
+  margin-bottom: 8px;
+}
+.prompt-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.5;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.prompt-text {
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.prompt-text.negative {
+  border-left: 3px solid rgba(255, 100, 100, 0.4);
+}
+.prompt-text.params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+}
+</style>

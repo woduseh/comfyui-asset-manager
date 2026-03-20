@@ -53,6 +53,8 @@ export const IPC_CHANNELS = {
   GALLERY_FAVORITE: 'gallery:favorite',
   GALLERY_DELETE: 'gallery:delete',
   GALLERY_EXPORT: 'gallery:export',
+  GALLERY_COPY_CLIPBOARD: 'gallery:copy-clipboard',
+  GALLERY_SHOW_IN_EXPLORER: 'gallery:show-in-explorer',
 
   // Settings
   SETTINGS_GET: 'settings:get',

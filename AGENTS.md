@@ -88,7 +88,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 5개 파일, 159개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 6개 파일, 187개 테스트 케이스.
 - 테스트 위치: `tests/main/services/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
@@ -114,13 +114,24 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 - `src/main/services/mcp/` — MCP 서버 서비스
   - `index.ts`: 서버 매니저 (Streamable HTTP, 포트 설정, 시작/중지)
-  - `tools.ts`: 15개 핵심 도구 정의 (모듈 CRUD, 아이템 CRUD, 워크플로우, 배치)
+  - `tools.ts`: 18개 도구 + 1개 프롬프트 정의 (모듈 CRUD, 아이템 CRUD, 워크플로우, 배치, 태그 검증/검색/인기)
   - `config-generator.ts`: 멀티 CLI 설정 자동 생성 (`.mcp.json`, Gemini, Codex)
 - 기존 Repository 클래스를 직접 호출하므로 IPC를 거치지 않음
 - `@modelcontextprotocol/sdk` 패키지 사용
 - 보안: localhost만 바인딩 (기본 포트: 39464)
 - **세션 관리**: 최대 10개 동시 세션, 30분 타임아웃 자동 정리, LRU 퇴출
 - **프롬프트 변형 지원**: `create_module_item`/`update_module_item`에서 `prompt_variants`, `create_batch_job`에서 `slot_mappings` + `promptVariant` 파라미터 지원
+
+### Danbooru 태그 서비스 (v0.10.0~)
+
+- `src/main/services/tags/` — 태그 검증/검색 서비스
+  - `index.ts`: TagService 싱글턴 — `resources/Danbooru Tag.txt` 로드, Map 기반 O(1) 조회, 검색, 유사 추천
+  - `danbooru-api.ts`: Danbooru REST API 클라이언트 (ofetch, 인메모리 캐시, 5초 타임아웃)
+- **로컬 우선 + 온라인 폴백**: 6,549개 태그 로컬 DB → 없으면 Danbooru API 검증
+- **유사 태그 추천**: Levenshtein 편집 거리 + 인기도 가중치로 유사 태그 상위 5개 추천
+- **시맨틱 그룹**: hair_color, eye_color, expression, clothing, pose 등 10개 그룹으로 태그 분류
+- MCP 도구 3개: `validate_danbooru_tags`, `search_danbooru_tags`, `get_popular_danbooru_tags`
+- MCP 프롬프트 1개: `danbooru_tag_guide` — 태그 규칙 + 인기 태그 예시
 
 ### 터미널 서비스 (v0.7.0~)
 
@@ -163,6 +174,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
+**0.10.0** — Danbooru 태그 검증 MCP 도구: 태그 검증(validate), 검색(search), 인기 태그(get_popular) + 프롬프트 가이드. 로컬 6,549개 태그 + Danbooru API 온라인 폴백. 테스트 187개
 **0.9.1** — WebSocket 기반 완료 감지: REST 폴링 제거로 ComfyUI 부하 대폭 절감. 프리뷰 쓰로틀링(500ms). 프롬프트 변형 편집 버그 수정
 **0.9.0** — 지연 태스크 생성(Lazy Task Expansion): 배치 생성 시 태스크 사전 생성 없이 실행 시 동적 생성. 모듈 데이터 스냅샷으로 실행 안정성 확보. 테스트 159개
 **0.8.1** — 대량 배치 최적화: 청크 기반 태스크 처리(50개 단위), ComfyUI 히스토리 자동 정리, DB 트랜잭션 최적화, 실시간 ETA 표시

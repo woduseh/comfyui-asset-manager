@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { registerMcpTools } from './tools'
 import { writeMcpJsonConfig, removeMcpJsonConfig } from './config-generator'
+import { tagService } from '../tags'
 import http from 'http'
 import { randomUUID } from 'crypto'
 
@@ -86,6 +87,11 @@ class McpServerManager {
     if (this._isRunning) return
 
     this._port = port || DEFAULT_PORT
+
+    // Load Danbooru tag database
+    if (!tagService.isLoaded()) {
+      tagService.load()
+    }
 
     this.httpServer = http.createServer(async (req, res) => {
       // CORS headers

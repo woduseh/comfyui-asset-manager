@@ -2,6 +2,19 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.10.0] - 2026-03-20
+
+Danbooru 태그 검증 MCP 도구 — LLM이 이미지 생성 프롬프트 작성 시 유효한 Danbooru 태그를 사용하도록 검증·검색·참조 도구 제공.
+
+### Added
+
+- **MCP 태그 검증 도구 (`validate_danbooru_tags`)**: 태그 목록의 유효성을 로컬 DB(6,549개) + Danbooru API로 검증. 무효 태그에 대해 Levenshtein 편집 거리 기반 유사 태그 자동 추천
+- **MCP 태그 검색 도구 (`search_danbooru_tags`)**: 키워드·와일드카드로 Danbooru 태그 검색. 로컬 우선 + 온라인 보충. 카테고리 필터 지원
+- **MCP 인기 태그 도구 (`get_popular_danbooru_tags`)**: 사용 빈도순 인기 태그 조회. `group_by_semantic=true`로 의미별 그룹화 (hair_color, eye_color, clothing, pose 등)
+- **MCP 프롬프트 템플릿 (`danbooru_tag_guide`)**: Danbooru 태그 작성 규칙, 카테고리별 인기 태그 예시, 검증 워크플로우 안내를 LLM에게 자동 제공
+- **태그 서비스** (`src/main/services/tags/`): 로컬 태그 DB 로드, 검색, 검증, 유사 추천 + Danbooru REST API 폴백 클라이언트
+- **태그 서비스 테스트**: 28개 테스트 케이스 추가 (총 187개)
+
 ## [0.9.1] - 2025-07-24
 
 ComfyUI 과부하 근본 원인 수정 — WebSocket 기반 완료 감지로 REST 폴링 제거, 프리뷰 쓰로틀링, 프롬프트 변형 편집 버그 수정.

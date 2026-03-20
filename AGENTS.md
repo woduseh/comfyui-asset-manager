@@ -102,8 +102,8 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 | 페이지 | 뷰 | 설명 |
 |--------|-----|------|
 | 워크플로우 | `WorkflowView` | 워크플로우 가져오기·관리, 역할 설정 (변수 값 편집 제거됨) |
-| 모듈 | `ModuleView` | 프롬프트 모듈 카드 그리드, 필 스타일 필터 |
-| 작업 | `JobsView` | 배치 생성(3단계 위자드) + 큐 관리 통합, 실행 상태 바 + 작업 카드 그리드 |
+| 모듈 | `ModuleView` | 프롬프트 모듈 카드 그리드, 필 스타일 필터, 아이템별 프롬프트 변형 편집 |
+| 작업 | `JobsView` | 배치 생성(3단계 위자드) + 큐 관리 통합, 슬롯별 변형 선택, 실행 상태 바 + 작업 카드 그리드 |
 | 갤러리 | `GalleryView` | 생성 이미지 그리드, 콤팩트 필터 바 |
 | 터미널 | `TerminalView` | 내장 터미널 (xterm.js + node-pty), 멀티 탭, MCP 서버 상태 |
 | 설정 | `SettingsView` | 서버 연결, 출력 경로, 테마, 언어, MCP 서버 설정 |
@@ -115,9 +115,12 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - `src/main/services/mcp/` — MCP 서버 서비스
   - `index.ts`: 서버 매니저 (Streamable HTTP, 포트 설정, 시작/중지)
   - `tools.ts`: 15개 핵심 도구 정의 (모듈 CRUD, 아이템 CRUD, 워크플로우, 배치)
+  - `config-generator.ts`: 멀티 CLI 설정 자동 생성 (`.mcp.json`, Gemini, Codex)
 - 기존 Repository 클래스를 직접 호출하므로 IPC를 거치지 않음
 - `@modelcontextprotocol/sdk` 패키지 사용
 - 보안: localhost만 바인딩 (기본 포트: 39464)
+- **세션 관리**: 최대 10개 동시 세션, 30분 타임아웃 자동 정리, LRU 퇴출
+- **프롬프트 변형 지원**: `create_module_item`/`update_module_item`에서 `prompt_variants`, `create_batch_job`에서 `slot_mappings` + `promptVariant` 파라미터 지원
 
 ### 터미널 서비스 (v0.7.0~)
 
@@ -137,9 +140,8 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
-**0.7.1** — MCP 멀티 CLI 호환: Copilot/Claude/Gemini/Codex CLI 자동 설정, 세션 관리 버그 수정
-**0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능
-**0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선
+**0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능. MCP 도구에도 변형 지원 추가. MCP 세션 메모리 누수 수정 (타임아웃 + 최대 세션 제한)
+**0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선 (Copilot/Claude/Gemini/Codex)
 **0.7.0** — MCP 서버 + 내장 터미널: LLM CLI가 앱 기능을 MCP 도구로 제어 가능, 5+1 페이지 구조, 커스텀 앱 아이콘·브랜딩
 **0.6.0** — UI 리디자인: 4+1 페이지 구조, 배치/큐 통합 (JobsView), 3단계 배치 위자드
 **0.5.0** — 슬롯별 모듈 매핑 (프리픽스/서픽스 + 모듈 체크박스 + 슬롯별 합성)

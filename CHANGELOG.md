@@ -16,6 +16,11 @@
   - 변형 미지정 시 기본 프롬프트로 자동 폴백
 - **DB 스키마**: `module_items` 테이블에 `prompt_variants` 컬럼 추가 (JSON 형식)
 - **테스트**: 프롬프트 변형 관련 6개 테스트 케이스 추가 (총 152개)
+- **MCP 도구 업데이트**: `create_module_item`/`update_module_item`에 `prompt_variants` 파라미터 추가, `create_batch_job`에 `slot_mappings` + `promptVariant` 지원
+
+### Fixed
+
+- **MCP 세션 메모리 누수**: 세션 타임아웃(30분) + 최대 세션 수(10개) 제한 + LRU 퇴출로 메모리 누수 방지
 
 ## [0.7.1] - 2025-07-24
 

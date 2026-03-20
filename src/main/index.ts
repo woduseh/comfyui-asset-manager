@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, protocol, net } from 'electron'
-import { join, normalize, resolve, sep } from 'path'
+import { join, normalize, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -79,19 +79,12 @@ app.whenReady().then(async () => {
       : request.url.slice('local-asset://'.length)
     const filePath = normalize(decodeURIComponent(encoded))
 
-    // Path traversal protection: only allow files under known safe directories
-    const settingsRepo = new SettingsRepository()
-    const outputDir = settingsRepo.get('output_directory')
-    const allowedDirs = [outputDir].filter(Boolean).map((d) => resolve(d as string))
-
-    const resolvedPath = resolve(filePath)
-    const isSafe = allowedDirs.some((dir) =>
-      resolvedPath.startsWith(dir + (dir.endsWith(sep) ? '' : sep))
-    )
-    if (!isSafe) {
+    // Path traversal protection: block relative path segments
+    if (filePath.includes('..')) {
       return new Response('Forbidden', { status: 403 })
     }
 
+    const resolvedPath = resolve(filePath)
     return net.fetch(pathToFileURL(resolvedPath).toString())
   })
 

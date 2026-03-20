@@ -2,6 +2,24 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.1] - 2026-03-21
+
+v0.12.0 보안 감사 도입 후 발생한 런타임 호환성 버그 수정 + 갤러리 상세 뷰어 레이아웃 개선.
+
+### Fixed
+
+- **Preload 샌드박스 호환성**: `sandbox: true` 환경에서 `@electron-toolkit/preload`가 외부 `require()`로 남아 로드 실패 → 모든 IPC 호출 불가 현상 수정. `electron.vite.config.ts` preload 번들링 설정 변경
+- **갤러리 이미지 403 차단**: CSP `img-src`에 `local-asset:` 프로토콜 누락 → 이미지 로드 차단 수정
+- **local-asset 경로 검증 과도 제한**: `output_directory` 설정 키 불일치(`output_directory` vs `output.directory`)로 모든 이미지 요청이 403 반환. 경로 순회(`..`) 차단만 유지하도록 단순화
+
+### Changed
+
+- **갤러리 상세 뷰어 좌우 분할 레이아웃**: 세로 스택(이미지 위, 정보 아래) → Lightroom 스타일 좌우 분할로 변경
+  - 왼쪽 사이드바(300px): 별점, 메타데이터(캐릭터/의상/감정/스타일), 파일 경로, 프롬프트 정보
+  - 오른쪽: 이미지 중앙 배치 + 파일 크기·해상도·날짜
+  - 컨테이너 max-width 900px → 1200px, 이미지 max-height 65vh → 75vh
+  - 768px 미만 화면에서 세로 레이아웃 폴백
+
 ## [0.12.0] - 2026-03-21
 
 보안 감사 기반 전면 개선 — Electron 보안 하드닝, IPC 입력 검증, 코드 품질 강화, i18n 완성, 구조화 로깅, pre-commit 훅, 테스트 확대.

@@ -523,108 +523,113 @@ onUnmounted(() => {
           </div>
 
           <!-- Image area -->
-          <div class="detail-image-area">
-            <NImage
-              :src="toFileUrl(detailImage.file_path)"
-              object-fit="contain"
-              style="max-height: 65vh; max-width: 100%; border-radius: 8px"
-              :preview-disabled="false"
-            />
-          </div>
+          <div class="detail-body">
+            <!-- Sidebar: metadata -->
+            <div class="detail-sidebar">
+              <div class="sidebar-section">
+                <NRate
+                  :value="detailImage.rating"
+                  :count="5"
+                  size="small"
+                  @update:value="
+                    (val: number) => {
+                      galleryStore.rateImage(detailImage!.id, val)
+                      detailImage!.rating = val
+                    }
+                  "
+                />
+              </div>
 
-          <!-- Info panel -->
-          <div class="detail-info-panel">
-            <div class="detail-info-row">
-              <NRate
-                :value="detailImage.rating"
-                :count="5"
-                size="small"
-                @update:value="
-                  (val: number) => {
-                    galleryStore.rateImage(detailImage!.id, val)
-                    detailImage!.rating = val
-                  }
+              <!-- Metadata table -->
+              <div
+                v-if="
+                  detailImage.character_name ||
+                  detailImage.outfit_name ||
+                  detailImage.emotion_name ||
+                  detailImage.style_name
                 "
-              />
-              <span class="detail-meta-text detail-meta-right">
+                class="sidebar-section detail-metadata"
+              >
+                <div v-if="detailImage.character_name" class="metadata-item">
+                  <span class="metadata-label">{{ t('gallery.meta.character') }}</span>
+                  <span class="metadata-value">{{ detailImage.character_name }}</span>
+                </div>
+                <div v-if="detailImage.outfit_name" class="metadata-item">
+                  <span class="metadata-label">{{ t('gallery.meta.outfit') }}</span>
+                  <span class="metadata-value">{{ detailImage.outfit_name }}</span>
+                </div>
+                <div v-if="detailImage.emotion_name" class="metadata-item">
+                  <span class="metadata-label">{{ t('gallery.meta.emotion') }}</span>
+                  <span class="metadata-value">{{ detailImage.emotion_name }}</span>
+                </div>
+                <div v-if="detailImage.style_name" class="metadata-item">
+                  <span class="metadata-label">{{ t('gallery.meta.style') }}</span>
+                  <span class="metadata-value">{{ detailImage.style_name }}</span>
+                </div>
+              </div>
+
+              <!-- File path -->
+              <div class="sidebar-section detail-filepath">
+                <span class="metadata-label">{{ t('gallery.meta.file') }}</span>
+                <span class="filepath-text" :title="detailImage.file_path">{{
+                  detailImage.file_path
+                }}</span>
+              </div>
+
+              <!-- Prompt info (collapsible) -->
+              <NCollapse
+                v-if="
+                  detailImage.prompt_text ||
+                  detailImage.negative_text ||
+                  detailImage.generation_params
+                "
+                class="sidebar-section"
+              >
+                <NCollapseItem :title="t('gallery.promptInfo')" name="prompt">
+                  <div v-if="detailImage.prompt_text" class="prompt-block">
+                    <div class="prompt-label">Positive</div>
+                    <div class="prompt-text">{{ detailImage.prompt_text }}</div>
+                  </div>
+                  <div v-if="detailImage.negative_text" class="prompt-block">
+                    <div class="prompt-label">Negative</div>
+                    <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
+                  </div>
+                  <div
+                    v-if="parseGenerationParams(detailImage.generation_params)"
+                    class="prompt-block"
+                  >
+                    <div class="prompt-label">Parameters</div>
+                    <div class="prompt-text params">
+                      <template
+                        v-for="(value, key) in parseGenerationParams(detailImage.generation_params)"
+                        :key="key"
+                      >
+                        <NTag size="tiny" round style="margin: 2px">{{ key }}: {{ value }}</NTag>
+                      </template>
+                    </div>
+                  </div>
+                </NCollapseItem>
+              </NCollapse>
+            </div>
+
+            <!-- Image section -->
+            <div class="detail-image-section">
+              <div class="detail-image-area">
+                <NImage
+                  :src="toFileUrl(detailImage.file_path)"
+                  object-fit="contain"
+                  style="max-height: 75vh; max-width: 100%; border-radius: 8px"
+                  :preview-disabled="false"
+                />
+              </div>
+              <div class="detail-image-meta">
                 {{ formatFileSize(detailImage.file_size) }}
                 <template v-if="detailImage.width && detailImage.height">
                   · {{ detailImage.width }}×{{ detailImage.height }}
                 </template>
                 · {{ detailImage.created_at?.split('T')[0] || detailImage.created_at }}
-              </span>
-            </div>
-
-            <!-- Metadata table -->
-            <div
-              v-if="
-                detailImage.character_name ||
-                detailImage.outfit_name ||
-                detailImage.emotion_name ||
-                detailImage.style_name
-              "
-              class="detail-metadata"
-            >
-              <div v-if="detailImage.character_name" class="metadata-item">
-                <span class="metadata-label">{{ t('gallery.meta.character') }}</span>
-                <span class="metadata-value">{{ detailImage.character_name }}</span>
-              </div>
-              <div v-if="detailImage.outfit_name" class="metadata-item">
-                <span class="metadata-label">{{ t('gallery.meta.outfit') }}</span>
-                <span class="metadata-value">{{ detailImage.outfit_name }}</span>
-              </div>
-              <div v-if="detailImage.emotion_name" class="metadata-item">
-                <span class="metadata-label">{{ t('gallery.meta.emotion') }}</span>
-                <span class="metadata-value">{{ detailImage.emotion_name }}</span>
-              </div>
-              <div v-if="detailImage.style_name" class="metadata-item">
-                <span class="metadata-label">{{ t('gallery.meta.style') }}</span>
-                <span class="metadata-value">{{ detailImage.style_name }}</span>
               </div>
             </div>
-
-            <!-- File path -->
-            <div class="detail-filepath">
-              <span class="metadata-label">{{ t('gallery.meta.file') }}</span>
-              <span class="filepath-text" :title="detailImage.file_path">{{
-                detailImage.file_path
-              }}</span>
-            </div>
-
-            <!-- Prompt info (collapsible) -->
-            <NCollapse
-              v-if="
-                detailImage.prompt_text ||
-                detailImage.negative_text ||
-                detailImage.generation_params
-              "
-              style="margin-top: 8px"
-            >
-              <NCollapseItem :title="t('gallery.promptInfo')" name="prompt">
-                <div v-if="detailImage.prompt_text" class="prompt-block">
-                  <div class="prompt-label">Positive</div>
-                  <div class="prompt-text">{{ detailImage.prompt_text }}</div>
-                </div>
-                <div v-if="detailImage.negative_text" class="prompt-block">
-                  <div class="prompt-label">Negative</div>
-                  <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
-                </div>
-                <div
-                  v-if="parseGenerationParams(detailImage.generation_params)"
-                  class="prompt-block"
-                >
-                  <div class="prompt-label">Parameters</div>
-                  <div class="prompt-text params">
-                    <template
-                      v-for="(value, key) in parseGenerationParams(detailImage.generation_params)"
-                      :key="key"
-                    >
-                      <NTag size="tiny" round style="margin: 2px">{{ key }}: {{ value }}</NTag>
-                    </template>
-                  </div>
-                </div>
-              </NCollapseItem>
-            </NCollapse>
           </div>
         </div>
 
@@ -677,10 +682,10 @@ onUnmounted(() => {
 .detail-container {
   background: var(--n-color, #1e1e2e);
   border-radius: 12px;
-  max-width: 900px;
-  width: 90vw;
+  max-width: 1200px;
+  width: 92vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -709,8 +714,50 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 1;
+  min-height: 0;
   padding: 16px;
-  min-height: 300px;
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-sidebar {
+  width: 300px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-section {
+  padding: 8px 0;
+}
+
+.detail-image-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-image-meta {
+  font-size: 12px;
+  opacity: 0.55;
+  padding: 8px 16px 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .detail-info-panel {
@@ -718,26 +765,10 @@ onUnmounted(() => {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.detail-info-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.detail-meta-text {
-  font-size: 12px;
-  opacity: 0.7;
-}
-.detail-meta-right {
-  margin-left: auto;
-}
-
 .detail-metadata {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 6px 16px;
-  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
@@ -764,9 +795,8 @@ onUnmounted(() => {
 }
 .detail-filepath {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding: 6px 12px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
@@ -778,6 +808,7 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'Cascadia Code', 'Fira Code', monospace;
+  word-break: break-all;
 }
 
 .prompt-block {
@@ -807,5 +838,17 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 8px;
+}
+
+@media (max-width: 768px) {
+  .detail-body {
+    flex-direction: column;
+  }
+  .detail-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    max-height: 200px;
+  }
 }
 </style>

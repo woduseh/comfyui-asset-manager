@@ -2,6 +2,31 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.7.0] - 2026-03-20
+
+MCP 서버와 내장 터미널 추가. LLM CLI(Copilot CLI, Claude CLI 등)가 MCP 도구를 통해 앱 기능을 프로그래밍적으로 제어 가능.
+
+### Added
+
+- **MCP 서버**: Streamable HTTP 전송 방식으로 15개 핵심 도구 제공
+  - 모듈 관리: `list_modules`, `get_module`, `create_module`, `update_module`, `delete_module`
+  - 모듈 아이템: `list_module_items`, `create_module_item`, `update_module_item`, `delete_module_item`
+  - 워크플로우: `list_workflows`, `get_workflow`
+  - 배치 작업: `create_batch_job`, `start_batch_job`, `list_batch_jobs`, `get_batch_job`
+- **내장 터미널**: node-pty + xterm.js 기반 풀 PTY 터미널
+  - 멀티 탭 지원
+  - 전용 페이지 (`/terminal`) + 하단 패널 모드 전환
+  - 드래그로 패널 높이 조절
+- **설정 페이지**: MCP 서버 활성화 토글, 포트 설정, 상태 표시, URL 복사
+- **네비게이션**: 사이드바에 터미널 메뉴 추가, 헤더에 터미널 패널 토글 버튼
+- **IPC 채널**: 터미널 6개 (`terminal:create/input/resize/destroy/data/exit`), MCP 3개 (`mcp:start/stop/status`)
+
+### Changed
+
+- `electron-builder.yml`: `npmRebuild: true`, node-pty `asarUnpack` 추가
+- `package.json`: `@modelcontextprotocol/sdk`, `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-web-links` 의존성 추가
+- 페이지 구조 4+1 → 5+1 (터미널 페이지 추가)
+
 ## [0.6.1] - 2026-03-20
 
 드래그 앤 드롭 정렬 기능 추가.

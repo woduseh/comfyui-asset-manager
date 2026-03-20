@@ -67,6 +67,19 @@ export const IPC_CHANNELS = {
   WORKFLOW_UPDATE_VARIABLE_ROLE: 'workflow:update-variable-role',
   WORKFLOW_UPDATE_VARIABLE_VALUE: 'workflow:update-variable-value',
 
+  // Terminal
+  TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_INPUT: 'terminal:input',
+  TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_DESTROY: 'terminal:destroy',
+  TERMINAL_DATA: 'terminal:data',
+  TERMINAL_EXIT: 'terminal:exit',
+
+  // MCP Server
+  MCP_START: 'mcp:start',
+  MCP_STOP: 'mcp:stop',
+  MCP_STATUS: 'mcp:status',
+
   // Events (main → renderer)
   QUEUE_PROGRESS: 'queue:progress',
   QUEUE_TASK_COMPLETED: 'queue:task-completed',

@@ -60,6 +60,17 @@ export interface IpcChannels {
   // Dialog
   'dialog:open-file': { filters?: { name: string; extensions: string[] }[] }
   'dialog:open-directory': void
+
+  // Terminal
+  'terminal:create': { cols: number; rows: number }
+  'terminal:input': { id: string; data: string }
+  'terminal:resize': { id: string; cols: number; rows: number }
+  'terminal:destroy': { id: string }
+
+  // MCP Server
+  'mcp:start': { port?: number }
+  'mcp:stop': void
+  'mcp:status': void
 }
 
 // Database record types

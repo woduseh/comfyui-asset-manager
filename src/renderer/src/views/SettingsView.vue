@@ -2,18 +2,23 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSelect, NSpace, NDivider
+  NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSelect, NSpace, NDivider, NSwitch, NTag, NIcon
 } from 'naive-ui'
+import { CopyOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
+import { useTerminalStore } from '@renderer/stores/terminal.store'
 
 const { t, locale } = useI18n()
 const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
+const terminalStore = useTerminalStore()
 
 const host = ref('localhost')
 const port = ref(8188)
 const outputDir = ref('')
+const mcpEnabled = ref(false)
+const mcpPort = ref(39464)
 
 const languageOptions = [
   { label: '한국어', value: 'ko' },
@@ -58,11 +63,34 @@ async function handleSettingChange(key: string, value: string): Promise<void> {
   await settingsStore.setSetting(key, value)
 }
 
+async function handleMcpEnabledChange(enabled: boolean): Promise<void> {
+  mcpEnabled.value = enabled
+  await settingsStore.setSetting('mcp_enabled', String(enabled))
+  if (enabled) {
+    await terminalStore.startMcpServer(mcpPort.value)
+  } else {
+    await terminalStore.stopMcpServer()
+  }
+}
+
+async function handleMcpPortChange(value: number | null): Promise<void> {
+  const p = value ?? 39464
+  mcpPort.value = p
+  await settingsStore.setSetting('mcp_port', String(p))
+}
+
+function handleCopyMcpUrl(): void {
+  navigator.clipboard.writeText(terminalStore.mcpStatus.url)
+}
+
 onMounted(async () => {
   await settingsStore.loadSettings()
   host.value = settingsStore.settings.comfyui_host
   port.value = parseInt(settingsStore.settings.comfyui_port) || 8188
   outputDir.value = settingsStore.settings.output_directory
+  mcpEnabled.value = settingsStore.settings.mcp_enabled === 'true'
+  mcpPort.value = parseInt(settingsStore.settings.mcp_port) || 39464
+  await terminalStore.fetchMcpStatus()
 })
 </script>
 
@@ -168,6 +196,46 @@ onMounted(async () => {
             :step="1000"
             @update:value="(v: number | null) => handleSettingChange('auto_save_interval', String(v ?? 5000))"
           />
+        </NFormItem>
+      </NForm>
+    </NCard>
+
+    <NDivider />
+
+    <!-- MCP Server Settings -->
+    <NCard :title="t('settings.mcp.title')">
+      <NForm label-placement="left" label-width="200">
+        <NFormItem :label="t('settings.mcp.enabled')">
+          <NSwitch :value="mcpEnabled" @update:value="handleMcpEnabledChange" />
+        </NFormItem>
+        <NFormItem :label="t('settings.mcp.port')">
+          <NInputNumber
+            :value="mcpPort"
+            :min="1024"
+            :max="65535"
+            :disabled="terminalStore.mcpStatus.isRunning"
+            @update:value="handleMcpPortChange"
+          />
+        </NFormItem>
+        <NFormItem :label="t('settings.mcp.status')">
+          <NSpace align="center" :size="8">
+            <NTag
+              :type="terminalStore.mcpStatus.isRunning ? 'success' : 'default'"
+              size="small"
+              round
+            >
+              {{ terminalStore.mcpStatus.isRunning ? t('settings.mcp.running') : t('settings.mcp.stopped') }}
+            </NTag>
+            <NButton
+              v-if="terminalStore.mcpStatus.isRunning"
+              size="tiny"
+              quaternary
+              @click="handleCopyMcpUrl"
+            >
+              <template #icon><NIcon :component="CopyOutline" /></template>
+              {{ terminalStore.mcpStatus.url }}
+            </NButton>
+          </NSpace>
         </NFormItem>
       </NForm>
     </NCard>

@@ -19,6 +19,8 @@ import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-g
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
 import { getDatabase, saveDatabase } from '../services/database'
+import { ptyManager } from '../services/terminal/pty-manager'
+import { mcpServerManager } from '../services/mcp'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -558,5 +560,48 @@ export function registerIpcHandlers(): void {
       properties: ['openDirectory']
     })
     return result.canceled ? null : result.filePaths[0]
+  })
+
+  // === Terminal ===
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_event, { cols, rows }: { cols: number; rows: number }) => {
+    return ptyManager.create(cols, rows)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_INPUT, (_event, { id, data }: { id: string; data: string }) => {
+    ptyManager.write(id, data)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_RESIZE, (_event, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+    ptyManager.resize(id, cols, rows)
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, (_event, { id }: { id: string }) => {
+    ptyManager.destroy(id)
+    return true
+  })
+
+  // === MCP Server ===
+  ipcMain.handle(IPC_CHANNELS.MCP_START, async (_event, { port }: { port?: number }) => {
+    try {
+      await mcpServerManager.start(port)
+      return { success: true, url: mcpServerManager.url, port: mcpServerManager.port }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_STOP, async () => {
+    await mcpServerManager.stop()
+    return true
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_STATUS, () => {
+    return {
+      isRunning: mcpServerManager.isRunning,
+      port: mcpServerManager.port,
+      url: mcpServerManager.url
+    }
   })
 }

@@ -5,6 +5,8 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initDatabase, closeDatabase } from './services/database'
 import { registerIpcHandlers } from './ipc/handlers'
+import { mcpServerManager } from './services/mcp'
+import { ptyManager } from './services/terminal/pty-manager'
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -75,6 +77,19 @@ app.whenReady().then(async () => {
   // Register IPC handlers
   registerIpcHandlers()
 
+  // Auto-start MCP server if enabled
+  try {
+    const { SettingsRepository } = require('./services/database/repositories')
+    const settingsRepo = new SettingsRepository()
+    const mcpEnabled = settingsRepo.get('mcp_enabled')
+    if (mcpEnabled === 'true') {
+      const mcpPort = parseInt(settingsRepo.get('mcp_port') || '39464')
+      mcpServerManager.start(mcpPort).catch((err: Error) => {
+        console.error('[MCP] Auto-start failed:', err.message)
+      })
+    }
+  } catch { /* settings not ready yet */ }
+
   createWindow()
 
   app.on('activate', function () {
@@ -89,6 +104,12 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // Clean up terminal instances
+  ptyManager.destroyAll()
+
+  // Stop MCP server
+  mcpServerManager.stop().catch(() => {})
+
   // Disconnect from ComfyUI and save database
   try {
     const { comfyuiManager } = require('./services/comfyui/manager')

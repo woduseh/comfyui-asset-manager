@@ -11,6 +11,7 @@
     "queue": "Queue Monitor",
     "jobs": "Jobs",
     "gallery": "Gallery",
+    "terminal": "Terminal",
     "settings": "Settings"
   },
   "connection": {
@@ -50,6 +51,15 @@
       "title": "Batch Settings",
       "maxRetries": "Max Retries",
       "autoSaveInterval": "Auto Save Interval (ms)"
+    },
+    "mcp": {
+      "title": "MCP Server",
+      "enabled": "Enable MCP Server",
+      "port": "Port",
+      "status": "Status",
+      "running": "Running",
+      "stopped": "Stopped",
+      "url": "Server URL"
     }
   },
   "workflow": {
@@ -155,5 +165,17 @@
     "success": "Success",
     "error": "Error",
     "warning": "Warning"
+  },
+  "terminal": {
+    "title": "Terminal",
+    "togglePanel": "Toggle Terminal Panel",
+    "newTab": "New Terminal",
+    "mcp": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "start": "Start MCP",
+      "stop": "Stop MCP",
+      "copyUrl": "Copy URL"
+    }
   }
 }

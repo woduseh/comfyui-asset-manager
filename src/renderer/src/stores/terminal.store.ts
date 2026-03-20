@@ -1,0 +1,98 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+
+export interface TerminalTab {
+  id: string
+  title: string
+}
+
+export const useTerminalStore = defineStore('terminal', () => {
+  const tabs = ref<TerminalTab[]>([])
+  const activeTabId = ref<string | null>(null)
+  const panelVisible = ref(false)
+  const panelHeight = ref(300)
+  const mcpStatus = ref<{ isRunning: boolean; port: number; url: string }>({
+    isRunning: false,
+    port: 39464,
+    url: 'http://localhost:39464/mcp'
+  })
+
+  async function createTab(): Promise<string> {
+    const terminalId = await window.electron.ipcRenderer.invoke('terminal:create', {
+      cols: 80,
+      rows: 24
+    })
+    const tab: TerminalTab = {
+      id: terminalId,
+      title: `Terminal ${tabs.value.length + 1}`
+    }
+    tabs.value.push(tab)
+    activeTabId.value = terminalId
+    return terminalId
+  }
+
+  async function closeTab(id: string): Promise<void> {
+    await window.electron.ipcRenderer.invoke('terminal:destroy', { id })
+    tabs.value = tabs.value.filter((t) => t.id !== id)
+    if (activeTabId.value === id) {
+      activeTabId.value = tabs.value.length > 0 ? tabs.value[tabs.value.length - 1].id : null
+    }
+  }
+
+  function setActiveTab(id: string): void {
+    activeTabId.value = id
+  }
+
+  function togglePanel(): void {
+    panelVisible.value = !panelVisible.value
+    if (panelVisible.value && tabs.value.length === 0) {
+      createTab()
+    }
+  }
+
+  function showPanel(): void {
+    panelVisible.value = true
+    if (tabs.value.length === 0) {
+      createTab()
+    }
+  }
+
+  function hidePanel(): void {
+    panelVisible.value = false
+  }
+
+  async function fetchMcpStatus(): Promise<void> {
+    const status = await window.electron.ipcRenderer.invoke('mcp:status')
+    mcpStatus.value = status
+  }
+
+  async function startMcpServer(port?: number): Promise<{ success: boolean; url?: string; error?: string }> {
+    const result = await window.electron.ipcRenderer.invoke('mcp:start', { port })
+    if (result.success) {
+      mcpStatus.value = { isRunning: true, port: result.port, url: result.url }
+    }
+    return result
+  }
+
+  async function stopMcpServer(): Promise<void> {
+    await window.electron.ipcRenderer.invoke('mcp:stop')
+    mcpStatus.value = { ...mcpStatus.value, isRunning: false }
+  }
+
+  return {
+    tabs,
+    activeTabId,
+    panelVisible,
+    panelHeight,
+    mcpStatus,
+    createTab,
+    closeTab,
+    setActiveTab,
+    togglePanel,
+    showPanel,
+    hidePanel,
+    fetchMcpStatus,
+    startMcpServer,
+    stopMcpServer
+  }
+})

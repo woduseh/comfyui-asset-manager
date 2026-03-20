@@ -23,7 +23,9 @@ const defaultSettings: AppSettings = {
   output_pattern: '{job}/{character}/{outfit}/{emotion}',
   filename_pattern: '{character}_{outfit}_{emotion}_{index}',
   max_retries: '3',
-  auto_save_interval: '5000'
+  auto_save_interval: '5000',
+  mcp_enabled: 'false',
+  mcp_port: '39464'
 }
 
 export const useSettingsStore = defineStore('settings', () => {

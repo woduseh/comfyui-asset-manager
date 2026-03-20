@@ -10,16 +10,20 @@ import {
   CubeOutline,
   FlashOutline,
   ImagesOutline,
-  SettingsOutline
+  SettingsOutline,
+  TerminalOutline
 } from '@vicons/ionicons5'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
+import { useTerminalStore } from '@renderer/stores/terminal.store'
+import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
+const terminalStore = useTerminalStore()
 
 function renderIcon(icon: ReturnType<typeof GitNetworkOutline>) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -51,6 +55,11 @@ const mainMenuOptions = computed<MenuOption[]>(() => [
     label: t('nav.gallery'),
     key: 'gallery',
     icon: renderIcon(ImagesOutline)
+  },
+  {
+    label: t('nav.terminal'),
+    key: 'terminal',
+    icon: renderIcon(TerminalOutline)
   }
 ])
 
@@ -113,6 +122,17 @@ async function handleToggleConnection(): Promise<void> {
     <NLayout>
       <NLayoutHeader bordered style="height: 48px; padding: 0 20px; display: flex; align-items: center; justify-content: flex-end;">
         <NSpace align="center" :size="12">
+          <NButton
+            size="tiny"
+            :type="terminalStore.panelVisible ? 'primary' : 'default'"
+            quaternary
+            @click="terminalStore.togglePanel()"
+            :title="t('terminal.togglePanel')"
+          >
+            <template #icon>
+              <NIcon :component="TerminalOutline" />
+            </template>
+          </NButton>
           <NTag
             :type="connectionStore.isConnected ? 'success' : 'error'"
             size="small"
@@ -137,9 +157,11 @@ async function handleToggleConnection(): Promise<void> {
         </NSpace>
       </NLayoutHeader>
 
-      <NLayout content-style="padding: 20px; overflow: auto;" style="height: calc(100vh - 48px);">
+      <NLayout content-style="padding: 20px; overflow: auto;" :style="{ height: terminalStore.panelVisible ? `calc(100vh - 48px - ${terminalStore.panelHeight}px)` : 'calc(100vh - 48px)' }">
         <router-view />
       </NLayout>
+
+      <TerminalPanel v-if="terminalStore.panelVisible" />
     </NLayout>
   </NLayout>
 </template>

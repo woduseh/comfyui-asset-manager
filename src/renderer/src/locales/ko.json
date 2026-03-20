@@ -11,6 +11,7 @@
     "queue": "큐 모니터",
     "jobs": "작업",
     "gallery": "갤러리",
+    "terminal": "터미널",
     "settings": "설정"
   },
   "connection": {
@@ -50,6 +51,15 @@
       "title": "배치 설정",
       "maxRetries": "최대 재시도 횟수",
       "autoSaveInterval": "자동 저장 간격 (ms)"
+    },
+    "mcp": {
+      "title": "MCP 서버",
+      "enabled": "MCP 서버 활성화",
+      "port": "포트",
+      "status": "상태",
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "url": "서버 URL"
     }
   },
   "workflow": {
@@ -155,5 +165,17 @@
     "success": "성공",
     "error": "오류",
     "warning": "경고"
+  },
+  "terminal": {
+    "title": "터미널",
+    "togglePanel": "터미널 패널 토글",
+    "newTab": "새 터미널",
+    "mcp": {
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "start": "MCP 시작",
+      "stop": "MCP 중지",
+      "copyUrl": "URL 복사"
+    }
   }
 }

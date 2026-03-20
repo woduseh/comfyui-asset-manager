@@ -27,6 +27,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@renderer/views/GalleryView.vue')
   },
   {
+    path: '/terminal',
+    name: 'terminal',
+    component: () => import('@renderer/views/TerminalView.vue')
+  },
+  {
     path: '/settings',
     name: 'settings',
     component: () => import('@renderer/views/SettingsView.vue')

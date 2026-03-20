@@ -2,6 +2,22 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.10.5] - 2026-03-20
+
+작업 관리 및 갤러리의 실시간 UI 업데이트 개선 — 작업 시작 시 즉시 상태 반영, 이미지 생성 시 갤러리 자동 갱신.
+
+### Fixed
+
+- **작업 시작 후 UI 미갱신**: `BATCH_START` IPC 핸들러가 전체 작업 완료까지 응답을 블로킹하여 renderer의 상태 갱신이 작업 완료 후에야 실행되던 문제 수정. 핸들러를 fire-and-forget으로 변경하여 즉시 응답
+- **작업 실행 상태 즉시 미반영**: 작업 시작 후 3초 폴링이 `isProcessing === true`일 때만 활성화되지만, 블로킹으로 인해 값이 갱신되지 않아 폴링이 시작되지 않던 문제 수정. `runningJob` 존재 여부도 폴링 조건에 추가
+- **갤러리 실시간 미갱신**: 이미지 생성 완료 후 갤러리 페이지에 즉시 반영되지 않던 문제 수정. `queueStore` 태스크 완료 이벤트 감시 + 디바운스(2초) 갤러리 리로드 추가
+
+### Changed
+
+- **BATCH_START 비블로킹**: `handlers.ts`에서 `startJob()` 호출을 fire-and-forget으로 변경, 즉시 `{ success: true }` 반환
+- **JobsView 폴링 조건 완화**: `isProcessing` 외에 `runningJob` 존재 시에도 3초 폴링 활성화
+- **GalleryView 자동 갱신**: `queueStore.activeJobs`의 `completedTasks` 변화 감시로 자동 리로드
+
 ## [0.10.4] - 2026-03-20
 
 새 배치 작업 생성 시에도 변수 오버라이드를 사용할 수 있도록 UI 일관성 개선.

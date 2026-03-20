@@ -233,10 +233,17 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
 // ─── Queue controls ───
 async function handleStartJob(jobId: string): Promise<void> {
   const result = await window.electron.ipcRenderer.invoke('batch:start', { id: jobId })
-  if (result.success) message.success('배치 작업이 시작되었습니다')
-  else message.error('시작 실패: ' + result.error)
+  if (result.success) {
+    message.success('배치 작업이 시작되었습니다')
+  } else {
+    message.error('시작 실패: ' + result.error)
+    return
+  }
+  // Short delay for main process to update DB status to 'running'
+  await new Promise((r) => setTimeout(r, 300))
   await loadBatchJobs()
   await loadQueueStatus()
+  await queueStore.loadActiveJobs()
 }
 
 async function handlePause(): Promise<void> {
@@ -443,12 +450,21 @@ onMounted(() => {
   loadBatchJobs()
   loadQueueStatus()
   refreshInterval = setInterval(async () => {
-    if (queueStatus.value.isProcessing) {
+    if (queueStatus.value.isProcessing || runningJob.value) {
       await loadBatchJobs()
       await loadQueueStatus()
     }
   }, 3000)
 })
+
+// Auto-refresh job list when queueStore detects job completion
+watch(
+  () => queueStore.activeJobs.length,
+  () => {
+    loadBatchJobs()
+    loadQueueStatus()
+  }
+)
 
 onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
 </script>

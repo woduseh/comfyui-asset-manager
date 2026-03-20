@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard, NEmpty, NGrid, NGridItem, NImage, NSpace, NRate, NButton,
@@ -8,10 +8,12 @@ import {
 } from 'naive-ui'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
+import { useQueueStore } from '@renderer/stores/queue.store'
 
 const { t } = useI18n()
 const message = useMessage()
 const galleryStore = useGalleryStore()
+const queueStore = useQueueStore()
 
 // Filters
 const filterCharacter = ref<string | null>(null)
@@ -134,8 +136,22 @@ function handlePageChange(p: number): void {
 
 watch(filterFavorite, () => applyFilters())
 
+// Auto-refresh gallery when tasks complete (debounced to avoid excessive reloads)
+let galleryRefreshTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => queueStore.activeJobs.reduce((sum, j) => sum + j.completedTasks, 0),
+  () => {
+    if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
+    galleryRefreshTimer = setTimeout(() => galleryStore.loadImages(), 2000)
+  }
+)
+
 onMounted(() => {
   galleryStore.loadImages()
+})
+
+onUnmounted(() => {
+  if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
 })
 </script>
 

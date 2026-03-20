@@ -385,14 +385,15 @@ export function registerIpcHandlers(): void {
     return batchTaskRepo.listByJob(jobId)
   })
 
-  // Queue execution control
-  ipcMain.handle(IPC_CHANNELS.BATCH_START, async (_event, { id }: { id: string }) => {
-    try {
-      await queueManager.startJob(id)
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: (error as Error).message }
+  // Queue execution control — fire-and-forget so renderer gets immediate response
+  ipcMain.handle(IPC_CHANNELS.BATCH_START, (_event, { id }: { id: string }) => {
+    if (queueManager.isProcessing) {
+      return { success: false, error: 'Queue is already processing a job' }
     }
+    queueManager.startJob(id).catch((err) => {
+      console.error('[QueueManager] Job execution error:', err)
+    })
+    return { success: true }
   })
 
   ipcMain.handle(IPC_CHANNELS.BATCH_PAUSE, () => {

@@ -34,6 +34,7 @@ export interface BatchConfig {
     assignedModuleIds: string[]
     prefixModuleIds: string[]
     prefixText: string
+    userPrefixText?: string
     suffixText: string
     promptVariant?: string
   }>

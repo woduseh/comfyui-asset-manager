@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { validateTagOnline, searchTagsOnline, type DanbooruApiTag } from './danbooru-api'
+import { validateTagOnline, searchTagsOnline } from './danbooru-api'
 
 export interface DanbooruTag {
   id: number

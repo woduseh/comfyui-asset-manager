@@ -306,6 +306,9 @@ export function registerIpcHandlers(): void {
     // Resolve prefix module IDs to composed text
     if (config.slotMappings) {
       for (const slot of config.slotMappings) {
+        // Preserve original user-entered prefixText before mutation (for edit/copy restoration)
+        slot.userPrefixText = slot.prefixText || ''
+
         if (slot.action === 'inject' && slot.prefixModuleIds && slot.prefixModuleIds.length > 0) {
           const prefixModules = slot.prefixModuleIds.map(moduleId => {
             const mod = moduleRepo.get(moduleId)

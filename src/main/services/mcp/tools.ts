@@ -8,7 +8,7 @@ import {
 import { expandBatchToTasks } from '../batch/task-generator'
 import type { BatchConfig } from '../batch/task-generator'
 import { queueManager } from '../batch/queue-manager'
-import { tagService, CATEGORY_NAMES } from '../tags'
+import { tagService } from '../tags'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 

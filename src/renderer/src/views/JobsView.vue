@@ -396,7 +396,7 @@ async function restoreConfig(job: Record<string, unknown>, isClone: boolean): Pr
             slot.fixedValue = saved.fixedValue || ''
             slot.assignedModuleIds = saved.assignedModuleIds || []
             slot.prefixModuleIds = saved.prefixModuleIds || []
-            slot.prefixText = saved.prefixText || ''
+            slot.prefixText = saved.userPrefixText ?? saved.prefixText ?? ''
             slot.suffixText = saved.suffixText || ''
             slot.promptVariant = saved.promptVariant || ''
           }

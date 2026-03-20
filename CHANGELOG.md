@@ -2,6 +2,16 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.10.1] - 2026-03-20
+
+배치 작업 수정/복제 시 '추가 텍스트' 필드에 고정 모듈 내용이 혼입되는 버그 수정.
+
+### Fixed
+
+- **배치 수정/복제 시 고정 모듈 텍스트 혼입**: 배치 저장 시 고정 모듈(prefixModuleIds)의 합성 텍스트가 `prefixText`에 직접 병합된 채 DB에 저장되어, 수정/복제 시 '추가 텍스트'란에 고정 모듈 내용이 표시되고 재저장 시 내용이 누적 중복되던 문제 수정
+  - 원인: `handlers.ts`의 `BATCH_CREATE`에서 `slot.prefixText`를 변형한 config를 그대로 DB에 저장
+  - 수정: 변형 전 원본을 `userPrefixText` 필드에 보존하고, 복원 시 `userPrefixText`를 우선 사용. 기존 작업은 `prefixText`로 폴백 (하위 호환)
+
 ## [0.10.0] - 2026-03-20
 
 Danbooru 태그 검증 MCP 도구 — LLM이 이미지 생성 프롬프트 작성 시 유효한 Danbooru 태그를 사용하도록 검증·검색·참조 도구 제공.

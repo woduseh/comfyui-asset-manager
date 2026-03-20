@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: temp_project
+appId: com.comfyui-asset-manager
+productName: ComfyUI Asset Manager
 directories:
   buildResources: build
 files:
@@ -13,7 +13,7 @@ asarUnpack:
   - resources/**
   - node_modules/node-pty/**
 win:
-  executableName: temp_project
+  executableName: comfyui-asset-manager
   target:
     - nsis
     - portable

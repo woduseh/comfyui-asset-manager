@@ -27,6 +27,8 @@ MCP 서버와 내장 터미널 추가. LLM CLI(Copilot CLI, Claude CLI 등)가 M
 
 ### Changed
 
+- **앱 브랜딩**: 앱 이름 `Electron` → `ComfyUI Asset Manager`, 커스텀 아이콘 적용 (모든 플랫폼)
+- `electron-builder.yml`: `appId`, `productName`, `executableName`을 프로젝트에 맞게 변경
 - `electron-builder.yml`: `npmRebuild: true`, node-pty `asarUnpack` 추가
 - `package.json`: `@modelcontextprotocol/sdk`, `node-pty`, `@xterm/xterm`, `@xterm/addon-fit`, `@xterm/addon-web-links` 의존성 추가
 - 페이지 구조 4+1 → 5+1 (터미널 페이지 추가)

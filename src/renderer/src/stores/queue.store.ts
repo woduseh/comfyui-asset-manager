@@ -10,6 +10,8 @@ export interface QueueJobInfo {
   completedTasks: number
   failedTasks: number
   startedAt: string | null
+  etaMs?: number
+  avgTaskDurationMs?: number
 }
 
 export const useQueueStore = defineStore('queue', () => {
@@ -43,17 +45,20 @@ export const useQueueStore = defineStore('queue', () => {
     currentProgress.value = progress
   }
 
-  function onTaskCompleted(jobId: string): void {
-    const job = activeJobs.value.find((j) => j.id === jobId)
+  function onTaskCompleted(data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }): void {
+    const job = activeJobs.value.find((j) => j.id === data.jobId)
     if (job) {
       job.completedTasks++
+      job.etaMs = data.etaMs
+      job.avgTaskDurationMs = data.avgTaskDurationMs
     }
   }
 
-  function onTaskFailed(jobId: string): void {
-    const job = activeJobs.value.find((j) => j.id === jobId)
+  function onTaskFailed(data: { jobId: string; etaMs?: number }): void {
+    const job = activeJobs.value.find((j) => j.id === data.jobId)
     if (job) {
       job.failedTasks++
+      job.etaMs = data.etaMs
     }
   }
 

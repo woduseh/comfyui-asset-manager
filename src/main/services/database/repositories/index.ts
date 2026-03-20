@@ -481,6 +481,35 @@ export class BatchTaskRepository {
     return results
   }
 
+  listByJobPending(jobId: string, limit: number): Record<string, unknown>[] {
+    const db = getDatabase()
+    const stmt = db.prepare(
+      "SELECT * FROM batch_tasks WHERE job_id = ? AND status NOT IN ('completed', 'cancelled') ORDER BY sort_order ASC LIMIT ?"
+    )
+    stmt.bind([jobId, limit])
+    const results: Record<string, unknown>[] = []
+    while (stmt.step()) {
+      results.push(stmt.getAsObject())
+    }
+    stmt.free()
+    return results
+  }
+
+  countByJobStatus(jobId: string): Record<string, number> {
+    const db = getDatabase()
+    const stmt = db.prepare(
+      'SELECT status, COUNT(*) as count FROM batch_tasks WHERE job_id = ? GROUP BY status'
+    )
+    stmt.bind([jobId])
+    const result: Record<string, number> = {}
+    while (stmt.step()) {
+      const row = stmt.getAsObject() as { status: string; count: number }
+      result[row.status] = row.count
+    }
+    stmt.free()
+    return result
+  }
+
   createBulk(
     tasks: Array<{
       job_id: string
@@ -490,13 +519,20 @@ export class BatchTaskRepository {
     }>
   ): void {
     const db = getDatabase()
-    for (const task of tasks) {
-      const id = uuidv4()
-      db.run(
-        `INSERT INTO batch_tasks (id, job_id, prompt_data, sort_order, metadata)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, task.job_id, task.prompt_data, task.sort_order, task.metadata]
-      )
+    db.run('BEGIN TRANSACTION')
+    try {
+      for (const task of tasks) {
+        const id = uuidv4()
+        db.run(
+          `INSERT INTO batch_tasks (id, job_id, prompt_data, sort_order, metadata)
+           VALUES (?, ?, ?, ?, ?)`,
+          [id, task.job_id, task.prompt_data, task.sort_order, task.metadata]
+        )
+      }
+      db.run('COMMIT')
+    } catch (e) {
+      db.run('ROLLBACK')
+      throw e
     }
     saveDatabase()
   }

@@ -132,6 +132,13 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
   - `TerminalInstance.vue`: xterm.js 래퍼
   - `TerminalPanel.vue`: 하단 패널 (드래그 리사이즈)
 
+### 배치 실행 최적화 (v0.8.1~)
+
+- **청크 기반 처리**: `listByJobPending(jobId, limit)` — 50개씩 미완료 태스크만 로드
+- **ComfyUI 히스토리 자동 정리**: 태스크 완료 후 `deleteFromHistory([promptId])` 호출
+- **DB 트랜잭션**: `createBulk()`가 `BEGIN`/`COMMIT`으로 감쌈
+- **ETA 계산**: 완료된 태스크 평균 소요 시간 × 남은 수 → `queue:task-completed` 이벤트에 `etaMs`, `avgTaskDurationMs` 포함
+
 ### 전역 스타일 가이드 (v0.6.0~)
 
 - border-radius: 12px (통일)
@@ -140,6 +147,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
+**0.8.1** — 대량 배치 최적화: 청크 기반 태스크 처리(50개 단위), ComfyUI 히스토리 자동 정리, DB 트랜잭션 최적화, 실시간 ETA 표시
 **0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능. MCP 도구에도 변형 지원 추가. MCP 세션 메모리 누수 수정 (타임아웃 + 최대 세션 제한)
 **0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선 (Copilot/Claude/Gemini/Codex)
 **0.7.0** — MCP 서버 + 내장 터미널: LLM CLI가 앱 기능을 MCP 도구로 제어 가능, 5+1 페이지 구조, 커스텀 앱 아이콘·브랜딩

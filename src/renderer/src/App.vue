@@ -29,12 +29,12 @@ onMounted(async () => {
     queueStore.updateProgress(data)
   })
 
-  window.electron.ipcRenderer.on('queue:task-completed', (_event: unknown, data: { jobId: string }) => {
-    queueStore.onTaskCompleted(data.jobId)
+  window.electron.ipcRenderer.on('queue:task-completed', (_event: unknown, data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }) => {
+    queueStore.onTaskCompleted(data)
   })
 
-  window.electron.ipcRenderer.on('queue:task-failed', (_event: unknown, data: { jobId: string }) => {
-    queueStore.onTaskFailed(data.jobId)
+  window.electron.ipcRenderer.on('queue:task-failed', (_event: unknown, data: { jobId: string; etaMs?: number }) => {
+    queueStore.onTaskFailed(data)
   })
 
   window.electron.ipcRenderer.on('queue:job-completed', (_event: unknown, data: { jobId: string }) => {

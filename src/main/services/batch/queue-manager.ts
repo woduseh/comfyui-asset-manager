@@ -128,74 +128,99 @@ class QueueManager {
     if (!workflow) throw new Error(`Workflow not found for job`)
 
     const apiJson = JSON.parse(workflow.api_json as string)
-    const tasks = batchTaskRepo.listByJob(jobId)
     const outputRoot = settingsRepo.get('output.directory') || join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
     const jobConfig = JSON.parse(job.config as string)
 
     let completedCount = (job.completed_tasks as number) || 0
     let failedCount = (job.failed_tasks as number) || 0
+    const totalTasks = (job.total_tasks as number) || 0
 
-    for (const task of tasks) {
-      // Skip already completed/cancelled tasks
-      if (task.status === 'completed' || task.status === 'cancelled') continue
+    // ETA tracking
+    const taskDurations: number[] = []
+    const CHUNK_SIZE = 50
 
-      // Wait while paused
-      while (this._isPaused) {
-        await this.sleep(1000)
+    while (true) {
+      const tasks = batchTaskRepo.listByJobPending(jobId, CHUNK_SIZE)
+      if (tasks.length === 0) break
+
+      for (const task of tasks) {
+        // Wait while paused
+        while (this._isPaused) {
+          await this.sleep(1000)
+          if (this._isCancelled) break
+        }
         if (this._isCancelled) break
-      }
-      if (this._isCancelled) break
 
-      try {
-        await this.processTask(
-          task,
-          apiJson,
-          jobId,
-          jobConfig,
-          outputRoot
-        )
-        completedCount++
-        batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+        const taskStartTime = Date.now()
 
-        this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
-          jobId,
-          taskId: task.id,
-          completed: completedCount,
-          total: job.total_tasks
-        })
-      } catch (error) {
-        const retryCount = (task.retry_count as number) || 0
-        if (retryCount < this._maxRetries) {
-          batchTaskRepo.updateStatus(task.id as string, 'retrying', {
-            error_message: (error as Error).message
+        try {
+          await this.processTask(
+            task,
+            apiJson,
+            jobId,
+            jobConfig,
+            outputRoot
+          )
+          completedCount++
+          taskDurations.push(Date.now() - taskStartTime)
+          batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+          const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+          const remainingTasks = totalTasks - completedCount - failedCount
+          const etaMs = Math.round(avgDuration * remainingTasks)
+
+          this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
+            jobId,
+            taskId: task.id,
+            completed: completedCount,
+            total: totalTasks,
+            etaMs,
+            avgTaskDurationMs: Math.round(avgDuration)
           })
-          // Re-add to end of queue... simplified: just retry immediately
-          try {
-            await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
-            completedCount++
-          } catch (retryError) {
+        } catch (error) {
+          const retryCount = (task.retry_count as number) || 0
+          if (retryCount < this._maxRetries) {
+            batchTaskRepo.updateStatus(task.id as string, 'retrying', {
+              error_message: (error as Error).message
+            })
+            const retryStartTime = Date.now()
+            try {
+              await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
+              completedCount++
+              taskDurations.push(Date.now() - retryStartTime)
+            } catch (retryError) {
+              failedCount++
+              batchTaskRepo.updateStatus(task.id as string, 'failed', {
+                error_message: (retryError as Error).message
+              })
+            }
+          } else {
             failedCount++
             batchTaskRepo.updateStatus(task.id as string, 'failed', {
-              error_message: (retryError as Error).message
+              error_message: (error as Error).message
             })
           }
-        } else {
-          failedCount++
-          batchTaskRepo.updateStatus(task.id as string, 'failed', {
-            error_message: (error as Error).message
+          batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+          const avgDuration = taskDurations.length > 0
+            ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+            : 0
+          const remainingTasks = totalTasks - completedCount - failedCount
+          const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+
+          this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
+            jobId,
+            taskId: task.id,
+            error: (error as Error).message,
+            completed: completedCount,
+            failed: failedCount,
+            total: totalTasks,
+            etaMs
           })
         }
-        batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-        this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
-          jobId,
-          taskId: task.id,
-          error: (error as Error).message,
-          completed: completedCount,
-          failed: failedCount,
-          total: job.total_tasks
-        })
       }
+
+      if (this._isCancelled) break
     }
 
     if (!this._isCancelled) {
@@ -286,6 +311,13 @@ class QueueManager {
     batchTaskRepo.updateStatus(taskId, 'completed', {
       result_path: savedPaths[0] || undefined
     })
+
+    // Clean up ComfyUI history to free server memory
+    try {
+      await comfyuiManager.restClient.deleteFromHistory([promptId])
+    } catch {
+      // Non-critical: history cleanup failure shouldn't block task completion
+    }
   }
 
   /**

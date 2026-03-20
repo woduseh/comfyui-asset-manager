@@ -11,6 +11,7 @@ import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
+import { useQueueStore } from '@renderer/stores/queue.store'
 import { toPlain } from '@renderer/utils/ipc'
 
 const { t } = useI18n()
@@ -18,6 +19,7 @@ const message = useMessage()
 const moduleStore = useModuleStore()
 const workflowStore = useWorkflowStore()
 const connectionStore = useConnectionStore()
+const queueStore = useQueueStore()
 
 // ─── Job list ───
 const batchJobs = ref<Record<string, unknown>[]>([])
@@ -130,6 +132,22 @@ const taskPreview = computed(() => {
 
 const runningJob = computed(() => {
   return batchJobs.value.find(j => j.status === 'running' || j.status === 'paused') || null
+})
+
+const runningJobEta = computed(() => {
+  if (!runningJob.value) return null
+  const jobId = runningJob.value.id as string
+  const queueJob = queueStore.activeJobs.find(j => j.id === jobId)
+  if (!queueJob?.etaMs || queueJob.etaMs <= 0) return null
+
+  const totalSec = Math.ceil(queueJob.etaMs / 1000)
+  const hours = Math.floor(totalSec / 3600)
+  const mins = Math.floor((totalSec % 3600) / 60)
+  const secs = totalSec % 60
+
+  if (hours > 0) return `${hours}시간 ${mins}분`
+  if (mins > 0) return `${mins}분 ${secs}초`
+  return `${secs}초`
 })
 
 const canGoStep2 = computed(() => !!batchName.value && !!selectedWorkflowId.value)
@@ -442,6 +460,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
           <strong>{{ runningJob.name }}</strong>
           <span style="font-size: 13px; opacity: 0.6;">
             {{ runningJob.completed_tasks }}/{{ runningJob.total_tasks }}
+            <template v-if="runningJobEta"> · 남은 시간: {{ runningJobEta }}</template>
           </span>
         </NSpace>
         <NSpace :size="8">

@@ -2,10 +2,10 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NButton, NEmpty, NSpace, NTag, NList, NListItem,
-  NModal, NForm, NFormItem, NInput, NSelect, NThing,
+  NCard, NButton, NEmpty, NSpace, NTag,
+  NModal, NForm, NFormItem, NInput, NSelect,
   NInputNumber, NSwitch, NGrid, NGridItem, NDivider,
-  NCollapse, NCollapseItem, NPopconfirm, useMessage
+  NPopconfirm, useMessage
 } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
@@ -339,7 +339,7 @@ onMounted(() => {
             v-if="moduleStore.currentItems.length > 0"
             v-model="moduleStore.currentItems"
             handle=".drag-handle"
-            animation="200"
+            :animation="200"
             @end="handleReorderItems"
           >
             <div

@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NEmpty, NProgress, NSpace, NText, NButton, NTag,
+  NCard, NEmpty, NProgress, NSpace, NButton, NTag,
   NStatistic, NGrid, NGridItem, NDivider, NDataTable, useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'

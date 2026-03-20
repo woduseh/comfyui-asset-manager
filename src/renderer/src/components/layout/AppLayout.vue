@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { NMenu, NLayout, NLayoutSider, NLayoutHeader, NIcon, NButton, NSpace, NTag, NBadge } from 'naive-ui'
@@ -25,7 +25,7 @@ const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 const terminalStore = useTerminalStore()
 
-function renderIcon(icon: ReturnType<typeof GitNetworkOutline>) {
+function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 

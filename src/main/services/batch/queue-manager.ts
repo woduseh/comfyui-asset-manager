@@ -38,7 +38,6 @@ class QueueManager {
   private _isPaused = false
   private _isCancelled = false
   private _currentJobId: string | null = null
-  private _currentTaskId: string | null = null
   private _maxRetries = 3
 
   get isProcessing(): boolean {
@@ -84,7 +83,6 @@ class QueueManager {
     } finally {
       this._isProcessing = false
       this._currentJobId = null
-      this._currentTaskId = null
       this.sendStatusToRenderer()
     }
   }
@@ -147,8 +145,6 @@ class QueueManager {
         if (this._isCancelled) break
       }
       if (this._isCancelled) break
-
-      this._currentTaskId = task.id as string
 
       try {
         await this.processTask(
@@ -288,7 +284,7 @@ class QueueManager {
     }
 
     batchTaskRepo.updateStatus(taskId, 'completed', {
-      result_path: savedPaths[0] || null
+      result_path: savedPaths[0] || undefined
     })
   }
 

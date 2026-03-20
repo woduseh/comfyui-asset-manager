@@ -106,7 +106,7 @@ export class ComfyUIClient {
     overwrite: boolean = true
   ): Promise<{ name: string; subfolder: string; type: string }> {
     const formData = new FormData()
-    const blob = new Blob([imageBuffer])
+    const blob = new Blob([new Uint8Array(imageBuffer)])
     formData.append('image', blob, filename)
     if (subfolder) formData.append('subfolder', subfolder)
     formData.append('overwrite', overwrite ? 'true' : 'false')

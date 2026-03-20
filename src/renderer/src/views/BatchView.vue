@@ -10,7 +10,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
-import { useWorkflowStore, type WorkflowItem } from '@renderer/stores/workflow.store'
+import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { toPlain } from '@renderer/utils/ipc'
 
 const { t } = useI18n()

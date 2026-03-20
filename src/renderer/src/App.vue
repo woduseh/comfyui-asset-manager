@@ -7,6 +7,7 @@ import AppLayout from './components/layout/AppLayout.vue'
 import { useSettingsStore } from './stores/settings.store'
 import { useConnectionStore } from './stores/connection.store'
 import { useQueueStore } from './stores/queue.store'
+import type { QueueProgress } from './types/ipc'
 
 const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
@@ -24,8 +25,8 @@ onMounted(async () => {
     connectionStore.setConnectionChanged(connected)
   })
 
-  window.electron.ipcRenderer.on('queue:progress', (_event: unknown, data: { value: number; max: number }) => {
-    queueStore.updateProgress({ value: data.value, max: data.max })
+  window.electron.ipcRenderer.on('queue:progress', (_event: unknown, data: QueueProgress) => {
+    queueStore.updateProgress(data)
   })
 
   window.electron.ipcRenderer.on('queue:task-completed', (_event: unknown, data: { jobId: string }) => {

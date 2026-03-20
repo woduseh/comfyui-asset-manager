@@ -1,6 +1,10 @@
 import { getDatabase, saveDatabase } from '../index'
 import { v4 as uuidv4 } from 'uuid'
-import type { SettingRecord } from '../../../renderer/src/types/ipc'
+
+interface SettingRecord {
+  key: string
+  value: string
+}
 
 export class SettingsRepository {
   get(key: string): string | null {

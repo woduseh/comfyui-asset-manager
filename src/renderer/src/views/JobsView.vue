@@ -463,7 +463,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
     <VueDraggable
       v-if="batchJobs.length > 0"
       v-model="batchJobs"
-      animation="200"
+      :animation="200"
       handle=".job-drag-handle"
       style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;"
       @end="handleReorderJobs"
@@ -665,7 +665,7 @@ onUnmounted(() => { if (refreshInterval) clearInterval(refreshInterval) })
                     <VueDraggable
                       v-if="slot.prefixModuleIds.length > 0"
                       v-model="slot.prefixModuleIds"
-                      animation="200"
+                      :animation="200"
                       style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;"
                     >
                       <NTag

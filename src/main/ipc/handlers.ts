@@ -18,7 +18,7 @@ import { previewPrompt, buildPrompt } from '../services/prompt/composition-engin
 import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
-import { getDatabase, saveDatabase } from '../services/database'
+import { getDatabase } from '../services/database'
 import { ptyManager } from '../services/terminal/pty-manager'
 import { mcpServerManager } from '../services/mcp'
 

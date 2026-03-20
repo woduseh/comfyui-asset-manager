@@ -6,6 +6,7 @@ import {
   NTag, NSelect, NPagination, NModal, NDescriptions, NDescriptionsItem,
   NCheckbox, NDivider, NPopconfirm, useMessage
 } from 'naive-ui'
+import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 
 const { t } = useI18n()
@@ -18,7 +19,7 @@ const filterOutfit = ref<string | null>(null)
 const filterEmotion = ref<string | null>(null)
 const filterRating = ref<number | null>(null)
 const filterFavorite = ref<boolean | null>(null)
-const sortBy = ref('created_at')
+const sortBy = ref<'created_at' | 'rating' | 'file_size'>('created_at')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 
 // Detail modal
@@ -41,8 +42,8 @@ const sortOptions = [
   { label: '평점 (낮은순)', value: 'rating:asc' }
 ]
 
-const ratingOptions = [
-  { label: '전체', value: null },
+const ratingOptions: SelectMixedOption[] = [
+  { label: '전체', value: null as unknown as string },
   { label: '⭐ 1+', value: 1 },
   { label: '⭐⭐ 2+', value: 2 },
   { label: '⭐⭐⭐ 3+', value: 3 },
@@ -68,7 +69,7 @@ function applyFilters(): void {
 
 function handleSortChange(val: string): void {
   const [field, order] = val.split(':')
-  sortBy.value = field
+  sortBy.value = field as 'created_at' | 'rating' | 'file_size'
   sortOrder.value = order as 'asc' | 'desc'
   applyFilters()
 }

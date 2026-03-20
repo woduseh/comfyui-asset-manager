@@ -292,10 +292,8 @@ export interface ComfyUIStatus {
 }
 
 export interface QueueProgress {
-  jobId: string
-  taskId: string
-  progress: number
-  currentStep: number
-  totalSteps: number
-  previewImage?: string
+  promptId: string
+  node: string
+  value: number
+  max: number
 }

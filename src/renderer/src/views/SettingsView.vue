@@ -2,9 +2,9 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSelect, NSpace, NDivider, NSwitch, NTag, NIcon
+  NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSelect, NSpace, NDivider, NSwitch, NTag, NIcon, NAlert
 } from 'naive-ui'
-import { CopyOutline } from '@vicons/ionicons5'
+import { CopyOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
@@ -81,6 +81,17 @@ async function handleMcpPortChange(value: number | null): Promise<void> {
 
 function handleCopyMcpUrl(): void {
   navigator.clipboard.writeText(terminalStore.mcpStatus.url)
+}
+
+async function handleSetupCli(): Promise<void> {
+  const result = await terminalStore.setupMcpForCli()
+  if (result.success) {
+    await terminalStore.fetchMcpConfigStatus()
+  }
+}
+
+async function handleRemoveCli(): Promise<void> {
+  await terminalStore.removeMcpFromCli()
 }
 
 onMounted(async () => {
@@ -238,6 +249,55 @@ onMounted(async () => {
           </NSpace>
         </NFormItem>
       </NForm>
+
+      <NDivider style="margin: 12px 0;" />
+
+      <!-- CLI Auto-Connection -->
+      <h4 style="margin: 0 0 12px 0;">{{ t('settings.mcp.cliSetup.title') }}</h4>
+      <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px;">
+        {{ t('settings.mcp.cliSetup.description') }}
+      </p>
+
+      <NSpace vertical :size="12">
+        <!-- Environment Variables -->
+        <NAlert type="info" :title="t('settings.mcp.cliSetup.envTitle')" :bordered="false">
+          <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>
+          <br />
+          <span style="font-size: 12px; color: var(--n-text-color3);">
+            {{ t('settings.mcp.cliSetup.envDescription') }}
+          </span>
+        </NAlert>
+
+        <!-- Claude Code (.mcp.json) -->
+        <NSpace align="center" :size="8">
+          <NButton
+            size="small"
+            :type="terminalStore.mcpConfigStatus.claudeCode ? 'default' : 'primary'"
+            :disabled="!terminalStore.mcpStatus.isRunning"
+            @click="handleSetupCli"
+          >
+            {{ terminalStore.mcpConfigStatus.claudeCode
+              ? t('settings.mcp.cliSetup.updateConfig')
+              : t('settings.mcp.cliSetup.setupClaudeCode') }}
+          </NButton>
+          <NTag v-if="terminalStore.mcpConfigStatus.claudeCode" type="success" size="small" round>
+            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+            {{ t('settings.mcp.cliSetup.configured') }}
+          </NTag>
+          <NButton
+            v-if="terminalStore.mcpConfigStatus.claudeCode"
+            size="tiny"
+            quaternary
+            type="error"
+            @click="handleRemoveCli"
+          >
+            {{ t('settings.mcp.cliSetup.remove') }}
+          </NButton>
+        </NSpace>
+        <span v-if="terminalStore.mcpConfigStatus.configPath" style="font-size: 12px; color: var(--n-text-color3);">
+          {{ terminalStore.mcpConfigStatus.configPath }}
+        </span>
+      </NSpace>
     </NCard>
   </div>
 </template>

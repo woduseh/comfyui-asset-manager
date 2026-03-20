@@ -18,8 +18,12 @@ MCP 서버와 내장 터미널 추가. LLM CLI(Copilot CLI, Claude CLI 등)가 M
   - 전용 페이지 (`/terminal`) + 하단 패널 모드 전환
   - 드래그로 패널 높이 조절
 - **설정 페이지**: MCP 서버 활성화 토글, 포트 설정, 상태 표시, URL 복사
+- **CLI 자동 연결**: 터미널에서 LLM CLI 실행 시 MCP 도구 자동 연결
+  - 환경 변수 자동 주입 (`COMFYUI_MCP_URL`, `MCP_ENDPOINT`)
+  - Claude Code용 `.mcp.json` 자동 생성/관리
+  - 터미널 웰컴 배너에 MCP 연결 정보 표시
 - **네비게이션**: 사이드바에 터미널 메뉴 추가, 헤더에 터미널 패널 토글 버튼
-- **IPC 채널**: 터미널 6개 (`terminal:create/input/resize/destroy/data/exit`), MCP 3개 (`mcp:start/stop/status`)
+- **IPC 채널**: 터미널 6개 (`terminal:create/input/resize/destroy/data/exit`), MCP 6개 (`mcp:start/stop/status/config-status/setup-cli/remove-cli`)
 
 ### Changed
 

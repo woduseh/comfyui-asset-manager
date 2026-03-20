@@ -16,6 +16,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     port: 39464,
     url: 'http://localhost:39464/mcp'
   })
+  const mcpConfigStatus = ref<{ claudeCode: boolean; configPath: string }>({
+    claudeCode: false,
+    configPath: ''
+  })
 
   async function createTab(): Promise<string> {
     const terminalId = await window.electron.ipcRenderer.invoke('terminal:create', {
@@ -64,12 +68,19 @@ export const useTerminalStore = defineStore('terminal', () => {
   async function fetchMcpStatus(): Promise<void> {
     const status = await window.electron.ipcRenderer.invoke('mcp:status')
     mcpStatus.value = status
+    await fetchMcpConfigStatus()
+  }
+
+  async function fetchMcpConfigStatus(): Promise<void> {
+    const status = await window.electron.ipcRenderer.invoke('mcp:config-status')
+    mcpConfigStatus.value = status
   }
 
   async function startMcpServer(port?: number): Promise<{ success: boolean; url?: string; error?: string }> {
     const result = await window.electron.ipcRenderer.invoke('mcp:start', { port })
     if (result.success) {
       mcpStatus.value = { isRunning: true, port: result.port, url: result.url }
+      await fetchMcpConfigStatus()
     }
     return result
   }
@@ -77,6 +88,21 @@ export const useTerminalStore = defineStore('terminal', () => {
   async function stopMcpServer(): Promise<void> {
     await window.electron.ipcRenderer.invoke('mcp:stop')
     mcpStatus.value = { ...mcpStatus.value, isRunning: false }
+    await fetchMcpConfigStatus()
+  }
+
+  async function setupMcpForCli(targetDir?: string): Promise<{ success: boolean; configPath?: string; error?: string }> {
+    const result = await window.electron.ipcRenderer.invoke('mcp:setup-cli', { targetDir })
+    if (result.success) {
+      await fetchMcpConfigStatus()
+    }
+    return result
+  }
+
+  async function removeMcpFromCli(targetDir?: string): Promise<{ success: boolean }> {
+    const result = await window.electron.ipcRenderer.invoke('mcp:remove-cli', { targetDir })
+    await fetchMcpConfigStatus()
+    return result
   }
 
   return {
@@ -85,6 +111,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     panelVisible,
     panelHeight,
     mcpStatus,
+    mcpConfigStatus,
     createTab,
     closeTab,
     setActiveTab,
@@ -92,7 +119,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     showPanel,
     hidePanel,
     fetchMcpStatus,
+    fetchMcpConfigStatus,
     startMcpServer,
-    stopMcpServer
+    stopMcpServer,
+    setupMcpForCli,
+    removeMcpFromCli
   }
 })

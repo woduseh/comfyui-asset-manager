@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { registerMcpTools } from './tools'
+import { writeMcpJsonConfig, removeMcpJsonConfig } from './config-generator'
 import http from 'http'
 
 const DEFAULT_PORT = 39464
@@ -80,6 +81,13 @@ class McpServerManager {
       this.httpServer!.listen(this._port, '127.0.0.1', () => {
         this._isRunning = true
         console.log(`[MCP] Server started on ${this.url}`)
+        // Auto-generate CLI config files
+        try {
+          const configPath = writeMcpJsonConfig(this.url)
+          console.log(`[MCP] Config written to ${configPath}`)
+        } catch (err) {
+          console.warn('[MCP] Failed to write config:', err)
+        }
         resolve()
       })
 
@@ -119,6 +127,10 @@ class McpServerManager {
           this._isRunning = false
           this.httpServer = null
           console.log('[MCP] Server stopped')
+          // Remove CLI config entry
+          try {
+            removeMcpJsonConfig()
+          } catch { /* ignore */ }
           resolve()
         })
       } else {

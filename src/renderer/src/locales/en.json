@@ -59,7 +59,18 @@
       "status": "Status",
       "running": "Running",
       "stopped": "Stopped",
-      "url": "Server URL"
+      "url": "Server URL",
+      "cliSetup": {
+        "title": "CLI Auto-Connection",
+        "description": "LLM CLIs launched in the embedded terminal will automatically connect to MCP tools.",
+        "envTitle": "Environment Variables (Auto-injected)",
+        "envDescription": "Automatically set when a new shell opens in the terminal.",
+        "setupClaudeCode": "Setup Claude Code",
+        "updateConfig": "Update Config",
+        "configured": "Configured",
+        "remove": "Remove",
+        "configPath": "Config file path"
+      }
     }
   },
   "workflow": {

@@ -79,6 +79,9 @@ export const IPC_CHANNELS = {
   MCP_START: 'mcp:start',
   MCP_STOP: 'mcp:stop',
   MCP_STATUS: 'mcp:status',
+  MCP_CONFIG_STATUS: 'mcp:config-status',
+  MCP_SETUP_CLI: 'mcp:setup-cli',
+  MCP_REMOVE_CLI: 'mcp:remove-cli',
 
   // Events (main → renderer)
   QUEUE_PROGRESS: 'queue:progress',

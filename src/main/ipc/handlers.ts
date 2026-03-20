@@ -604,4 +604,32 @@ export function registerIpcHandlers(): void {
       url: mcpServerManager.url
     }
   })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_CONFIG_STATUS, () => {
+    const { getMcpConfigStatus } = require('../services/mcp/config-generator')
+    return getMcpConfigStatus()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_SETUP_CLI, (_event, { targetDir }: { targetDir?: string }) => {
+    if (!mcpServerManager.isRunning) {
+      return { success: false, error: 'MCP server is not running' }
+    }
+    try {
+      const { writeMcpJsonConfig } = require('../services/mcp/config-generator')
+      const configPath = writeMcpJsonConfig(mcpServerManager.url, targetDir)
+      return { success: true, configPath }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_REMOVE_CLI, (_event, { targetDir }: { targetDir?: string }) => {
+    try {
+      const { removeMcpJsonConfig } = require('../services/mcp/config-generator')
+      const removed = removeMcpJsonConfig(targetDir)
+      return { success: true, removed }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
+    }
+  })
 }

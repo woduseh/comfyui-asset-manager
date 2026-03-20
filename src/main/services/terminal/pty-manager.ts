@@ -1,6 +1,7 @@
 import * as pty from 'node-pty'
 import { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import { mcpServerManager } from '../mcp'
 
 interface TerminalInstance {
   pty: pty.IPty
@@ -17,12 +18,19 @@ class PtyManager {
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
     const args = process.platform === 'win32' ? ['-NoLogo'] : []
 
+    // Inject MCP environment variables for LLM CLI auto-discovery
+    const env = { ...(process.env as Record<string, string>) }
+    if (mcpServerManager.isRunning) {
+      env.COMFYUI_MCP_URL = mcpServerManager.url
+      env.MCP_ENDPOINT = mcpServerManager.url
+    }
+
     const ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols,
       rows,
       cwd: process.env.HOME || process.env.USERPROFILE || '.',
-      env: process.env as Record<string, string>
+      env
     })
 
     ptyProcess.onData((data: string) => {

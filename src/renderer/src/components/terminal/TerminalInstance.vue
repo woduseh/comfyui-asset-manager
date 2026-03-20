@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { useTerminalStore } from '@renderer/stores/terminal.store'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -10,12 +11,27 @@ const props = defineProps<{
   active: boolean
 }>()
 
+const terminalStore = useTerminalStore()
 const terminalRef = ref<HTMLDivElement>()
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let dataListener: ((event: unknown, payload: { id: string; data: string }) => void) | null = null
 let exitListener: ((event: unknown, payload: { id: string; exitCode: number }) => void) | null = null
 let resizeObserver: ResizeObserver | null = null
+
+function writeMcpBanner(): void {
+  if (!terminal) return
+  const mcp = terminalStore.mcpStatus
+  if (mcp.isRunning) {
+    terminal.write('\x1b[38;5;117m╭─ MCP Server ─────────────────────────────────╮\x1b[0m\r\n')
+    terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[32m●\x1b[0m URL: \x1b[1m${mcp.url}\x1b[0m\r\n`)
+    terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[36menv:\x1b[0m $COMFYUI_MCP_URL \x1b[90m(auto-injected)\x1b[0m\r\n`)
+    if (terminalStore.mcpConfigStatus.claudeCode) {
+      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mClaude Code:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`)
+    }
+    terminal.write('\x1b[38;5;117m╰──────────────────────────────────────────────╯\x1b[0m\r\n\r\n')
+  }
+}
 
 onMounted(() => {
   if (!terminalRef.value) return
@@ -58,6 +74,7 @@ onMounted(() => {
 
   nextTick(() => {
     fitAddon!.fit()
+    writeMcpBanner()
   })
 
   // Send input to PTY

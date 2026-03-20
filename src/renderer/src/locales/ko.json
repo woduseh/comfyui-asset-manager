@@ -59,7 +59,18 @@
       "status": "상태",
       "running": "실행 중",
       "stopped": "중지됨",
-      "url": "서버 URL"
+      "url": "서버 URL",
+      "cliSetup": {
+        "title": "CLI 자동 연결",
+        "description": "내장 터미널에서 LLM CLI를 실행하면 MCP 도구에 자동으로 연결됩니다.",
+        "envTitle": "환경 변수 (자동 주입)",
+        "envDescription": "터미널에서 새 셸이 열릴 때 자동으로 설정됩니다.",
+        "setupClaudeCode": "Claude Code 설정",
+        "updateConfig": "설정 업데이트",
+        "configured": "설정됨",
+        "remove": "제거",
+        "configPath": "설정 파일 경로"
+      }
     }
   },
   "workflow": {

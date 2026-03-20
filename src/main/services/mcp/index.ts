@@ -7,12 +7,15 @@ import { randomUUID } from 'crypto'
 
 const DEFAULT_PORT = 39464
 const SERVER_NAME = 'comfyui-asset-manager'
-const SERVER_VERSION = '0.7.1'
+const SERVER_VERSION = '0.8.0'
 
-// Stored per-session: transport + the McpServer instance driving it
+const MAX_SESSIONS = 10
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
+
 interface McpSession {
   transport: StreamableHTTPServerTransport
   server: McpServer
+  lastActivity: number
 }
 
 class McpServerManager {
@@ -20,6 +23,7 @@ class McpServerManager {
   private sessions = new Map<string, McpSession>()
   private _isRunning = false
   private _port = DEFAULT_PORT
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null
 
   get isRunning(): boolean {
     return this._isRunning
@@ -31,6 +35,51 @@ class McpServerManager {
 
   get url(): string {
     return `http://localhost:${this._port}/mcp`
+  }
+
+  private startCleanupTimer(): void {
+    this.stopCleanupTimer()
+    this.cleanupTimer = setInterval(() => this.cleanupStaleSessions(), 60_000)
+  }
+
+  private stopCleanupTimer(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+      this.cleanupTimer = null
+    }
+  }
+
+  private cleanupStaleSessions(): void {
+    const now = Date.now()
+    for (const [id, session] of this.sessions) {
+      if (now - session.lastActivity > SESSION_TIMEOUT_MS) {
+        console.log(`[MCP] Cleaning up stale session: ${id}`)
+        this.destroySession(id, session)
+      }
+    }
+  }
+
+  private destroySession(id: string, session: McpSession): void {
+    try {
+      session.transport.close().catch(() => {})
+      session.server.close().catch(() => {})
+    } catch { /* ignore */ }
+    this.sessions.delete(id)
+  }
+
+  private evictOldestSession(): void {
+    let oldestId: string | null = null
+    let oldestTime = Infinity
+    for (const [id, session] of this.sessions) {
+      if (session.lastActivity < oldestTime) {
+        oldestTime = session.lastActivity
+        oldestId = id
+      }
+    }
+    if (oldestId) {
+      console.log(`[MCP] Evicting oldest session: ${oldestId}`)
+      this.destroySession(oldestId, this.sessions.get(oldestId)!)
+    }
   }
 
   async start(port?: number): Promise<void> {
@@ -79,6 +128,7 @@ class McpServerManager {
     return new Promise((resolve, reject) => {
       this.httpServer!.listen(this._port, '127.0.0.1', () => {
         this._isRunning = true
+        this.startCleanupTimer()
         console.log(`[MCP] Server started on ${this.url}`)
         try {
           const configPath = writeMcpJsonConfig(this.url)
@@ -111,30 +161,32 @@ class McpServerManager {
       // ── Existing session → delegate ──
       if (sessionId && this.sessions.has(sessionId)) {
         const session = this.sessions.get(sessionId)!
+        session.lastActivity = Date.now()
         await session.transport.handleRequest(req, res)
         return
       }
 
       // ── New session (initialization) ──
-      // Following the official SDK example pattern:
-      // 1. Create transport with onsessioninitialized callback for session storage
-      // 2. Connect server to transport
-      // 3. handleRequest() triggers session init → callback stores session
+      // Evict oldest session if at capacity
+      if (this.sessions.size >= MAX_SESSIONS) {
+        this.evictOldestSession()
+      }
+
       const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
       registerMcpTools(server)
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid: string) => {
-          console.log(`[MCP] Session initialized: ${sid}`)
-          this.sessions.set(sid, { transport, server })
+          console.log(`[MCP] Session initialized: ${sid} (active: ${this.sessions.size + 1})`)
+          this.sessions.set(sid, { transport, server, lastActivity: Date.now() })
         }
       })
 
       transport.onclose = () => {
         const sid = transport.sessionId
         if (sid && this.sessions.has(sid)) {
-          console.log(`[MCP] Session closed: ${sid}`)
+          console.log(`[MCP] Session closed: ${sid} (active: ${this.sessions.size - 1})`)
           this.sessions.delete(sid)
         }
         server.close().catch(() => {})
@@ -149,6 +201,7 @@ class McpServerManager {
       // SSE stream — requires existing session
       if (sessionId && this.sessions.has(sessionId)) {
         const session = this.sessions.get(sessionId)!
+        session.lastActivity = Date.now()
         await session.transport.handleRequest(req, res)
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -183,12 +236,10 @@ class McpServerManager {
   async stop(): Promise<void> {
     if (!this._isRunning) return
 
+    this.stopCleanupTimer()
+
     for (const [id, session] of this.sessions) {
-      try {
-        await session.transport.close()
-        await session.server.close()
-      } catch { /* ignore */ }
-      this.sessions.delete(id)
+      this.destroySession(id, session)
     }
 
     return new Promise((resolve) => {

@@ -166,6 +166,14 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - **리스너 정리**: Promise settle 시 `removeListener()`로 이벤트 리스너 즉시 정리
 - **프리뷰 쓰로틀**: `PREVIEW_THROTTLE_MS = 500` — 초당 2회로 프리뷰 전송 제한
 
+### 작업 복구 (v0.10.3~)
+
+- **앱 시작 시 자동 복구**: `QueueManager.recoverInterruptedJobs()` — 고아 `running` 작업을 `paused`로 전환, stuck `running` 태스크를 `pending`으로 리셋
+- **정상 종료 시 상태 보존**: `before-quit`에서 실행 중 작업을 `paused`로 저장
+- **Cold Resume**: `resume()`가 인메모리 상태 없이도 DB에서 paused 작업을 찾아 처리 재개
+- **Cold Cancel**: `cancel()`이 인메모리 상태 없이도 DB에서 stale 작업을 찾아 취소
+- **BatchTaskRepository 메서드**: `resetRunningTasksByJob()`, `cancelRemainingTasksByJob()`
+
 ### 전역 스타일 가이드 (v0.6.0~)
 
 - border-radius: 12px (통일)
@@ -174,6 +182,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
+**0.10.3** — 앱 비정상 종료 후 배치 작업 상태 복구: 시작 시 고아 작업 자동 감지→paused 전환, cold resume/cancel 지원, 정상 종료 시 상태 보존. 테스트 197개
 **0.10.2** — 고정 모듈 프롬프트 변형 지원: 슬롯에 지정된 `promptVariant`가 고정 모듈 아이템에도 적용 (변형 있으면 사용, 없으면 기본 폴백). 테스트 187개
 **0.10.1** — 배치 수정/복제 시 '추가 텍스트' 고정 모듈 혼입 버그 수정: `userPrefixText` 필드로 원본 보존, 복원 시 우선 사용. 테스트 187개
 **0.10.0** — Danbooru 태그 검증 MCP 도구: 태그 검증(validate), 검색(search), 인기 태그(get_popular) + 프롬프트 가이드. 로컬 6,549개 태그 + Danbooru API 온라인 폴백. 테스트 187개

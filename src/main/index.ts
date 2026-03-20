@@ -7,6 +7,7 @@ import { initDatabase, closeDatabase } from './services/database'
 import { registerIpcHandlers } from './ipc/handlers'
 import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
+import { queueManager } from './services/batch/queue-manager'
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -74,6 +75,9 @@ app.whenReady().then(async () => {
   // Initialize database
   await initDatabase()
 
+  // Recover jobs interrupted by previous crash/force-quit
+  queueManager.recoverInterruptedJobs()
+
   // Register IPC handlers
   registerIpcHandlers()
 
@@ -104,6 +108,17 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  // Clean up running job state so it can be recovered on next startup
+  try {
+    if (queueManager.isProcessing && queueManager.currentJobId) {
+      const { BatchJobRepository, BatchTaskRepository } = require('./services/database/repositories')
+      const batchJobRepo = new BatchJobRepository()
+      const batchTaskRepo = new BatchTaskRepository()
+      batchTaskRepo.resetRunningTasksByJob(queueManager.currentJobId)
+      batchJobRepo.updateStatus(queueManager.currentJobId, 'paused')
+    }
+  } catch { /* ignore */ }
+
   // Clean up terminal instances
   ptyManager.destroyAll()
 

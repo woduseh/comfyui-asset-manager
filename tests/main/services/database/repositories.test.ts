@@ -463,6 +463,49 @@ describe('Database Repositories', () => {
       jobRepo.delete(jobId)
       expect(taskRepo.listByJob(jobId)).toHaveLength(0)
     })
+
+    it('resetRunningTasksByJob resets only running tasks to pending', () => {
+      taskRepo.createBulk([
+        { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{"a":3}', sort_order: 2, metadata: '{}' }
+      ])
+      const tasks = taskRepo.listByJob(jobId)
+      taskRepo.updateStatus(tasks[0].id as string, 'completed')
+      taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
+      taskRepo.updateStatus(tasks[2].id as string, 'running', { comfyui_prompt_id: 'p-2' })
+
+      taskRepo.resetRunningTasksByJob(jobId)
+
+      const updated = taskRepo.listByJob(jobId)
+      expect(updated[0].status).toBe('completed')
+      expect(updated[1].status).toBe('pending')
+      expect(updated[1].comfyui_prompt_id).toBeNull()
+      expect(updated[2].status).toBe('pending')
+      expect(updated[2].comfyui_prompt_id).toBeNull()
+    })
+
+    it('cancelRemainingTasksByJob cancels all non-completed tasks', () => {
+      taskRepo.createBulk([
+        { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{"a":3}', sort_order: 2, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{"a":4}', sort_order: 3, metadata: '{}' }
+      ])
+      const tasks = taskRepo.listByJob(jobId)
+      taskRepo.updateStatus(tasks[0].id as string, 'completed')
+      taskRepo.updateStatus(tasks[1].id as string, 'running')
+      taskRepo.updateStatus(tasks[2].id as string, 'failed')
+      // tasks[3] stays 'pending'
+
+      taskRepo.cancelRemainingTasksByJob(jobId)
+
+      const updated = taskRepo.listByJob(jobId)
+      expect(updated[0].status).toBe('completed')
+      expect(updated[1].status).toBe('cancelled')
+      expect(updated[2].status).toBe('cancelled')
+      expect(updated[3].status).toBe('cancelled')
+    })
   })
 
   describe('GeneratedImageRepository', () => {

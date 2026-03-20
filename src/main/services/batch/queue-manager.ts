@@ -54,6 +54,23 @@ class QueueManager {
   }
 
   /**
+   * Recover jobs that were interrupted by a crash or force-quit.
+   * Finds orphaned 'running' jobs, resets their stuck tasks, and marks them as 'paused'.
+   */
+  recoverInterruptedJobs(): void {
+    const runningJobs = batchJobRepo.list('running')
+    for (const job of runningJobs) {
+      const jobId = job.id as string
+      console.log(`[QueueManager] Recovering interrupted job: ${jobId}`)
+      batchTaskRepo.resetRunningTasksByJob(jobId)
+      batchJobRepo.updateStatus(jobId, 'paused')
+    }
+    if (runningJobs.length > 0) {
+      console.log(`[QueueManager] Recovered ${runningJobs.length} interrupted job(s)`)
+    }
+  }
+
+  /**
    * Start processing a batch job
    */
   async startJob(jobId: string): Promise<void> {
@@ -99,26 +116,58 @@ class QueueManager {
   }
 
   /**
-   * Resume processing
+   * Resume processing.
+   * Supports "hot resume" (active loop paused) and "cold resume" (restart after crash).
    */
   async resume(): Promise<void> {
-    if (!this._currentJobId || !this._isPaused) return
-    this._isPaused = false
-    batchJobRepo.updateStatus(this._currentJobId, 'running')
-    // The processJob loop will continue via the isPaused check
+    // Hot resume: currently paused in an active processing loop
+    if (this._currentJobId && this._isPaused) {
+      this._isPaused = false
+      batchJobRepo.updateStatus(this._currentJobId, 'running')
+      return
+    }
+
+    // Cold resume: no active loop, find a paused job and restart processing
+    if (!this._isProcessing) {
+      const pausedJobs = batchJobRepo.list('paused')
+      if (pausedJobs.length > 0) {
+        const jobId = pausedJobs[0].id as string
+        console.log(`[QueueManager] Cold resuming job: ${jobId}`)
+        this.startJob(jobId).catch((err) => {
+          console.error('[QueueManager] Cold resume failed:', err)
+        })
+      }
+    }
   }
 
   /**
-   * Cancel the current job
+   * Cancel the current job.
+   * Supports "hot cancel" (active loop running) and "cold cancel" (stale state after crash).
    */
   cancel(): void {
-    this._isCancelled = true
-    this._isPaused = false
+    // Hot cancel: QueueManager is actively processing
     if (this._currentJobId) {
+      this._isCancelled = true
+      this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'cancelled')
+      batchTaskRepo.cancelRemainingTasksByJob(this._currentJobId)
+      comfyuiManager.restClient.interrupt().catch(() => {})
+      return
     }
-    // Interrupt current ComfyUI generation
-    comfyuiManager.restClient.interrupt().catch(() => {})
+
+    // Cold cancel: no active loop, find running/paused job and cancel directly in DB
+    if (!this._isProcessing) {
+      const staleJobs = [
+        ...batchJobRepo.list('running'),
+        ...batchJobRepo.list('paused')
+      ]
+      for (const job of staleJobs) {
+        const jobId = job.id as string
+        console.log(`[QueueManager] Cold cancelling job: ${jobId}`)
+        batchTaskRepo.cancelRemainingTasksByJob(jobId)
+        batchJobRepo.updateStatus(jobId, 'cancelled')
+      }
+    }
   }
 
   private async processJob(jobId: string): Promise<void> {

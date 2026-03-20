@@ -2,6 +2,21 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.10.3] - 2026-03-20
+
+앱 비정상 종료 후 배치 작업 상태 복구 — 크래시/강제 종료 후 재시작 시 고아 작업의 재개·취소가 정상 동작합니다.
+
+### Fixed
+
+- **앱 크래시 후 작업 상태 불일치**: 배치 실행 중 앱이 강제 종료되면 DB에 `running` 상태로 남은 작업이 재시작 후에도 UI에서 "실행 중"으로 표시되지만 실제 ComfyUI 요청이 가지 않던 문제 수정
+- **크래시 후 재개(Resume) 불가**: QueueManager 인메모리 상태 초기화로 `resume()`이 무시되던 문제 수정. Cold resume 지원 추가 — DB에서 paused 작업을 찾아 처리 재개
+- **크래시 후 취소(Cancel) 불가**: `_currentJobId`가 null이면 `cancel()`이 DB를 업데이트하지 않던 문제 수정. Cold cancel 지원 추가 — DB에서 stale 작업을 찾아 직접 취소
+
+### Added
+
+- **앱 시작 시 자동 복구**: 시작 시 고아 `running` 작업을 감지하여 `paused` 상태로 전환, stuck된 `running` 태스크를 `pending`으로 리셋
+- **정상 종료 시 작업 상태 정리**: `before-quit`에서 실행 중인 작업을 `paused`로 저장하여 다음 시작 시 안전하게 복구 가능
+
 ## [0.10.2] - 2026-03-20
 
 고정 모듈의 프롬프트 변형 지원 — 슬롯에 지정된 변형이 고정 모듈에도 적용됩니다.

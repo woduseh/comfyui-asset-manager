@@ -619,6 +619,24 @@ export class BatchTaskRepository {
     )
     saveDatabase()
   }
+
+  resetRunningTasksByJob(jobId: string): void {
+    const db = getDatabase()
+    db.run(
+      "UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL WHERE job_id = ? AND status = 'running'",
+      [jobId]
+    )
+    saveDatabase()
+  }
+
+  cancelRemainingTasksByJob(jobId: string): void {
+    const db = getDatabase()
+    db.run(
+      "UPDATE batch_tasks SET status = 'cancelled' WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')",
+      [jobId]
+    )
+    saveDatabase()
+  }
 }
 
 export class GeneratedImageRepository {

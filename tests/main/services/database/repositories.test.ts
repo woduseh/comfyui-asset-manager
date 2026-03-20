@@ -57,7 +57,8 @@ function createTables(db: SqlJsDatabase): void {
     status TEXT DEFAULT 'draft', config TEXT NOT NULL, workflow_id TEXT REFERENCES workflows(id),
     total_tasks INTEGER DEFAULT 0, completed_tasks INTEGER DEFAULT 0, failed_tasks INTEGER DEFAULT 0,
     pipeline_config TEXT, created_at DATETIME DEFAULT (datetime('now')),
-    started_at DATETIME, completed_at DATETIME, sort_order INTEGER DEFAULT 0
+    started_at DATETIME, completed_at DATETIME, sort_order INTEGER DEFAULT 0,
+    module_data_snapshot TEXT
   )`)
   db.run(`CREATE TABLE IF NOT EXISTS batch_tasks (
     id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES batch_jobs(id) ON DELETE CASCADE,

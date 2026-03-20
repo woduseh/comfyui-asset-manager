@@ -2,6 +2,27 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.9.0] - 2025-07-24
+
+지연 태스크 생성(Lazy Task Expansion) — 배치 생성 시 수천 개 태스크를 사전 생성하지 않고 실행 시점에 동적으로 생성하여 메모리와 DB 부하를 극적으로 절감.
+
+### Changed
+
+- **지연 태스크 생성**: 배치 생성 시 설정(config)과 모듈 데이터 스냅샷만 저장하고, 태스크는 실행 시점에 청크(50개) 단위로 동적 생성
+  - 4160개 태스크 배치: 기존 ~15-25MB 사전 할당 → 실행 시 ~0.5MB만 사용
+  - DB INSERT: 기존 4160개 일괄 → 실행 중 한 건씩 Just-In-Time 삽입
+- **모듈 데이터 스냅샷**: 배치 생성 시 모듈/아이템 상태를 `module_data_snapshot`으로 동결 저장 (배치 생성 후 모듈 수정/삭제해도 실행에 영향 없음)
+- **완료 태스크 프롬프트 데이터 정리**: 완료된 태스크의 `prompt_data`를 `{}`로 비워 DB 공간 절약
+- **하위 호환성**: 기존(v0.8.1 이하) 배치 작업은 레거시 경로로 정상 실행
+
+### Added
+
+- **DB 스키마**: `batch_jobs` 테이블에 `module_data_snapshot TEXT` 컬럼 추가
+- **새 함수**: `expandBatchToTasksChunk()` — 인덱스 범위에 대한 태스크만 선택적 생성
+- **새 함수**: `countTotalTasksFromData()` — 전체 태스크 수 사전 계산 (태스크 생성 없이)
+- **Repository**: `BatchTaskRepository.createSingle()`, `countProcessedByJob()`, `clearPromptDataForCompleted()` 추가
+- **테스트**: 지연 태스크 생성 관련 7개 테스트 케이스 추가 (총 159개)
+
 ## [0.8.1] - 2025-07-24
 
 대량 배치 실행 최적화 — ComfyUI 메모리 절감, 청크 기반 처리, ETA 표시.

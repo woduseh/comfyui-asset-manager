@@ -409,12 +409,13 @@ export class BatchJobRepository {
     workflow_id?: string
     total_tasks?: number
     pipeline_config?: string
+    module_data_snapshot?: string
   }): string {
     const db = getDatabase()
     const id = uuidv4()
     db.run(
-      `INSERT INTO batch_jobs (id, name, description, config, workflow_id, total_tasks, pipeline_config)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO batch_jobs (id, name, description, config, workflow_id, total_tasks, pipeline_config, module_data_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.name,
@@ -422,7 +423,8 @@ export class BatchJobRepository {
         data.config,
         data.workflow_id || null,
         data.total_tasks || 0,
-        data.pipeline_config || null
+        data.pipeline_config || null,
+        data.module_data_snapshot || null
       ]
     )
     saveDatabase()
@@ -577,6 +579,44 @@ export class BatchTaskRepository {
   resetByJob(jobId: string): void {
     const db = getDatabase()
     db.run("UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL, error_message = NULL, completed_at = NULL, retry_count = 0 WHERE job_id = ?", [jobId])
+    saveDatabase()
+  }
+
+  createSingle(data: {
+    job_id: string
+    prompt_data: string
+    sort_order: number
+    metadata: string
+  }): string {
+    const db = getDatabase()
+    const id = uuidv4()
+    db.run(
+      `INSERT INTO batch_tasks (id, job_id, prompt_data, sort_order, metadata)
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, data.job_id, data.prompt_data, data.sort_order, data.metadata]
+    )
+    saveDatabase()
+    return id
+  }
+
+  countProcessedByJob(jobId: string): number {
+    const db = getDatabase()
+    const stmt = db.prepare(
+      "SELECT COUNT(*) as count FROM batch_tasks WHERE job_id = ? AND status IN ('completed', 'failed', 'cancelled')"
+    )
+    stmt.bind([jobId])
+    stmt.step()
+    const count = (stmt.getAsObject() as { count: number }).count
+    stmt.free()
+    return count
+  }
+
+  clearPromptDataForCompleted(jobId: string): void {
+    const db = getDatabase()
+    db.run(
+      "UPDATE batch_tasks SET prompt_data = '{}' WHERE job_id = ? AND status = 'completed'",
+      [jobId]
+    )
     saveDatabase()
   }
 }

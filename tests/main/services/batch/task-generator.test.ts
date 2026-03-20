@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   cartesianProduct,
   expandBatchToTasks,
+  expandBatchToTasksChunk,
+  countTotalTasksFromData,
   calculateTaskCount,
   resolveOutputPath,
   type BatchConfig
@@ -408,6 +410,112 @@ describe('Task Generator', () => {
         expect(tasks).toHaveLength(2)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice')
       })
+    })
+  })
+
+  describe('expandBatchToTasksChunk', () => {
+    const makeChunkConfig = (overrides?: Partial<BatchConfig>): BatchConfig => ({
+      name: 'Test Batch',
+      workflowId: 'wf-1',
+      moduleSelections: [
+        { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['c1', 'c2'] },
+        { moduleId: 'mod-emo', moduleType: 'emotion', selectedItemIds: ['e1', 'e2', 'e3'] }
+      ],
+      countPerCombination: 2,
+      seedMode: 'incremental',
+      fixedSeed: 100,
+      outputFolderPattern: '{character}/{emotion}',
+      fileNamePattern: '{character}_{emotion}_{index}',
+      ...overrides
+    })
+
+    const moduleData = [
+      {
+        moduleId: 'mod-char',
+        moduleType: 'character',
+        items: [
+          { id: 'c1', name: 'Alice', prompt: '1girl, alice', negative: '', weight: 1.0, enabled: true },
+          { id: 'c2', name: 'Bob', prompt: '1boy, bob', negative: '', weight: 1.0, enabled: true }
+        ]
+      },
+      {
+        moduleId: 'mod-emo',
+        moduleType: 'emotion',
+        items: [
+          { id: 'e1', name: 'Happy', prompt: 'smile', negative: '', weight: 1.0, enabled: true },
+          { id: 'e2', name: 'Sad', prompt: 'crying', negative: '', weight: 1.0, enabled: true },
+          { id: 'e3', name: 'Angry', prompt: 'angry', negative: '', weight: 1.0, enabled: true }
+        ]
+      }
+    ]
+
+    const config = makeChunkConfig()
+
+    it('countTotalTasksFromData returns correct count', () => {
+      const count = countTotalTasksFromData(config, moduleData)
+      // 2 chars × 3 emotions × 2 per combo = 12
+      expect(count).toBe(12)
+    })
+
+    it('generates correct chunk at start', () => {
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, 4)
+      expect(tasks).toHaveLength(4)
+      expect(tasks[0].sortOrder).toBe(0)
+      expect(tasks[3].sortOrder).toBe(3)
+      // First combo (char=Alice, emo=Happy), image 0 and 1
+      expect(tasks[0].metadata.characterName).toBe('Alice')
+      expect(tasks[0].metadata.emotionName).toBe('Happy')
+      expect(tasks[0].metadata.imageIndex).toBe(0)
+      expect(tasks[1].metadata.imageIndex).toBe(1)
+      // Second combo (char=Alice, emo=Sad)
+      expect(tasks[2].metadata.emotionName).toBe('Sad')
+    })
+
+    it('generates correct chunk in the middle', () => {
+      const tasks = expandBatchToTasksChunk(config, moduleData, 4, 4)
+      expect(tasks).toHaveLength(4)
+      expect(tasks[0].sortOrder).toBe(4)
+      // Should be combo 2 (Alice, Angry), image 0
+      expect(tasks[0].metadata.characterName).toBe('Alice')
+      expect(tasks[0].metadata.emotionName).toBe('Angry')
+      expect(tasks[0].metadata.imageIndex).toBe(0)
+    })
+
+    it('generates correct chunk at the end (partial)', () => {
+      const tasks = expandBatchToTasksChunk(config, moduleData, 10, 50)
+      // Only 2 remaining (index 10, 11)
+      expect(tasks).toHaveLength(2)
+      expect(tasks[0].sortOrder).toBe(10)
+      expect(tasks[1].sortOrder).toBe(11)
+    })
+
+    it('returns empty for out-of-range start', () => {
+      const tasks = expandBatchToTasksChunk(config, moduleData, 100, 10)
+      expect(tasks).toHaveLength(0)
+    })
+
+    it('uses incremental seeds based on sortOrder', () => {
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, 4)
+      expect(tasks[0].promptData.seed).toBe(100) // fixedSeed + 0
+      expect(tasks[1].promptData.seed).toBe(101) // fixedSeed + 1
+      expect(tasks[2].promptData.seed).toBe(102)
+      expect(tasks[3].promptData.seed).toBe(103)
+    })
+
+    it('matches full expansion results', () => {
+      // Verify chunk generation matches full expandBatchToTasks
+      const fullTasks = expandBatchToTasks(config, moduleData)
+      const chunk1 = expandBatchToTasksChunk(config, moduleData, 0, 6)
+      const chunk2 = expandBatchToTasksChunk(config, moduleData, 6, 6)
+      const allChunked = [...chunk1, ...chunk2]
+
+      expect(allChunked).toHaveLength(fullTasks.length)
+      for (let i = 0; i < fullTasks.length; i++) {
+        expect(allChunked[i].metadata).toEqual(fullTasks[i].metadata)
+        expect(allChunked[i].sortOrder).toBe(fullTasks[i].sortOrder)
+        expect(allChunked[i].promptData.seed).toBe(fullTasks[i].promptData.seed)
+        expect(allChunked[i].promptData.positive).toBe(fullTasks[i].promptData.positive)
+      }
     })
   })
 })

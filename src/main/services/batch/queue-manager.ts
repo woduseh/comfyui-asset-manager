@@ -17,7 +17,8 @@ import {
   SettingsRepository
 } from '../database/repositories'
 import { IPC_CHANNELS } from '../../ipc/channels'
-import { resolveOutputPath } from '../batch/task-generator'
+import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
+import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
@@ -129,7 +130,7 @@ class QueueManager {
 
     const apiJson = JSON.parse(workflow.api_json as string)
     const outputRoot = settingsRepo.get('output.directory') || join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
-    const jobConfig = JSON.parse(job.config as string)
+    const jobConfig = JSON.parse(job.config as string) as BatchConfig
 
     let completedCount = (job.completed_tasks as number) || 0
     let failedCount = (job.failed_tasks as number) || 0
@@ -139,94 +140,196 @@ class QueueManager {
     const taskDurations: number[] = []
     const CHUNK_SIZE = 50
 
-    while (true) {
-      const tasks = batchTaskRepo.listByJobPending(jobId, CHUNK_SIZE)
-      if (tasks.length === 0) break
+    // Determine execution mode: lazy (has snapshot) or legacy (pre-created tasks)
+    const hasSnapshot = !!job.module_data_snapshot
+    let moduleDataSnapshot: ModuleDataSnapshot | null = null
+    if (hasSnapshot) {
+      moduleDataSnapshot = JSON.parse(job.module_data_snapshot as string) as ModuleDataSnapshot
+    }
 
-      for (const task of tasks) {
-        // Wait while paused
-        while (this._isPaused) {
-          await this.sleep(1000)
+    if (hasSnapshot && moduleDataSnapshot) {
+      // Lazy expansion: generate tasks on-the-fly
+      let startIndex = completedCount + failedCount
+
+      while (startIndex < totalTasks) {
+        const generatedTasks = expandBatchToTasksChunk(
+          jobConfig,
+          moduleDataSnapshot,
+          startIndex,
+          CHUNK_SIZE
+        )
+        if (generatedTasks.length === 0) break
+
+        for (const genTask of generatedTasks) {
+          while (this._isPaused) {
+            await this.sleep(1000)
+            if (this._isCancelled) break
+          }
           if (this._isCancelled) break
-        }
-        if (this._isCancelled) break
 
-        const taskStartTime = Date.now()
-
-        try {
-          await this.processTask(
-            task,
-            apiJson,
-            jobId,
-            jobConfig,
-            outputRoot
-          )
-          completedCount++
-          taskDurations.push(Date.now() - taskStartTime)
-          batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-          const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-          const remainingTasks = totalTasks - completedCount - failedCount
-          const etaMs = Math.round(avgDuration * remainingTasks)
-
-          this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
-            jobId,
-            taskId: task.id,
-            completed: completedCount,
-            total: totalTasks,
-            etaMs,
-            avgTaskDurationMs: Math.round(avgDuration)
+          // Create a single task row just-in-time
+          const taskId = batchTaskRepo.createSingle({
+            job_id: jobId,
+            prompt_data: JSON.stringify(genTask.promptData),
+            sort_order: genTask.sortOrder,
+            metadata: JSON.stringify(genTask.metadata)
           })
-        } catch (error) {
-          const retryCount = (task.retry_count as number) || 0
-          if (retryCount < this._maxRetries) {
-            batchTaskRepo.updateStatus(task.id as string, 'retrying', {
-              error_message: (error as Error).message
-            })
-            const retryStartTime = Date.now()
-            try {
-              await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
-              completedCount++
-              taskDurations.push(Date.now() - retryStartTime)
-            } catch (retryError) {
+
+          const taskRecord: Record<string, unknown> = {
+            id: taskId,
+            prompt_data: JSON.stringify(genTask.promptData),
+            metadata: JSON.stringify(genTask.metadata),
+            retry_count: 0
+          }
+
+          const taskStartTime = Date.now()
+
+          try {
+            await this.processTask(taskRecord, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+            completedCount++
+            taskDurations.push(Date.now() - taskStartTime)
+            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+            this.sendTaskCompletedEvent(jobId, taskId, completedCount, totalTasks, taskDurations)
+          } catch (error) {
+            // Retry once for lazy tasks
+            if ((taskRecord.retry_count as number) < this._maxRetries) {
+              batchTaskRepo.updateStatus(taskId, 'retrying', {
+                error_message: (error as Error).message
+              })
+              const retryStartTime = Date.now()
+              try {
+                await this.processTask(taskRecord, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+                completedCount++
+                taskDurations.push(Date.now() - retryStartTime)
+              } catch (retryError) {
+                failedCount++
+                batchTaskRepo.updateStatus(taskId, 'failed', {
+                  error_message: (retryError as Error).message
+                })
+              }
+            } else {
               failedCount++
-              batchTaskRepo.updateStatus(task.id as string, 'failed', {
-                error_message: (retryError as Error).message
+              batchTaskRepo.updateStatus(taskId, 'failed', {
+                error_message: (error as Error).message
               })
             }
-          } else {
-            failedCount++
-            batchTaskRepo.updateStatus(task.id as string, 'failed', {
-              error_message: (error as Error).message
+            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+            const avgDuration = taskDurations.length > 0
+              ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+              : 0
+            const remainingTasks = totalTasks - completedCount - failedCount
+            const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+
+            this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
+              jobId,
+              taskId,
+              error: (error as Error).message,
+              completed: completedCount,
+              failed: failedCount,
+              total: totalTasks,
+              etaMs
             })
           }
-          batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-          const avgDuration = taskDurations.length > 0
-            ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-            : 0
-          const remainingTasks = totalTasks - completedCount - failedCount
-          const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
-
-          this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
-            jobId,
-            taskId: task.id,
-            error: (error as Error).message,
-            completed: completedCount,
-            failed: failedCount,
-            total: totalTasks,
-            etaMs
-          })
         }
-      }
 
-      if (this._isCancelled) break
+        startIndex = completedCount + failedCount
+        if (this._isCancelled) break
+
+        // Periodically clear prompt_data from completed tasks to free DB space
+        batchTaskRepo.clearPromptDataForCompleted(jobId)
+      }
+    } else {
+      // Legacy mode: process pre-created tasks from DB
+      while (true) {
+        const tasks = batchTaskRepo.listByJobPending(jobId, CHUNK_SIZE)
+        if (tasks.length === 0) break
+
+        for (const task of tasks) {
+          while (this._isPaused) {
+            await this.sleep(1000)
+            if (this._isCancelled) break
+          }
+          if (this._isCancelled) break
+
+          const taskStartTime = Date.now()
+
+          try {
+            await this.processTask(task, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+            completedCount++
+            taskDurations.push(Date.now() - taskStartTime)
+            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+            this.sendTaskCompletedEvent(jobId, task.id as string, completedCount, totalTasks, taskDurations)
+          } catch (error) {
+            const retryCount = (task.retry_count as number) || 0
+            if (retryCount < this._maxRetries) {
+              batchTaskRepo.updateStatus(task.id as string, 'retrying', {
+                error_message: (error as Error).message
+              })
+              const retryStartTime = Date.now()
+              try {
+                await this.processTask(task, apiJson, jobId, jobConfig as unknown as Record<string, unknown>, outputRoot)
+                completedCount++
+                taskDurations.push(Date.now() - retryStartTime)
+              } catch (retryError) {
+                failedCount++
+                batchTaskRepo.updateStatus(task.id as string, 'failed', {
+                  error_message: (retryError as Error).message
+                })
+              }
+            } else {
+              failedCount++
+              batchTaskRepo.updateStatus(task.id as string, 'failed', {
+                error_message: (error as Error).message
+              })
+            }
+            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+
+            const avgDuration = taskDurations.length > 0
+              ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+              : 0
+            const remainingTasks = totalTasks - completedCount - failedCount
+            const etaMs = taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+
+            this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
+              jobId,
+              taskId: task.id,
+              error: (error as Error).message,
+              completed: completedCount,
+              failed: failedCount,
+              total: totalTasks,
+              etaMs
+            })
+          }
+        }
+
+        if (this._isCancelled) break
+      }
     }
 
     if (!this._isCancelled) {
       batchJobRepo.updateStatus(jobId, 'completed')
       this.sendToRenderer(IPC_CHANNELS.QUEUE_JOB_COMPLETED, { jobId })
     }
+  }
+
+  private sendTaskCompletedEvent(
+    jobId: string, taskId: string, completedCount: number, totalTasks: number, taskDurations: number[]
+  ): void {
+    const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
+    const remainingTasks = totalTasks - completedCount
+    const etaMs = Math.round(avgDuration * remainingTasks)
+
+    this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
+      jobId,
+      taskId,
+      completed: completedCount,
+      total: totalTasks,
+      etaMs,
+      avgTaskDurationMs: Math.round(avgDuration)
+    })
   }
 
   private async processTask(

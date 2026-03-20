@@ -182,6 +182,11 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
+  // Migration: add module_data_snapshot column for lazy task expansion
+  try {
+    database.run(`ALTER TABLE batch_jobs ADD COLUMN module_data_snapshot TEXT`)
+  } catch { /* Column already exists */ }
+
   // Migration: add sort_order column for batch_jobs
   try {
     database.run(`ALTER TABLE batch_jobs ADD COLUMN sort_order INTEGER DEFAULT 0`)

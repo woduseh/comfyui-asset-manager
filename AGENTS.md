@@ -88,7 +88,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 5개 파일, 152개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 5개 파일, 159개 테스트 케이스.
 - 테스트 위치: `tests/main/services/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
@@ -139,6 +139,15 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - **DB 트랜잭션**: `createBulk()`가 `BEGIN`/`COMMIT`으로 감쌈
 - **ETA 계산**: 완료된 태스크 평균 소요 시간 × 남은 수 → `queue:task-completed` 이벤트에 `etaMs`, `avgTaskDurationMs` 포함
 
+### 지연 태스크 생성 (v0.9.0~)
+
+- **Lazy Task Expansion**: 배치 생성 시 태스크 행을 사전 생성하지 않고, `module_data_snapshot`과 resolved config만 저장
+- **동적 생성**: `processJob()` 실행 시 `expandBatchToTasksChunk(config, moduleData, startIndex, 50)`로 50개씩 생성
+- **인덱스 매핑**: `task[i]` → `comboIdx = floor(i / countPerCombination)`, `imgIdx = i % countPerCombination`
+- **결정론적 시드**: incremental seed = `fixedSeed + sortOrder`, fixed seed = `fixedSeed` (인덱스 무관)
+- **하위 호환**: `module_data_snapshot`이 없는 레거시 작업은 기존 청크 DB 로드 경로 사용
+- **DB 공간 절약**: `clearPromptDataForCompleted()` — 완료 태스크의 `prompt_data`를 `{}`로 비움
+
 ### 전역 스타일 가이드 (v0.6.0~)
 
 - border-radius: 12px (통일)
@@ -147,6 +156,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ## 현재 버전
 
+**0.9.0** — 지연 태스크 생성(Lazy Task Expansion): 배치 생성 시 태스크 사전 생성 없이 실행 시 동적 생성. 모듈 데이터 스냅샷으로 실행 안정성 확보. 테스트 159개
 **0.8.1** — 대량 배치 최적화: 청크 기반 태스크 처리(50개 단위), ComfyUI 히스토리 자동 정리, DB 트랜잭션 최적화, 실시간 ETA 표시
 **0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능. MCP 도구에도 변형 지원 추가. MCP 세션 메모리 누수 수정 (타임아웃 + 최대 세션 제한)
 **0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선 (Copilot/Claude/Gemini/Codex)

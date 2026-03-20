@@ -15,8 +15,8 @@ import {
 import { comfyuiManager } from '../services/comfyui/manager'
 import { parseWorkflow } from '../services/comfyui/workflow-parser'
 import { previewPrompt, buildPrompt } from '../services/prompt/composition-engine'
-import { expandBatchToTasks, calculateTaskCount } from '../services/batch/task-generator'
-import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
+import { calculateTaskCount, countTotalTasksFromData } from '../services/batch/task-generator'
+import type { BatchConfig, BatchModuleSelection, ModuleDataSnapshot } from '../services/batch/task-generator'
 import { queueManager } from '../services/batch/queue-manager'
 import { getDatabase } from '../services/database'
 import { ptyManager } from '../services/terminal/pty-manager'
@@ -279,7 +279,8 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, async (_event, { id }: { id: string }) => {
     try {
-      batchTaskRepo.resetByJob(id)
+      // Delete old task rows (they'll be regenerated lazily during execution)
+      batchTaskRepo.deleteByJob(id)
       batchJobRepo.updateProgress(id, 0, 0)
       batchJobRepo.updateStatus(id, 'draft')
       await queueManager.startJob(id)
@@ -296,9 +297,6 @@ export function registerIpcHandlers(): void {
 
   // Create batch job and expand to tasks
   ipcMain.handle(IPC_CHANNELS.BATCH_CREATE, (_event, config: BatchConfig) => {
-    // Store original config for DB (preserves module IDs for cloning)
-    const originalConfigJson = JSON.stringify(config)
-
     // Resolve prefix module IDs to composed text
     if (config.slotMappings) {
       for (const slot of config.slotMappings) {
@@ -330,8 +328,8 @@ export function registerIpcHandlers(): void {
       }
     }
 
-    // Load module data for expansion
-    const moduleData = config.moduleSelections.map((sel) => {
+    // Load module data for snapshot (freeze current state so deleted items won't break job)
+    const moduleData: ModuleDataSnapshot = config.moduleSelections.map((sel) => {
       const items = moduleItemRepo.list(sel.moduleId)
       return {
         moduleId: sel.moduleId,
@@ -348,31 +346,24 @@ export function registerIpcHandlers(): void {
       }
     })
 
-    const tasks = expandBatchToTasks(config, moduleData)
+    // Calculate total task count without generating tasks
+    const totalTasks = countTotalTasksFromData(config, moduleData)
 
-    // Create the job
+    // Store resolved config (with prefix text already composed) for lazy expansion
+    const resolvedConfigJson = JSON.stringify(config)
+
+    // Create the job with module data snapshot — NO task rows created
     const jobId = batchJobRepo.create({
       name: config.name,
       description: config.description,
-      config: originalConfigJson,
+      config: resolvedConfigJson,
       workflow_id: config.workflowId,
-      total_tasks: tasks.length,
-      pipeline_config: config.pipelineConfig ? JSON.stringify(config.pipelineConfig) : undefined
+      total_tasks: totalTasks,
+      pipeline_config: config.pipelineConfig ? JSON.stringify(config.pipelineConfig) : undefined,
+      module_data_snapshot: JSON.stringify(moduleData)
     })
 
-    // Create tasks in bulk
-    if (tasks.length > 0) {
-      batchTaskRepo.createBulk(
-        tasks.map((t) => ({
-          job_id: jobId,
-          prompt_data: JSON.stringify(t.promptData),
-          sort_order: t.sortOrder,
-          metadata: JSON.stringify(t.metadata)
-        }))
-      )
-    }
-
-    return { jobId, totalTasks: tasks.length }
+    return { jobId, totalTasks }
   })
 
   // Get tasks for a batch job

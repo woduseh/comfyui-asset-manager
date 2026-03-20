@@ -16,7 +16,7 @@ class PtyManager {
     const id = `terminal-${this.nextId++}`
 
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'
-    const args = process.platform === 'win32' ? ['-NoLogo'] : []
+    const args = process.platform === 'win32' ? ['-NoLogo', '-ExecutionPolicy', 'Bypass'] : []
 
     // Inject MCP environment variables for LLM CLI auto-discovery
     const env = { ...(process.env as Record<string, string>) }

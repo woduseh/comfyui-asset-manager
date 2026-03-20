@@ -317,12 +317,17 @@ export function registerIpcHandlers(): void {
               type: (mod?.type as string) || 'custom',
               items: items
                 .filter(item => (item.enabled as number) !== 0)
-                .map(item => ({
-                  prompt: item.prompt as string,
-                  negative: (item.negative as string) || '',
-                  weight: (item.weight as number) || 1.0,
-                  enabled: true
-                }))
+                .map(item => {
+                  // Resolve prompt variant if slot specifies one
+                  const variants = parsePromptVariants(item.prompt_variants as string)
+                  const variant = slot.promptVariant ? variants[slot.promptVariant] : undefined
+                  return {
+                    prompt: variant?.prompt ?? (item.prompt as string),
+                    negative: variant?.negative ?? ((item.negative as string) || ''),
+                    weight: (item.weight as number) || 1.0,
+                    enabled: true
+                  }
+                })
             }
           }).filter(m => m.items.length > 0)
 

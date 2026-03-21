@@ -88,11 +88,22 @@ export type ComfyUIWSMessage =
       data: { value: number; max: number; prompt_id: string; node: string }
     }
   | { type: 'executed'; data: { node: string; output: Record<string, unknown>; prompt_id: string } }
-  | { type: 'execution_error'; data: { prompt_id: string; node_id: string; exception_message: string; exception_type: string } }
+  | {
+      type: 'execution_error'
+      data: {
+        prompt_id: string
+        node_id: string
+        exception_message: string
+        exception_type: string
+      }
+    }
   | { type: 'execution_interrupted'; data: { prompt_id: string } }
 
 // Known node types for variable extraction
-export const VARIABLE_NODE_TYPES: Record<string, { fields: Array<{ name: string; type: string; displayName: string }> }> = {
+export const VARIABLE_NODE_TYPES: Record<
+  string,
+  { fields: Array<{ name: string; type: string; displayName: string }> }
+> = {
   KSampler: {
     fields: [
       { name: 'seed', type: 'seed', displayName: 'Seed' },

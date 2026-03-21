@@ -243,15 +243,11 @@ describe('Prompt Composition Engine', () => {
       const modules = [
         {
           type: 'character',
-          items: [
-            { prompt: '1girl', negative: 'bad anatomy', weight: 1.0, enabled: true }
-          ]
+          items: [{ prompt: '1girl', negative: 'bad anatomy', weight: 1.0, enabled: true }]
         },
         {
           type: 'negative',
-          items: [
-            { prompt: 'worst quality', negative: '', weight: 1.0, enabled: true }
-          ]
+          items: [{ prompt: 'worst quality', negative: '', weight: 1.0, enabled: true }]
         }
       ]
       const result = buildPrompt(modules, undefined, 42)
@@ -266,9 +262,7 @@ describe('Prompt Composition Engine', () => {
       const modules = [
         {
           type: 'character',
-          items: [
-            { prompt: '{red|blue} hair', negative: '', weight: 1.0, enabled: true }
-          ]
+          items: [{ prompt: '{red|blue} hair', negative: '', weight: 1.0, enabled: true }]
         }
       ]
       const result = previewPrompt(modules)
@@ -279,9 +273,7 @@ describe('Prompt Composition Engine', () => {
       const modules = [
         {
           type: 'character',
-          items: [
-            { prompt: '{{name}} hair', negative: '', weight: 1.0, enabled: true }
-          ]
+          items: [{ prompt: '{{name}} hair', negative: '', weight: 1.0, enabled: true }]
         }
       ]
       const result = previewPrompt(modules, { name: 'Alice' })

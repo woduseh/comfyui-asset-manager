@@ -63,7 +63,7 @@ onMounted(() => {
     <div class="panel-resize-handle" @mousedown="startResize" />
 
     <div class="panel-toolbar">
-      <NSpace align="center" :size="4" style="flex: 1; overflow-x: auto;">
+      <NSpace align="center" :size="4" style="flex: 1; overflow-x: auto">
         <NButton
           v-for="tab in terminalStore.tabs"
           :key="tab.id"
@@ -77,7 +77,7 @@ onMounted(() => {
             <NIcon
               :component="CloseOutline"
               @click.stop="handleCloseTab(tab.id)"
-              style="cursor: pointer; margin-left: 4px;"
+              style="cursor: pointer; margin-left: 4px"
               :size="12"
             />
           </template>

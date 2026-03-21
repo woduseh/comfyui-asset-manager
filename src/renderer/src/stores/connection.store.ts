@@ -21,7 +21,10 @@ export const useConnectionStore = defineStore('connection', () => {
     try {
       const h = host || status.value.host
       const p = port || status.value.port
-      const result = await window.electron.ipcRenderer.invoke('comfyui:connect', { host: h, port: p })
+      const result = await window.electron.ipcRenderer.invoke('comfyui:connect', {
+        host: h,
+        port: p
+      })
       if (result) {
         status.value.connected = true
         status.value.host = h

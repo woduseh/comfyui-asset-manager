@@ -2,7 +2,17 @@
 import { computed, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { NMenu, NLayout, NLayoutSider, NLayoutHeader, NIcon, NButton, NSpace, NTag, NBadge } from 'naive-ui'
+import {
+  NMenu,
+  NLayout,
+  NLayoutSider,
+  NLayoutHeader,
+  NIcon,
+  NButton,
+  NSpace,
+  NTag,
+  NBadge
+} from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { h } from 'vue'
 import {
@@ -45,7 +55,11 @@ const mainMenuOptions = computed<MenuOption[]>(() => [
       h('span', {}, [
         t('nav.jobs'),
         queueStore.isProcessing
-          ? h(NBadge, { value: queueStore.totalProgress + '%', type: 'info', style: 'margin-left: 8px' })
+          ? h(NBadge, {
+              value: queueStore.totalProgress + '%',
+              type: 'info',
+              style: 'margin-left: 8px'
+            })
           : null
       ]),
     key: 'jobs',
@@ -72,7 +86,7 @@ const settingsMenuOptions = computed<MenuOption[]>(() => [
 ])
 
 const activeKey = computed(() => {
-  return route.name as string || 'workflows'
+  return (route.name as string) || 'workflows'
 })
 
 function handleMenuUpdate(key: string): void {
@@ -109,18 +123,23 @@ async function handleToggleConnection(): Promise<void> {
         :options="mainMenuOptions"
         :value="activeKey"
         @update:value="handleMenuUpdate"
-        style="flex: 1;"
+        style="flex: 1"
       />
 
-      <NMenu
-        :options="settingsMenuOptions"
-        :value="activeKey"
-        @update:value="handleMenuUpdate"
-      />
+      <NMenu :options="settingsMenuOptions" :value="activeKey" @update:value="handleMenuUpdate" />
     </NLayoutSider>
 
     <NLayout>
-      <NLayoutHeader bordered style="height: 48px; padding: 0 20px; display: flex; align-items: center; justify-content: flex-end;">
+      <NLayoutHeader
+        bordered
+        style="
+          height: 48px;
+          padding: 0 20px;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+        "
+      >
         <NSpace align="center" :size="12">
           <NButton
             size="tiny"
@@ -133,18 +152,13 @@ async function handleToggleConnection(): Promise<void> {
               <NIcon :component="TerminalOutline" />
             </template>
           </NButton>
-          <NTag
-            :type="connectionStore.isConnected ? 'success' : 'error'"
-            size="small"
-            round
-          >
+          <NTag :type="connectionStore.isConnected ? 'success' : 'error'" size="small" round>
             <template #icon>
-              <div
-                class="status-dot"
-                :class="{ connected: connectionStore.isConnected }"
-              />
+              <div class="status-dot" :class="{ connected: connectionStore.isConnected }" />
             </template>
-            {{ connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected') }}
+            {{
+              connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected')
+            }}
           </NTag>
           <NButton
             size="tiny"
@@ -157,7 +171,14 @@ async function handleToggleConnection(): Promise<void> {
         </NSpace>
       </NLayoutHeader>
 
-      <NLayout content-style="padding: 20px; overflow: auto;" :style="{ height: terminalStore.panelVisible ? `calc(100vh - 48px - ${terminalStore.panelHeight}px)` : 'calc(100vh - 48px)' }">
+      <NLayout
+        content-style="padding: 20px; overflow: auto;"
+        :style="{
+          height: terminalStore.panelVisible
+            ? `calc(100vh - 48px - ${terminalStore.panelHeight}px)`
+            : 'calc(100vh - 48px)'
+        }"
+      >
         <router-view />
       </NLayout>
 
@@ -196,7 +217,9 @@ async function handleToggleConnection(): Promise<void> {
 
 /* Sidebar smooth styling */
 :deep(.n-menu-item-content) {
-  transition: background 0.2s ease, color 0.2s ease !important;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease !important;
   border-radius: 8px !important;
   margin: 2px 6px !important;
 }

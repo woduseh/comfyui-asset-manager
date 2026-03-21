@@ -21,25 +21,37 @@ onMounted(async () => {
   updateTheme(settingsStore.settings.theme)
 
   // Listen for main→renderer events
-  window.electron.ipcRenderer.on('comfyui:connection-changed', (_event: unknown, connected: boolean) => {
-    connectionStore.setConnectionChanged(connected)
-  })
+  window.electron.ipcRenderer.on(
+    'comfyui:connection-changed',
+    (_event: unknown, connected: boolean) => {
+      connectionStore.setConnectionChanged(connected)
+    }
+  )
 
   window.electron.ipcRenderer.on('queue:progress', (_event: unknown, data: QueueProgress) => {
     queueStore.updateProgress(data)
   })
 
-  window.electron.ipcRenderer.on('queue:task-completed', (_event: unknown, data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }) => {
-    queueStore.onTaskCompleted(data)
-  })
+  window.electron.ipcRenderer.on(
+    'queue:task-completed',
+    (_event: unknown, data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }) => {
+      queueStore.onTaskCompleted(data)
+    }
+  )
 
-  window.electron.ipcRenderer.on('queue:task-failed', (_event: unknown, data: { jobId: string; etaMs?: number }) => {
-    queueStore.onTaskFailed(data)
-  })
+  window.electron.ipcRenderer.on(
+    'queue:task-failed',
+    (_event: unknown, data: { jobId: string; etaMs?: number }) => {
+      queueStore.onTaskFailed(data)
+    }
+  )
 
-  window.electron.ipcRenderer.on('queue:job-completed', (_event: unknown, data: { jobId: string }) => {
-    queueStore.onJobCompleted(data.jobId)
-  })
+  window.electron.ipcRenderer.on(
+    'queue:job-completed',
+    (_event: unknown, data: { jobId: string }) => {
+      queueStore.onJobCompleted(data.jobId)
+    }
+  )
 
   // Auto-connect on startup if previously connected
   const host = settingsStore.settings.comfyui_host || 'localhost'

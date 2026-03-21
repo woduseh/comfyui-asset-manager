@@ -20,7 +20,10 @@ export const useWorkflowStore = defineStore('workflow', () => {
   async function loadWorkflows(category?: string): Promise<void> {
     loading.value = true
     try {
-      const result = await window.electron.ipcRenderer.invoke('workflow:list', category ? { category } : undefined)
+      const result = await window.electron.ipcRenderer.invoke(
+        'workflow:list',
+        category ? { category } : undefined
+      )
       workflows.value = result || []
     } finally {
       loading.value = false

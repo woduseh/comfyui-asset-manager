@@ -29,7 +29,10 @@ describe('ComfyUI REST Client', () => {
       mockFetch.mockResolvedValueOnce({ system: {}, devices: [] })
       const result = await client.ping()
       expect(result).toBe(true)
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8188/system_stats', expect.any(Object))
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8188/system_stats',
+        expect.any(Object)
+      )
     })
 
     it('returns false when server is unreachable', async () => {
@@ -104,10 +107,7 @@ describe('ComfyUI REST Client', () => {
       const buffer = Buffer.from('fake-image-data')
       mockFetch.mockResolvedValueOnce(buffer)
       await client.getImage('output.png', 'subfolder', 'output')
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/view?'),
-        expect.any(Object)
-      )
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/view?'), expect.any(Object))
     })
   })
 

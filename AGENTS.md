@@ -254,6 +254,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.12.2** — CI 경고 전면 해소: GitHub Actions Node.js 24 마이그레이션(checkout@v6, setup-node@v5), Vue 속성 순서 경고 10건 수정, ESLint 에러 해결, Prettier 포맷팅 일괄 적용. 테스트 229개
 **0.12.1** — v0.12.0 호환성 수정: preload 샌드박스 번들링 수정, 갤러리 이미지 403/CSP 수정, 갤러리 상세 뷰어 좌우 분할 레이아웃 (Lightroom 스타일). 테스트 229개
 **0.12.0** — 보안 감사 기반 전면 개선: Electron 보안 하드닝(sandbox/webSecurity/CSP), IPC 입력 검증, Repository 필드 화이트리스트, 경로 순회 차단, 매직 넘버 상수 추출, 배치 위자드 composable, 에러 핸들링 개선, i18n 완성(6개 뷰), 구조화 로깅(electron-log), pre-commit 훅(husky+lint-staged), IPC 검증 테스트 32개. 테스트 229개
 **0.11.0** — 갤러리 뷰어 강화: 좌우 네비게이션(← →), 클립보드 복사(Ctrl+C), 파일 탐색기 열기, 상세 모달에서 삭제, 프롬프트/시드 표시, 파일 크기·해상도 표시. 테스트 197개

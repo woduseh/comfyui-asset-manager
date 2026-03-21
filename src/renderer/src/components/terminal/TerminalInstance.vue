@@ -16,7 +16,8 @@ const terminalRef = ref<HTMLDivElement>()
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let dataListener: ((event: unknown, payload: { id: string; data: string }) => void) | null = null
-let exitListener: ((event: unknown, payload: { id: string; exitCode: number }) => void) | null = null
+let exitListener: ((event: unknown, payload: { id: string; exitCode: number }) => void) | null =
+  null
 let resizeObserver: ResizeObserver | null = null
 
 function writeMcpBanner(): void {
@@ -25,15 +26,23 @@ function writeMcpBanner(): void {
   if (mcp.isRunning) {
     terminal.write('\x1b[38;5;117m╭─ MCP Server ─────────────────────────────────╮\x1b[0m\r\n')
     terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[32m●\x1b[0m URL: \x1b[1m${mcp.url}\x1b[0m\r\n`)
-    terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[36menv:\x1b[0m $COMFYUI_MCP_URL \x1b[90m(auto-injected)\x1b[0m\r\n`)
+    terminal.write(
+      `\x1b[38;5;117m│\x1b[0m  \x1b[36menv:\x1b[0m $COMFYUI_MCP_URL \x1b[90m(auto-injected)\x1b[0m\r\n`
+    )
     if (terminalStore.mcpConfigStatus.claudeCode) {
-      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mClaude Code:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`)
+      terminal.write(
+        `\x1b[38;5;117m│\x1b[0m  \x1b[35mClaude Code:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`
+      )
     }
     if (terminalStore.mcpConfigStatus.geminiCli) {
-      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mGemini CLI:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`)
+      terminal.write(
+        `\x1b[38;5;117m│\x1b[0m  \x1b[35mGemini CLI:\x1b[0m \x1b[32mconfigured ✓\x1b[0m\r\n`
+      )
     }
     if (terminalStore.mcpConfigStatus.codexCli) {
-      terminal.write(`\x1b[38;5;117m│\x1b[0m  \x1b[35mCodex CLI:\x1b[0m  \x1b[32mconfigured ✓\x1b[0m\r\n`)
+      terminal.write(
+        `\x1b[38;5;117m│\x1b[0m  \x1b[35mCodex CLI:\x1b[0m  \x1b[32mconfigured ✓\x1b[0m\r\n`
+      )
     }
     terminal.write('\x1b[38;5;117m╰──────────────────────────────────────────────╯\x1b[0m\r\n\r\n')
   }
@@ -123,24 +132,33 @@ onMounted(() => {
 })
 
 // Re-fit when tab becomes active
-watch(() => props.active, (isActive) => {
-  if (isActive && fitAddon) {
-    nextTick(() => {
-      fitAddon!.fit()
-      terminal?.focus()
-    })
+watch(
+  () => props.active,
+  (isActive) => {
+    if (isActive && fitAddon) {
+      nextTick(() => {
+        fitAddon!.fit()
+        terminal?.focus()
+      })
+    }
   }
-})
+)
 
 onBeforeUnmount(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
   if (dataListener) {
-    window.electron.ipcRenderer.removeListener('terminal:data', dataListener as (...args: unknown[]) => void)
+    window.electron.ipcRenderer.removeListener(
+      'terminal:data',
+      dataListener as (...args: unknown[]) => void
+    )
   }
   if (exitListener) {
-    window.electron.ipcRenderer.removeListener('terminal:exit', exitListener as (...args: unknown[]) => void)
+    window.electron.ipcRenderer.removeListener(
+      'terminal:exit',
+      exitListener as (...args: unknown[]) => void
+    )
   }
   terminal?.dispose()
 })

@@ -43,10 +43,7 @@ export function resolveWildcards(text: string, seed?: number): string {
 /**
  * Interpolate variables in text: `{{variable_name}}` → value
  */
-export function interpolateVariables(
-  text: string,
-  variables: Record<string, string>
-): string {
+export function interpolateVariables(text: string, variables: Record<string, string>): string {
   return text.replace(/\{\{(\w+)\}\}/g, (_match, varName: string) => {
     return variables[varName] ?? `{{${varName}}}`
   })

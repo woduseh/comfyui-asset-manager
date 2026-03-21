@@ -2,7 +2,19 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  NCard, NForm, NFormItem, NInput, NInputNumber, NButton, NSelect, NSpace, NDivider, NSwitch, NTag, NIcon, NAlert
+  NCard,
+  NForm,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NButton,
+  NSelect,
+  NSpace,
+  NDivider,
+  NSwitch,
+  NTag,
+  NIcon,
+  NAlert
 } from 'naive-ui'
 import { CopyOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@renderer/stores/settings.store'
@@ -110,7 +122,7 @@ onMounted(async () => {
     <h2>{{ t('settings.title') }}</h2>
 
     <!-- Server Settings -->
-    <NCard :title="t('settings.server.title')" style="margin-top: 16px;">
+    <NCard :title="t('settings.server.title')" style="margin-top: 16px">
       <NForm label-placement="left" label-width="140">
         <NFormItem :label="t('settings.server.host')">
           <NInput v-model:value="host" />
@@ -120,17 +132,10 @@ onMounted(async () => {
         </NFormItem>
         <NFormItem>
           <NSpace>
-            <NButton
-              type="primary"
-              :disabled="connectionStore.isConnected"
-              @click="handleConnect"
-            >
+            <NButton type="primary" :disabled="connectionStore.isConnected" @click="handleConnect">
               {{ t('settings.server.connect') }}
             </NButton>
-            <NButton
-              :disabled="!connectionStore.isConnected"
-              @click="handleDisconnect"
-            >
+            <NButton :disabled="!connectionStore.isConnected" @click="handleDisconnect">
               {{ t('settings.server.disconnect') }}
             </NButton>
           </NSpace>
@@ -139,11 +144,11 @@ onMounted(async () => {
     </NCard>
 
     <!-- Output Settings -->
-    <NCard :title="t('settings.output.title')" style="margin-top: 16px;">
+    <NCard :title="t('settings.output.title')" style="margin-top: 16px">
       <NForm label-placement="left" label-width="140">
         <NFormItem :label="t('settings.output.directory')">
           <NSpace>
-            <NInput v-model:value="outputDir" readonly style="flex: 1;" />
+            <NInput v-model:value="outputDir" readonly style="flex: 1" />
             <NButton @click="handleBrowseOutput">
               {{ t('settings.output.browse') }}
             </NButton>
@@ -152,22 +157,22 @@ onMounted(async () => {
         <NFormItem :label="t('settings.output.folderPattern')">
           <NInput
             :value="settingsStore.settings.output_pattern"
-            @update:value="(v: string) => handleSettingChange('output_pattern', v)"
             placeholder="{job}/{character}/{outfit}/{emotion}"
+            @update:value="(v: string) => handleSettingChange('output_pattern', v)"
           />
         </NFormItem>
         <NFormItem :label="t('settings.output.filePattern')">
           <NInput
             :value="settingsStore.settings.filename_pattern"
-            @update:value="(v: string) => handleSettingChange('filename_pattern', v)"
             placeholder="{character}_{outfit}_{emotion}_{index}"
+            @update:value="(v: string) => handleSettingChange('filename_pattern', v)"
           />
         </NFormItem>
       </NForm>
     </NCard>
 
     <!-- General Settings -->
-    <NCard :title="t('settings.general.title')" style="margin-top: 16px;">
+    <NCard :title="t('settings.general.title')" style="margin-top: 16px">
       <NForm label-placement="left" label-width="140">
         <NFormItem :label="t('settings.general.language')">
           <NSelect
@@ -205,7 +210,9 @@ onMounted(async () => {
             :min="1000"
             :max="60000"
             :step="1000"
-            @update:value="(v: number | null) => handleSettingChange('auto_save_interval', String(v ?? 5000))"
+            @update:value="
+              (v: number | null) => handleSettingChange('auto_save_interval', String(v ?? 5000))
+            "
           />
         </NFormItem>
       </NForm>
@@ -235,7 +242,11 @@ onMounted(async () => {
               size="small"
               round
             >
-              {{ terminalStore.mcpStatus.isRunning ? t('settings.mcp.running') : t('settings.mcp.stopped') }}
+              {{
+                terminalStore.mcpStatus.isRunning
+                  ? t('settings.mcp.running')
+                  : t('settings.mcp.stopped')
+              }}
             </NTag>
             <NButton
               v-if="terminalStore.mcpStatus.isRunning"
@@ -250,11 +261,11 @@ onMounted(async () => {
         </NFormItem>
       </NForm>
 
-      <NDivider style="margin: 12px 0;" />
+      <NDivider style="margin: 12px 0" />
 
       <!-- CLI Auto-Connection -->
-      <h4 style="margin: 0 0 12px 0;">{{ t('settings.mcp.cliSetup.title') }}</h4>
-      <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px;">
+      <h4 style="margin: 0 0 12px 0">{{ t('settings.mcp.cliSetup.title') }}</h4>
+      <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px">
         {{ t('settings.mcp.cliSetup.description') }}
       </p>
 
@@ -263,7 +274,7 @@ onMounted(async () => {
         <NAlert type="info" :title="t('settings.mcp.cliSetup.envTitle')" :bordered="false">
           <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>
           <br />
-          <span style="font-size: 12px; color: var(--n-text-color3);">
+          <span style="font-size: 12px; color: var(--n-text-color3)">
             {{ t('settings.mcp.cliSetup.envDescription') }}
           </span>
         </NAlert>
@@ -276,9 +287,11 @@ onMounted(async () => {
             :disabled="!terminalStore.mcpStatus.isRunning"
             @click="handleSetupCli"
           >
-            {{ terminalStore.mcpConfigStatus.claudeCode
-              ? t('settings.mcp.cliSetup.updateConfig')
-              : t('settings.mcp.cliSetup.setupClaudeCode') }}
+            {{
+              terminalStore.mcpConfigStatus.claudeCode
+                ? t('settings.mcp.cliSetup.updateConfig')
+                : t('settings.mcp.cliSetup.setupClaudeCode')
+            }}
           </NButton>
           <NTag v-if="terminalStore.mcpConfigStatus.claudeCode" type="success" size="small" round>
             <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
@@ -293,7 +306,11 @@ onMounted(async () => {
             Codex CLI ✓
           </NTag>
           <NButton
-            v-if="terminalStore.mcpConfigStatus.claudeCode || terminalStore.mcpConfigStatus.geminiCli || terminalStore.mcpConfigStatus.codexCli"
+            v-if="
+              terminalStore.mcpConfigStatus.claudeCode ||
+              terminalStore.mcpConfigStatus.geminiCli ||
+              terminalStore.mcpConfigStatus.codexCli
+            "
             size="tiny"
             quaternary
             type="error"
@@ -302,7 +319,10 @@ onMounted(async () => {
             {{ t('settings.mcp.cliSetup.remove') }}
           </NButton>
         </NSpace>
-        <span v-if="terminalStore.mcpConfigStatus.configPath" style="font-size: 12px; color: var(--n-text-color3);">
+        <span
+          v-if="terminalStore.mcpConfigStatus.configPath"
+          style="font-size: 12px; color: var(--n-text-color3)"
+        >
           {{ terminalStore.mcpConfigStatus.configPath }}
         </span>
       </NSpace>

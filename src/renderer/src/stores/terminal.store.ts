@@ -16,7 +16,12 @@ export const useTerminalStore = defineStore('terminal', () => {
     port: 39464,
     url: 'http://localhost:39464/mcp'
   })
-  const mcpConfigStatus = ref<{ claudeCode: boolean; geminiCli: boolean; codexCli: boolean; configPath: string }>({
+  const mcpConfigStatus = ref<{
+    claudeCode: boolean
+    geminiCli: boolean
+    codexCli: boolean
+    configPath: string
+  }>({
     claudeCode: false,
     geminiCli: false,
     codexCli: false,
@@ -78,7 +83,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     mcpConfigStatus.value = status
   }
 
-  async function startMcpServer(port?: number): Promise<{ success: boolean; url?: string; error?: string }> {
+  async function startMcpServer(
+    port?: number
+  ): Promise<{ success: boolean; url?: string; error?: string }> {
     const result = await window.electron.ipcRenderer.invoke('mcp:start', { port })
     if (result.success) {
       mcpStatus.value = { isRunning: true, port: result.port, url: result.url }
@@ -93,7 +100,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     await fetchMcpConfigStatus()
   }
 
-  async function setupMcpForCli(targetDir?: string): Promise<{ success: boolean; configPath?: string; error?: string }> {
+  async function setupMcpForCli(
+    targetDir?: string
+  ): Promise<{ success: boolean; configPath?: string; error?: string }> {
     const result = await window.electron.ipcRenderer.invoke('mcp:setup-cli', { targetDir })
     if (result.success) {
       await fetchMcpConfigStatus()

@@ -96,7 +96,9 @@ function createTables(db: SqlJsDatabase): void {
     created_at DATETIME DEFAULT (datetime('now'))
   )`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id)`)
-  db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`)
+  db.run(
+    `INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`
+  )
   db.run('PRAGMA foreign_keys = ON;')
 }
 
@@ -114,9 +116,7 @@ describe('QueueManager Recovery', () => {
 
   describe('recoverInterruptedJobs', () => {
     it('converts orphaned running jobs to paused', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Test Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
@@ -128,9 +128,7 @@ describe('QueueManager Recovery', () => {
     })
 
     it('resets stuck running tasks to pending', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Test Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
@@ -154,9 +152,7 @@ describe('QueueManager Recovery', () => {
     })
 
     it('does not affect completed or cancelled jobs', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const completedId = jobRepo.create({ name: 'Done Job', config: '{}' })
       jobRepo.updateStatus(completedId, 'completed')
@@ -170,9 +166,7 @@ describe('QueueManager Recovery', () => {
     })
 
     it('recovers multiple orphaned running jobs', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const job1 = jobRepo.create({ name: 'Job 1', config: '{}' })
       const job2 = jobRepo.create({ name: 'Job 2', config: '{}' })
@@ -188,9 +182,7 @@ describe('QueueManager Recovery', () => {
 
   describe('cold cancel', () => {
     it('cancels orphaned running job via cancel()', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Stale Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
@@ -211,9 +203,7 @@ describe('QueueManager Recovery', () => {
     })
 
     it('cancels paused job via cancel()', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Paused Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'paused')
@@ -230,9 +220,7 @@ describe('QueueManager Recovery', () => {
     })
 
     it('does nothing when no active or stale jobs exist', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
       queueManager.cancel()
@@ -242,9 +230,7 @@ describe('QueueManager Recovery', () => {
 
   describe('cold resume', () => {
     it('does nothing when no paused jobs exist', async () => {
-      const { queueManager } = await import(
-        '../../../../src/main/services/batch/queue-manager'
-      )
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
       await queueManager.resume()

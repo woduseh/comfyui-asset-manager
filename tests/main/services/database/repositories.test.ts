@@ -79,7 +79,9 @@ function createTables(db: SqlJsDatabase): void {
   db.run(`CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id)`)
   db.run(`CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id)`)
-  db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`)
+  db.run(
+    `INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`
+  )
   db.run('PRAGMA foreign_keys = ON;')
 }
 
@@ -420,9 +422,7 @@ describe('Database Repositories', () => {
     })
 
     it('updates task status', () => {
-      taskRepo.createBulk([
-        { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }
-      ])
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
       const tasks = taskRepo.listByJob(jobId)
       const taskId = tasks[0].id as string
       taskRepo.updateStatus(taskId, 'running')
@@ -431,9 +431,7 @@ describe('Database Repositories', () => {
     })
 
     it('updates status with extra fields', () => {
-      taskRepo.createBulk([
-        { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }
-      ])
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
       const taskId = taskRepo.listByJob(jobId)[0].id as string
       taskRepo.updateStatus(taskId, 'completed', {
         comfyui_prompt_id: 'prompt-123',
@@ -446,9 +444,7 @@ describe('Database Repositories', () => {
     })
 
     it('increments retry_count on retrying status', () => {
-      taskRepo.createBulk([
-        { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }
-      ])
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
       const taskId = taskRepo.listByJob(jobId)[0].id as string
       taskRepo.updateStatus(taskId, 'retrying')
       taskRepo.updateStatus(taskId, 'retrying')
@@ -457,9 +453,7 @@ describe('Database Repositories', () => {
     })
 
     it('cascade deletes tasks when job is deleted', () => {
-      taskRepo.createBulk([
-        { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }
-      ])
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
       jobRepo.delete(jobId)
       expect(taskRepo.listByJob(jobId)).toHaveLength(0)
     })

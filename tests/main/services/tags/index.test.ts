@@ -14,7 +14,10 @@ vi.mock('../../../../src/main/services/tags/danbooru-api', () => ({
 }))
 
 import { tagService, CATEGORY_NAMES, CATEGORY_IDS } from '../../../../src/main/services/tags/index'
-import { validateTagOnline, searchTagsOnline } from '../../../../src/main/services/tags/danbooru-api'
+import {
+  validateTagOnline,
+  searchTagsOnline
+} from '../../../../src/main/services/tags/danbooru-api'
 
 const TAG_FILE_PATH = path.resolve(__dirname, '../../../../resources/Danbooru Tag.txt')
 
@@ -129,7 +132,9 @@ describe('TagService', () => {
     it('should find tags by prefix', () => {
       const results = tagService.search('blue_')
       expect(results.length).toBeGreaterThan(1)
-      expect(results.every((r) => r.name.startsWith('blue_') || r.name.includes('blue_'))).toBe(true)
+      expect(results.every((r) => r.name.startsWith('blue_') || r.name.includes('blue_'))).toBe(
+        true
+      )
     })
 
     it('should support wildcard patterns', () => {
@@ -167,7 +172,7 @@ describe('TagService', () => {
         { id: 1, name: 'rare_tag_from_api', category: 0, post_count: 100, is_deprecated: false }
       ])
 
-      const results = await tagService.searchWithOnline('rare_tag_from', undefined, 20)
+      await tagService.searchWithOnline('rare_tag_from', undefined, 20)
       // Should include at least the online result
       expect(searchTagsOnline).toHaveBeenCalled()
     })
@@ -245,11 +250,13 @@ describe('TagService', () => {
       const tags = [{ id: 1, name: 'blue_eyes', category: 0, count: 1000 }]
       const formatted = tagService.formatTagsForDisplay(tags)
 
-      expect(formatted).toEqual([{
-        name: 'blue_eyes',
-        category: 'general',
-        post_count: 1000
-      }])
+      expect(formatted).toEqual([
+        {
+          name: 'blue_eyes',
+          category: 'general',
+          post_count: 1000
+        }
+      ])
     })
   })
 })

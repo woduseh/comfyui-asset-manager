@@ -2,6 +2,20 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.2] - 2026-03-21
+
+CI 파이프라인 린트 오류 수정 — ESLint 에러 해결 및 Prettier 포맷팅 일괄 적용.
+
+### Fixed
+
+- **테스트 미사용 변수 ESLint 에러**: `tests/main/services/tags/index.test.ts`의 미사용 `results` 변수 할당 제거 (`@typescript-eslint/no-unused-vars`)
+- **Prettier 포맷팅 불일치**: 전체 프로젝트 `npm run format` 실행으로 1017개 포맷팅 경고 일괄 해결
+- **Vue 속성 순서 경고**: `vue/attributes-order` 규칙 위반 10건 수정 (AppLayout, SettingsView, TerminalView, TerminalPanel)
+
+### Changed
+
+- **GitHub Actions Node.js 24 마이그레이션**: `actions/checkout@v4` → `@v6`, `actions/setup-node@v4` → `@v5`로 업그레이드하여 Node.js 20 deprecation 경고 해소. `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` 환경변수 제거
+
 ## [0.12.1] - 2026-03-21
 
 v0.12.0 보안 감사 도입 후 발생한 런타임 호환성 버그 수정 + 갤러리 상세 뷰어 레이아웃 개선.

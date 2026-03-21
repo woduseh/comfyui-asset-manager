@@ -138,7 +138,9 @@ describe('Workflow Parser', () => {
       const result = parseWorkflow(makeGenerationWorkflow())
       // KSampler has model, positive, negative, latent_image as links
       const linkVars = result.variables.filter(
-        (v) => v.nodeType === 'KSampler' && ['model', 'positive', 'negative', 'latent_image'].includes(v.fieldName)
+        (v) =>
+          v.nodeType === 'KSampler' &&
+          ['model', 'positive', 'negative', 'latent_image'].includes(v.fieldName)
       )
       expect(linkVars).toHaveLength(0)
     })

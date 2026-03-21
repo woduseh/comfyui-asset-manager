@@ -119,10 +119,20 @@ export function expandBatchToTasks(
   }>
 ): GeneratedTask[] {
   // Build the cartesian dimensions
-  const dimensions: Array<Array<{
-    moduleType: string
-    item: { id: string; name: string; prompt: string; negative: string; weight: number; enabled: boolean; prompt_variants?: Record<string, { prompt: string; negative: string }> }
-  }>> = []
+  const dimensions: Array<
+    Array<{
+      moduleType: string
+      item: {
+        id: string
+        name: string
+        prompt: string
+        negative: string
+        weight: number
+        enabled: boolean
+        prompt_variants?: Record<string, { prompt: string; negative: string }>
+      }
+    }>
+  > = []
   const dimensionModuleIds: string[] = []
 
   for (const selection of config.moduleSelections) {
@@ -230,18 +240,25 @@ export function expandBatchToTasks(
                   : undefined
                 return {
                   type: entry.moduleType,
-                  items: [{
-                    prompt: variant?.prompt ?? entry.item.prompt,
-                    negative: variant?.negative ?? entry.item.negative,
-                    weight: entry.item.weight,
-                    enabled: true
-                  }]
+                  items: [
+                    {
+                      prompt: variant?.prompt ?? entry.item.prompt,
+                      negative: variant?.negative ?? entry.item.negative,
+                      weight: entry.item.weight,
+                      enabled: true
+                    }
+                  ]
                 }
               })
 
             if (assignedModules.length > 0) {
-              const slotComposed = buildPrompt(assignedModules, config.extraVariables as Record<string, string>, seed)
-              const promptText = slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
+              const slotComposed = buildPrompt(
+                assignedModules,
+                config.extraVariables as Record<string, string>,
+                seed
+              )
+              const promptText =
+                slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
 
               const parts: string[] = []
               if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
@@ -256,7 +273,8 @@ export function expandBatchToTasks(
             }
           } else {
             // No specific modules assigned — use global composed prompt (backward compat)
-            const globalPrompt = slot.role === 'prompt_positive' ? composed.positive : composed.negative
+            const globalPrompt =
+              slot.role === 'prompt_positive' ? composed.positive : composed.negative
             const parts: string[] = []
             if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
             if (globalPrompt.trim()) parts.push(globalPrompt.trim())
@@ -390,16 +408,20 @@ function buildDimensions(
   config: BatchConfig,
   moduleData: ModuleDataSnapshot
 ): {
-  dimensions: Array<Array<{
-    moduleType: string
-    item: ModuleDataSnapshot[number]['items'][number]
-  }>>
+  dimensions: Array<
+    Array<{
+      moduleType: string
+      item: ModuleDataSnapshot[number]['items'][number]
+    }>
+  >
   dimensionModuleIds: string[]
 } {
-  const dimensions: Array<Array<{
-    moduleType: string
-    item: ModuleDataSnapshot[number]['items'][number]
-  }>> = []
+  const dimensions: Array<
+    Array<{
+      moduleType: string
+      item: ModuleDataSnapshot[number]['items'][number]
+    }>
+  > = []
   const dimensionModuleIds: string[] = []
 
   for (const selection of config.moduleSelections) {
@@ -507,18 +529,25 @@ function generateSingleTask(
               : undefined
             return {
               type: entry.moduleType,
-              items: [{
-                prompt: variant?.prompt ?? entry.item.prompt,
-                negative: variant?.negative ?? entry.item.negative,
-                weight: entry.item.weight,
-                enabled: true
-              }]
+              items: [
+                {
+                  prompt: variant?.prompt ?? entry.item.prompt,
+                  negative: variant?.negative ?? entry.item.negative,
+                  weight: entry.item.weight,
+                  enabled: true
+                }
+              ]
             }
           })
 
         if (assignedModules.length > 0) {
-          const slotComposed = buildPrompt(assignedModules, config.extraVariables as Record<string, string>, seed)
-          const promptText = slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
+          const slotComposed = buildPrompt(
+            assignedModules,
+            config.extraVariables as Record<string, string>,
+            seed
+          )
+          const promptText =
+            slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
 
           const parts: string[] = []
           if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
@@ -570,10 +599,7 @@ function generateSingleTask(
 /**
  * Generate output path from pattern
  */
-export function resolveOutputPath(
-  pattern: string,
-  vars: Record<string, string>
-): string {
+export function resolveOutputPath(pattern: string, vars: Record<string, string>): string {
   let result = pattern
   for (const [key, value] of Object.entries(vars)) {
     result = result.replace(new RegExp(`\\{${key}\\}`, 'g'), sanitizePathSegment(value))

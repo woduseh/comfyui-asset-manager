@@ -31,11 +31,13 @@ src/renderer/src/ → Vue 3 SPA (browser context)
 ### IPC Communication Pattern
 
 **Renderer → Main** (request-response):
+
 - Main registers handlers via `ipcMain.handle(channel, handler)` in `src/main/ipc/handlers.ts`
 - Renderer calls `window.electron.ipcRenderer.invoke(channel, args)` from Pinia stores
 - All channel names are constants in `src/main/ipc/channels.ts`
 
 **Main → Renderer** (events):
+
 - Main sends via `win.webContents.send(channel, data)`
 - Renderer listens via `window.electron.ipcRenderer.on(channel, handler)` in `App.vue`
 - Event channels: `comfyui:connection-changed`, `queue:progress`, `queue:task-completed`, `queue:task-failed`, `queue:job-completed`, `comfyui:preview`
@@ -52,6 +54,7 @@ In-memory SQLite via `sql.js` (WASM). No native bindings — chosen because `bet
 ### ComfyUI Integration
 
 Singleton `comfyuiManager` in `src/main/services/comfyui/manager.ts` coordinates:
+
 - **REST client** (`client.ts`): Uses `ofetch`. Endpoints: `/prompt`, `/queue`, `/history/{id}`, `/system_stats`, `/object_info`, `/view`, `/upload/image`.
 - **WebSocket** (`websocket.ts`): Uses `ws` package (Node.js, not browser). Auto-reconnects with exponential backoff (3s→30s). Emits typed events: `progress`, `executionComplete`, `executionError`, `preview`.
 - **Workflow parser** (`workflow-parser.ts`): Extracts variables from ComfyUI API JSON. `VARIABLE_NODE_TYPES` in `types.ts` defines known node fields.
@@ -87,10 +90,10 @@ quality → style → artist → character → outfit → emotion → lora → n
 
 ### Path Aliases
 
-| Alias | Resolves to | Used in |
-|-------|-------------|---------|
+| Alias         | Resolves to          | Used in                                                        |
+| ------------- | -------------------- | -------------------------------------------------------------- |
 | `@renderer/*` | `src/renderer/src/*` | Renderer process (tsconfig.web.json + electron.vite.config.ts) |
-| `@main/*` | `src/main/*` | Main process (electron.vite.config.ts only) |
+| `@main/*`     | `src/main/*`         | Main process (electron.vite.config.ts only)                    |
 
 ### Renderer Patterns
 
@@ -124,6 +127,7 @@ This app works with **API format** JSON (node IDs as keys, `class_type` + `input
 ### Release Documentation
 
 Every feature/fix commit must update these 3 files together:
+
 - **`AGENTS.md`** — AI agent conventions and project rules
 - **`README.md`** — User-facing feature documentation
 - **`CHANGELOG.md`** — Version history (Added/Changed/Fixed/Removed per SemVer section)

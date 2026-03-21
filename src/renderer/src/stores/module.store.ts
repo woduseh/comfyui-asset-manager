@@ -36,7 +36,10 @@ export const useModuleStore = defineStore('module', () => {
   async function loadModules(type?: string): Promise<void> {
     loading.value = true
     try {
-      const result = await window.electron.ipcRenderer.invoke('module:list', type ? { type } : undefined)
+      const result = await window.electron.ipcRenderer.invoke(
+        'module:list',
+        type ? { type } : undefined
+      )
       modules.value = (result || []) as PromptModule[]
     } finally {
       loading.value = false
@@ -49,7 +52,12 @@ export const useModuleStore = defineStore('module', () => {
     return currentModule.value
   }
 
-  async function createModule(data: { name: string; type: string; description?: string; parent_id?: string }): Promise<string> {
+  async function createModule(data: {
+    name: string
+    type: string
+    description?: string
+    parent_id?: string
+  }): Promise<string> {
     const id = await window.electron.ipcRenderer.invoke('module:create', toPlain(data))
     await loadModules()
     return id
@@ -88,7 +96,11 @@ export const useModuleStore = defineStore('module', () => {
     return id
   }
 
-  async function updateItem(id: string, moduleId: string, data: Partial<Record<string, unknown>>): Promise<void> {
+  async function updateItem(
+    id: string,
+    moduleId: string,
+    data: Partial<Record<string, unknown>>
+  ): Promise<void> {
     await window.electron.ipcRenderer.invoke('module-item:update', { id, data: toPlain(data) })
     await loadItems(moduleId)
   }

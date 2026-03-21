@@ -29,15 +29,17 @@ export const useQueueStore = defineStore('queue', () => {
   async function loadActiveJobs(): Promise<void> {
     const running = await window.electron.ipcRenderer.invoke('batch:list', { status: 'running' })
     const queued = await window.electron.ipcRenderer.invoke('batch:list', { status: 'queued' })
-    activeJobs.value = [...(running || []), ...(queued || [])].map((j: Record<string, unknown>) => ({
-      id: j.id as string,
-      name: j.name as string,
-      status: j.status as string,
-      totalTasks: j.total_tasks as number,
-      completedTasks: j.completed_tasks as number,
-      failedTasks: j.failed_tasks as number,
-      startedAt: j.started_at as string | null
-    }))
+    activeJobs.value = [...(running || []), ...(queued || [])].map(
+      (j: Record<string, unknown>) => ({
+        id: j.id as string,
+        name: j.name as string,
+        status: j.status as string,
+        totalTasks: j.total_tasks as number,
+        completedTasks: j.completed_tasks as number,
+        failedTasks: j.failed_tasks as number,
+        startedAt: j.started_at as string | null
+      })
+    )
     isProcessing.value = activeJobs.value.some((j) => j.status === 'running')
   }
 
@@ -45,7 +47,11 @@ export const useQueueStore = defineStore('queue', () => {
     currentProgress.value = progress
   }
 
-  function onTaskCompleted(data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }): void {
+  function onTaskCompleted(data: {
+    jobId: string
+    etaMs?: number
+    avgTaskDurationMs?: number
+  }): void {
     const job = activeJobs.value.find((j) => j.id === data.jobId)
     if (job) {
       job.completedTasks++

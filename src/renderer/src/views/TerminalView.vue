@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  NButton, NSpace, NTag, NTabs, NTabPane, NTooltip, NIcon
-} from 'naive-ui'
+import { NButton, NSpace, NTag, NTabs, NTabPane, NTooltip, NIcon } from 'naive-ui'
 import { AddOutline, CopyOutline, ServerOutline } from '@vicons/ionicons5'
 import TerminalInstance from '@renderer/components/terminal/TerminalInstance.vue'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
@@ -56,7 +54,12 @@ onMounted(async () => {
           <template #icon>
             <NIcon :component="ServerOutline" />
           </template>
-          MCP {{ terminalStore.mcpStatus.isRunning ? t('terminal.mcp.running') : t('terminal.mcp.stopped') }}
+          MCP
+          {{
+            terminalStore.mcpStatus.isRunning
+              ? t('terminal.mcp.running')
+              : t('terminal.mcp.stopped')
+          }}
         </NTag>
         <NTooltip v-if="terminalStore.mcpStatus.isRunning">
           <template #trigger>
@@ -82,19 +85,14 @@ onMounted(async () => {
         v-if="terminalStore.tabs.length > 0"
         type="card"
         :value="terminalStore.activeTabId || undefined"
-        @update:value="handleTabChange"
         size="small"
         closable
+        @update:value="handleTabChange"
         @close="handleCloseTab"
       >
-        <NTabPane
-          v-for="tab in terminalStore.tabs"
-          :key="tab.id"
-          :name="tab.id"
-          :tab="tab.title"
-        />
+        <NTabPane v-for="tab in terminalStore.tabs" :key="tab.id" :name="tab.id" :tab="tab.title" />
       </NTabs>
-      <NButton size="small" quaternary @click="handleNewTab" style="margin-left: 4px;">
+      <NButton size="small" quaternary style="margin-left: 4px" @click="handleNewTab">
         <template #icon><NIcon :component="AddOutline" /></template>
       </NButton>
     </div>

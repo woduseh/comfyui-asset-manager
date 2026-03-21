@@ -34,11 +34,7 @@ describe('Task Generator', () => {
     })
 
     it('produces correct count for three arrays', () => {
-      const result = cartesianProduct([
-        ['a', 'b'],
-        ['1', '2', '3'],
-        ['x']
-      ])
+      const result = cartesianProduct([['a', 'b'], ['1', '2', '3'], ['x']])
       expect(result).toHaveLength(2 * 3 * 1)
     })
 
@@ -287,8 +283,8 @@ describe('Task Generator', () => {
               weight: 1.0,
               enabled: true,
               prompt_variants: {
-                '자연어': { prompt: 'A cute girl named Alice with blonde hair', negative: 'ugly' },
-                '태그': { prompt: '1girl, alice, blonde_hair, blue_dress', negative: 'bad_anatomy' }
+                자연어: { prompt: 'A cute girl named Alice with blonde hair', negative: 'ugly' },
+                태그: { prompt: '1girl, alice, blonde_hair, blue_dress', negative: 'bad_anatomy' }
               }
             }
           ]
@@ -301,12 +297,20 @@ describe('Task Generator', () => {
             { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
           ],
           countPerCombination: 1,
-          slotMappings: [{
-            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
-            role: 'prompt_positive', action: 'inject', fixedValue: '',
-            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-            prefixText: '', suffixText: ''
-          }]
+          slotMappings: [
+            {
+              variableId: 'v1',
+              nodeId: 'n1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: ''
+            }
+          ]
         })
         const tasks = expandBatchToTasks(config, variantModuleData)
         expect(tasks).toHaveLength(1)
@@ -319,16 +323,27 @@ describe('Task Generator', () => {
             { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
           ],
           countPerCombination: 1,
-          slotMappings: [{
-            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
-            role: 'prompt_positive', action: 'inject', fixedValue: '',
-            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-            prefixText: '', suffixText: '', promptVariant: '태그'
-          }]
+          slotMappings: [
+            {
+              variableId: 'v1',
+              nodeId: 'n1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: '태그'
+            }
+          ]
         })
         const tasks = expandBatchToTasks(config, variantModuleData)
         expect(tasks).toHaveLength(1)
-        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde_hair, blue_dress')
+        expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain(
+          '1girl, alice, blonde_hair, blue_dress'
+        )
         expect(tasks[0].promptData.slotPrompts!['n1:text']).not.toContain('blonde hair')
       })
 
@@ -338,12 +353,21 @@ describe('Task Generator', () => {
             { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
           ],
           countPerCombination: 1,
-          slotMappings: [{
-            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
-            role: 'prompt_positive', action: 'inject', fixedValue: '',
-            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-            prefixText: '', suffixText: '', promptVariant: 'nonexistent'
-          }]
+          slotMappings: [
+            {
+              variableId: 'v1',
+              nodeId: 'n1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: 'nonexistent'
+            }
+          ]
         })
         const tasks = expandBatchToTasks(config, variantModuleData)
         expect(tasks).toHaveLength(1)
@@ -356,12 +380,21 @@ describe('Task Generator', () => {
             { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
           ],
           countPerCombination: 1,
-          slotMappings: [{
-            variableId: 'v2', nodeId: 'n2', fieldName: 'text',
-            role: 'prompt_negative', action: 'inject', fixedValue: '',
-            assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-            prefixText: '', suffixText: '', promptVariant: '태그'
-          }]
+          slotMappings: [
+            {
+              variableId: 'v2',
+              nodeId: 'n2',
+              fieldName: 'text',
+              role: 'prompt_negative',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: '태그'
+            }
+          ]
         })
         const tasks = expandBatchToTasks(config, variantModuleData)
         expect(tasks).toHaveLength(1)
@@ -376,16 +409,30 @@ describe('Task Generator', () => {
           countPerCombination: 1,
           slotMappings: [
             {
-              variableId: 'v1', nodeId: 'n1', fieldName: 'text',
-              role: 'prompt_positive', action: 'inject', fixedValue: '',
-              assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-              prefixText: '', suffixText: '', promptVariant: '자연어'
+              variableId: 'v1',
+              nodeId: 'n1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: '자연어'
             },
             {
-              variableId: 'v2', nodeId: 'n2', fieldName: 'text',
-              role: 'prompt_positive', action: 'inject', fixedValue: '',
-              assignedModuleIds: ['mod-char'], prefixModuleIds: [],
-              prefixText: '', suffixText: '', promptVariant: '태그'
+              variableId: 'v2',
+              nodeId: 'n2',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: '태그'
             }
           ]
         })
@@ -398,12 +445,21 @@ describe('Task Generator', () => {
       it('works with items that have no prompt_variants field', () => {
         const config = makeConfig({
           countPerCombination: 1,
-          slotMappings: [{
-            variableId: 'v1', nodeId: 'n1', fieldName: 'text',
-            role: 'prompt_positive', action: 'inject', fixedValue: '',
-            assignedModuleIds: ['mod-char', 'mod-emo'], prefixModuleIds: [],
-            prefixText: '', suffixText: '', promptVariant: '태그'
-          }]
+          slotMappings: [
+            {
+              variableId: 'v1',
+              nodeId: 'n1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['mod-char', 'mod-emo'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: '',
+              promptVariant: '태그'
+            }
+          ]
         })
         // moduleData has no prompt_variants on its items — should fall back gracefully
         const tasks = expandBatchToTasks(config, moduleData)
@@ -434,7 +490,14 @@ describe('Task Generator', () => {
         moduleId: 'mod-char',
         moduleType: 'character',
         items: [
-          { id: 'c1', name: 'Alice', prompt: '1girl, alice', negative: '', weight: 1.0, enabled: true },
+          {
+            id: 'c1',
+            name: 'Alice',
+            prompt: '1girl, alice',
+            negative: '',
+            weight: 1.0,
+            enabled: true
+          },
           { id: 'c2', name: 'Bob', prompt: '1boy, bob', negative: '', weight: 1.0, enabled: true }
         ]
       },

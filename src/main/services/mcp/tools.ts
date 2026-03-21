@@ -584,7 +584,7 @@ export function registerMcpTools(server: McpServer): void {
                 total_unique_tags: uniqueTags.length,
                 summary: { valid: validCount, invalid: invalidCount, unverified: unverifiedCount },
                 online_available: onlineAvailable,
-                local_tag_count: tagService.tagCount,
+                local_tag_count: tagService.getTagCount(),
                 issues
               },
               null,
@@ -697,6 +697,7 @@ export function registerMcpTools(server: McpServer): void {
             weight: z.number().optional().describe('Weight (default: 1.0)'),
             prompt_variants: z
               .record(
+                z.string(),
                 z.object({
                   prompt: z.string(),
                   negative: z.string()

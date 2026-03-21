@@ -138,6 +138,7 @@ onMounted(async () => {
 
 .terminal-content {
   flex: 1;
+  position: relative;
   border-radius: 12px;
   overflow: hidden;
   background: #1e1e2e;

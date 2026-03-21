@@ -89,6 +89,16 @@ onMounted(() => {
 
   nextTick(() => {
     fitAddon!.fit()
+
+    // Sync PTY dimensions with the new terminal size
+    if (terminal) {
+      window.electron.ipcRenderer.invoke('terminal:resize', {
+        id: props.terminalId,
+        cols: terminal.cols,
+        rows: terminal.rows
+      })
+    }
+
     writeMcpBanner()
   })
 
@@ -117,9 +127,10 @@ onMounted(() => {
 
   // Auto-resize
   resizeObserver = new ResizeObserver(() => {
-    if (props.active && fitAddon) {
+    if (fitAddon) {
       fitAddon.fit()
-      if (terminal) {
+      // Only sync PTY dimensions for the active terminal
+      if (props.active && terminal) {
         window.electron.ipcRenderer.invoke('terminal:resize', {
           id: props.terminalId,
           cols: terminal.cols,
@@ -135,10 +146,18 @@ onMounted(() => {
 watch(
   () => props.active,
   (isActive) => {
-    if (isActive && fitAddon) {
+    if (isActive && fitAddon && terminal) {
       nextTick(() => {
-        fitAddon!.fit()
-        terminal?.focus()
+        // Wait for rendering cycle to ensure container has final dimensions
+        requestAnimationFrame(() => {
+          fitAddon!.fit()
+          window.electron.ipcRenderer.invoke('terminal:resize', {
+            id: props.terminalId,
+            cols: terminal!.cols,
+            rows: terminal!.rows
+          })
+          terminal!.focus()
+        })
       })
     }
   }
@@ -165,11 +184,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    ref="terminalRef"
-    class="terminal-instance"
-    :style="{ display: active ? 'block' : 'none' }"
-  />
+  <div ref="terminalRef" class="terminal-instance" :class="{ 'terminal-hidden': !active }" />
 </template>
 
 <style scoped>
@@ -177,6 +192,12 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.terminal-hidden {
+  visibility: hidden;
+  position: absolute;
+  pointer-events: none;
 }
 
 .terminal-instance :deep(.xterm) {

@@ -2,6 +2,17 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.7] - 2026-03-21
+
+터미널 탭 전환 시 입력 깨짐 수정.
+
+### Fixed
+
+- **터미널 display:none 렌더링 깨짐**: 비활성 터미널 탭에 `display: none` 적용 시 xterm.js 캔버스가 0×0이 되어 셀/커서 계산 깨짐 → `visibility: hidden` + `position: absolute`로 변경하여 컨테이너 크기 유지
+- **라우트 복귀 시 PTY 크기 불일치**: TerminalView 재마운트 시 초기 `fit()` 후 PTY에 resize를 보내지 않아 cols/rows 불일치 → 초기 fit 후 `terminal:resize` IPC 즉시 전송
+- **탭 전환 시 fit() 타이밍 문제**: `nextTick`만으로는 컨테이너 크기 미확정 → `nextTick` + `requestAnimationFrame` 조합으로 렌더링 사이클 완료 후 fit 실행
+- **ResizeObserver 비활성 탭 미감지**: `active` 조건 게이트로 숨겨진 터미널의 크기 변경 무시 → 조건 완화하여 비활성 터미널도 fit() 호출 (PTY resize는 active일 때만)
+
 ## [0.12.6] - 2026-03-21
 
 패키징된 앱에서 Danbooru 태그 DB가 로드되지 않는 버그 수정 및 오프라인 환경 대응.

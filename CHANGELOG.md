@@ -2,6 +2,19 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.0] - 2026-03-22
+
+MCP 내보내기/비교/동기화 도구 3개 추가. 모듈 아이템을 파일로 내보내고, 외부 파일과 태그 단위 비교, upsert 기반 동기화 지원. list_modules에 아이템 수 포함.
+
+### Added
+
+- **`export_module_items_to_file` MCP 도구**: 모듈 아이템을 JSON/CSV/Markdown 파일로 내보내기. 확장자 자동 포맷 감지, 덮어쓰기 방지
+- **`diff_module_with_file` MCP 도구**: 모듈 아이템과 외부 파일을 이름 기반 매칭 + 태그 단위 diff. added/removed/modified/unchanged 분류, 요약 통계
+- **`sync_module_from_file` MCP 도구**: 파일 기준 upsert 동기화 (이름 매칭: 있으면 update, 없으면 create, `delete_missing=true` 시 삭제). `dry_run` 미리보기 지원
+- **파일 직렬화 유틸리티** (`src/main/services/mcp/file-serializer.ts`): JSON/CSV/MD 직렬화, RFC 4180 CSV 이스케이핑
+- **비교 엔진** (`src/main/services/mcp/diff-engine.ts`): 이름 기반 퍼지 매칭 + `extractTagsFromPrompt()` 재활용 태그 diff
+- **`list_modules` 개선**: 응답에 `item_count` 필드 추가 (SQL 서브쿼리)
+
 ## [0.14.0] - 2026-03-21
 
 MCP 대량 생성/가져오기/복제/통계 도구 4개 추가. 파일에서 프롬프트 일괄 등록, 모듈 복제, 모듈 요약 통계 지원.

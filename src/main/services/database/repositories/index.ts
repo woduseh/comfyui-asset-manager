@@ -222,13 +222,14 @@ export class WorkflowRepository {
 export class ModuleRepository {
   list(type?: string): Record<string, unknown>[] {
     const db = getDatabase()
-    let query = 'SELECT * FROM prompt_modules'
+    let query =
+      'SELECT pm.*, (SELECT COUNT(*) FROM module_items WHERE module_id = pm.id) as item_count FROM prompt_modules pm'
     const params: unknown[] = []
     if (type) {
-      query += ' WHERE type = ?'
+      query += ' WHERE pm.type = ?'
       params.push(type)
     }
-    query += ' ORDER BY updated_at DESC'
+    query += ' ORDER BY pm.updated_at DESC'
     const stmt = db.prepare(query)
     if (params.length) stmt.bind(params as string[])
     const results: Record<string, unknown>[] = []

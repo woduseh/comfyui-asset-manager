@@ -245,6 +245,20 @@ describe('Database Repositories', () => {
       repo.delete(id)
       expect(repo.get(id)).toBeNull()
     })
+
+    it('includes item_count in list results', () => {
+      const itemRepo = new ModuleItemRepository()
+      const id1 = repo.create({ name: 'WithItems', type: 'character' })
+      const id2 = repo.create({ name: 'Empty', type: 'emotion' })
+      itemRepo.create({ module_id: id1, name: 'A', prompt: 'a' })
+      itemRepo.create({ module_id: id1, name: 'B', prompt: 'b' })
+
+      const modules = repo.list()
+      const withItems = modules.find((m) => m.id === id1)
+      const empty = modules.find((m) => m.id === id2)
+      expect(withItems!.item_count).toBe(2)
+      expect(empty!.item_count).toBe(0)
+    })
   })
 
   describe('ModuleItemRepository', () => {

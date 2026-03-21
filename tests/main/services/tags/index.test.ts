@@ -10,13 +10,16 @@ vi.mock('electron', () => ({
 vi.mock('../../../../src/main/services/tags/danbooru-api', () => ({
   validateTagOnline: vi.fn(),
   searchTagsOnline: vi.fn(),
-  clearApiCache: vi.fn()
+  checkOnlineAvailability: vi.fn(),
+  clearApiCache: vi.fn(),
+  resetOnlineStatus: vi.fn()
 }))
 
 import { tagService, CATEGORY_NAMES, CATEGORY_IDS } from '../../../../src/main/services/tags/index'
 import {
   validateTagOnline,
-  searchTagsOnline
+  searchTagsOnline,
+  checkOnlineAvailability
 } from '../../../../src/main/services/tags/danbooru-api'
 
 const TAG_FILE_PATH = path.resolve(__dirname, '../../../../resources/Danbooru Tag.txt')
@@ -50,10 +53,11 @@ describe('TagService', () => {
   describe('validate', () => {
     beforeEach(() => {
       vi.mocked(validateTagOnline).mockReset()
+      vi.mocked(checkOnlineAvailability).mockReset()
     })
 
     it('should validate existing local tags', async () => {
-      const results = await tagService.validate(['blue_eyes', 'long_hair', 'smile'], false)
+      const { results } = await tagService.validate(['blue_eyes', 'long_hair', 'smile'], false)
 
       expect(results).toHaveLength(3)
       expect(results.every((r) => r.valid)).toBe(true)
@@ -62,7 +66,7 @@ describe('TagService', () => {
     })
 
     it('should mark non-existent tags as invalid', async () => {
-      const results = await tagService.validate(['fake_tag_xyz'], false)
+      const { results } = await tagService.validate(['fake_tag_xyz'], false)
 
       expect(results).toHaveLength(1)
       expect(results[0].valid).toBe(false)
@@ -70,7 +74,7 @@ describe('TagService', () => {
     })
 
     it('should provide suggestions for invalid tags', async () => {
-      const results = await tagService.validate(['blue_eye'], false)
+      const { results } = await tagService.validate(['blue_eye'], false)
 
       expect(results).toHaveLength(1)
       expect(results[0].valid).toBe(false)
@@ -80,7 +84,7 @@ describe('TagService', () => {
     })
 
     it('should normalize tags (spaces to underscores, lowercase)', async () => {
-      const results = await tagService.validate(['Blue Eyes', 'LONG HAIR'], false)
+      const { results } = await tagService.validate(['Blue Eyes', 'LONG HAIR'], false)
 
       expect(results).toHaveLength(2)
       expect(results[0].tag).toBe('blue_eyes')
@@ -90,6 +94,7 @@ describe('TagService', () => {
     })
 
     it('should use online fallback for unknown tags', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
       vi.mocked(validateTagOnline).mockResolvedValueOnce({
         id: 99999,
         name: 'rare_online_tag',
@@ -98,8 +103,9 @@ describe('TagService', () => {
         is_deprecated: false
       })
 
-      const results = await tagService.validate(['rare_online_tag'], true)
+      const { results, onlineAvailable } = await tagService.validate(['rare_online_tag'], true)
 
+      expect(onlineAvailable).toBe(true)
       expect(results).toHaveLength(1)
       expect(results[0].valid).toBe(true)
       expect(results[0].source).toBe('online')
@@ -107,6 +113,7 @@ describe('TagService', () => {
     })
 
     it('should reject deprecated online tags', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
       vi.mocked(validateTagOnline).mockResolvedValueOnce({
         id: 99999,
         name: 'deprecated_tag',
@@ -115,10 +122,52 @@ describe('TagService', () => {
         is_deprecated: true
       })
 
-      const results = await tagService.validate(['deprecated_tag'], true)
+      const { results } = await tagService.validate(['deprecated_tag'], true)
 
       expect(results).toHaveLength(1)
       expect(results[0].valid).toBe(false)
+    })
+
+    it('should mark tags as unverified when online is unavailable', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(false)
+
+      const { results, onlineAvailable } = await tagService.validate(['rare_unknown_tag'], true)
+
+      expect(onlineAvailable).toBe(false)
+      expect(results).toHaveLength(1)
+      expect(results[0].valid).toBeNull()
+      expect(results[0].source).toBe('unverified')
+      expect(validateTagOnline).not.toHaveBeenCalled()
+    })
+
+    it('should return onlineAvailable false when fallback is disabled', async () => {
+      const { results, onlineAvailable } = await tagService.validate(
+        ['blue_eyes', 'fake_tag'],
+        false
+      )
+
+      expect(onlineAvailable).toBe(false)
+      expect(results).toHaveLength(2)
+      expect(results[0].valid).toBe(true) // local tag
+      expect(results[1].valid).toBe(false) // unknown, no fallback
+      expect(checkOnlineAvailability).not.toHaveBeenCalled()
+    })
+
+    it('should still validate local tags instantly when online is unavailable', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(false)
+
+      const { results } = await tagService.validate(
+        ['blue_eyes', 'long_hair', 'rare_unknown_tag'],
+        true
+      )
+
+      expect(results).toHaveLength(3)
+      expect(results[0].valid).toBe(true)
+      expect(results[0].source).toBe('local')
+      expect(results[1].valid).toBe(true)
+      expect(results[1].source).toBe('local')
+      expect(results[2].valid).toBeNull()
+      expect(results[2].source).toBe('unverified')
     })
   })
 
@@ -165,16 +214,28 @@ describe('TagService', () => {
   describe('searchWithOnline', () => {
     beforeEach(() => {
       vi.mocked(searchTagsOnline).mockReset()
+      vi.mocked(checkOnlineAvailability).mockReset()
     })
 
     it('should supplement local results with online results', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
       vi.mocked(searchTagsOnline).mockResolvedValueOnce([
         { id: 1, name: 'rare_tag_from_api', category: 0, post_count: 100, is_deprecated: false }
       ])
 
       await tagService.searchWithOnline('rare_tag_from', undefined, 20)
-      // Should include at least the online result
+      expect(checkOnlineAvailability).toHaveBeenCalled()
       expect(searchTagsOnline).toHaveBeenCalled()
+    })
+
+    it('should skip online when network is unavailable', async () => {
+      vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(false)
+
+      const results = await tagService.searchWithOnline('rare_tag_xyz', undefined, 20)
+      expect(checkOnlineAvailability).toHaveBeenCalled()
+      expect(searchTagsOnline).not.toHaveBeenCalled()
+      // Returns local results only (may be empty for rare query)
+      expect(Array.isArray(results)).toBe(true)
     })
   })
 

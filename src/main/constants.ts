@@ -32,6 +32,8 @@ export const DB_SAVE_DEBOUNCE_BATCH_MS = 10_000 // Longer debounce during batch 
 
 // === Tags ===
 export const DANBOORU_REQUEST_TIMEOUT_MS = 5000
+export const DANBOORU_PROBE_TIMEOUT_MS = 2000
+export const DANBOORU_ONLINE_CACHE_TTL_MS = 60_000
 
 // === Window ===
 export const WINDOW_DEFAULT_WIDTH = 1400

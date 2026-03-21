@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import log from '../../logger'
-import { validateTagOnline, searchTagsOnline } from './danbooru-api'
+import { validateTagOnline, searchTagsOnline, checkOnlineAvailability } from './danbooru-api'
 
 export interface DanbooruTag {
   id: number
@@ -13,10 +13,10 @@ export interface DanbooruTag {
 
 export interface TagValidationResult {
   tag: string
-  valid: boolean
+  valid: boolean | null
   postCount?: number
   category?: string
-  source?: 'local' | 'online'
+  source?: 'local' | 'online' | 'unverified'
   suggestions?: string[]
 }
 
@@ -104,13 +104,16 @@ class TagService {
   private tags = new Map<string, DanbooruTag>()
   private tagsByCount: DanbooruTag[] = []
   private loaded = false
+  private _lastError: string | null = null
 
   load(customPath?: string): void {
     const tagFilePath =
       customPath ||
       (app.isPackaged
-        ? join(process.resourcesPath, 'Danbooru Tag.txt')
+        ? join(app.getAppPath(), 'resources', 'Danbooru Tag.txt')
         : join(__dirname, '../../resources/Danbooru Tag.txt'))
+
+    log.info(`[Tags] Loading from: ${tagFilePath}`)
 
     try {
       const content = readFileSync(tagFilePath, 'utf-8')
@@ -136,11 +139,18 @@ class TagService {
 
       this.tagsByCount = Array.from(this.tags.values()).sort((a, b) => b.count - a.count)
       this.loaded = true
+      this._lastError = null
       log.info(`[Tags] Loaded ${this.tags.size} tags from local database`)
     } catch (error) {
-      log.error('[Tags] Failed to load tag file:', error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      log.error(`[Tags] Failed to load tag file from '${tagFilePath}':`, error)
+      this._lastError = errorMsg
       this.loaded = false
     }
+  }
+
+  get lastError(): string | null {
+    return this._lastError
   }
 
   isLoaded(): boolean {
@@ -155,8 +165,12 @@ class TagService {
     return this.tags.get(name)
   }
 
-  async validate(tags: string[], onlineFallback = true): Promise<TagValidationResult[]> {
+  async validate(
+    tags: string[],
+    onlineFallback = true
+  ): Promise<{ results: TagValidationResult[]; onlineAvailable: boolean }> {
     const results: TagValidationResult[] = []
+    const canUseOnline = onlineFallback && (await checkOnlineAvailability())
 
     for (const tagName of tags) {
       const normalized = tagName.trim().toLowerCase().replace(/\s+/g, '_')
@@ -173,8 +187,8 @@ class TagService {
         continue
       }
 
-      // Online fallback
-      if (onlineFallback) {
+      // Online fallback (only if network is reachable)
+      if (canUseOnline) {
         const onlineTag = await validateTagOnline(normalized)
         if (onlineTag && !onlineTag.is_deprecated) {
           results.push({
@@ -188,16 +202,28 @@ class TagService {
         }
       }
 
-      // Invalid tag — provide suggestions
-      const suggestions = this.suggestSimilar(normalized, 5)
-      results.push({
-        tag: normalized,
-        valid: false,
-        suggestions: suggestions.length > 0 ? suggestions : undefined
-      })
+      // Tag not found locally and online unavailable/not found
+      if (!canUseOnline && onlineFallback) {
+        // Online was requested but unavailable — mark as unverified
+        const suggestions = this.suggestSimilar(normalized, 5)
+        results.push({
+          tag: normalized,
+          valid: null,
+          source: 'unverified',
+          suggestions: suggestions.length > 0 ? suggestions : undefined
+        })
+      } else {
+        // Confirmed invalid (online checked or not requested)
+        const suggestions = this.suggestSimilar(normalized, 5)
+        results.push({
+          tag: normalized,
+          valid: false,
+          suggestions: suggestions.length > 0 ? suggestions : undefined
+        })
+      }
     }
 
-    return results
+    return { results, onlineAvailable: canUseOnline }
   }
 
   search(query: string, category?: string, limit = 20): DanbooruTag[] {
@@ -255,6 +281,10 @@ class TagService {
     const localResults = this.search(query, category, limit)
 
     if (localResults.length >= limit) return localResults
+
+    // Check network before attempting online supplement
+    const canUseOnline = await checkOnlineAvailability()
+    if (!canUseOnline) return localResults
 
     // Supplement with online results
     try {

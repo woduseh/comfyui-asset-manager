@@ -1,5 +1,9 @@
 import { ofetch, FetchError } from 'ofetch'
-import { DANBOORU_REQUEST_TIMEOUT_MS } from '../../constants'
+import {
+  DANBOORU_REQUEST_TIMEOUT_MS,
+  DANBOORU_PROBE_TIMEOUT_MS,
+  DANBOORU_ONLINE_CACHE_TTL_MS
+} from '../../constants'
 import log from '../../logger'
 
 const DANBOORU_BASE = 'https://danbooru.donmai.us'
@@ -14,8 +18,39 @@ export interface DanbooruApiTag {
 
 const apiCache = new Map<string, DanbooruApiTag | null>()
 
+let onlineAvailable: boolean | null = null
+let onlineCheckedAt = 0
+
 export function clearApiCache(): void {
   apiCache.clear()
+}
+
+export function resetOnlineStatus(): void {
+  onlineAvailable = null
+  onlineCheckedAt = 0
+}
+
+export async function checkOnlineAvailability(): Promise<boolean> {
+  const now = Date.now()
+  if (onlineAvailable !== null && now - onlineCheckedAt < DANBOORU_ONLINE_CACHE_TTL_MS) {
+    return onlineAvailable
+  }
+
+  try {
+    await ofetch(`${DANBOORU_BASE}/tags.json`, {
+      params: { 'search[name]': '1girl', limit: 1 },
+      timeout: DANBOORU_PROBE_TIMEOUT_MS
+    })
+    onlineAvailable = true
+    onlineCheckedAt = now
+    log.info('[Tags] Danbooru API is reachable')
+    return true
+  } catch {
+    onlineAvailable = false
+    onlineCheckedAt = now
+    log.info('[Tags] Danbooru API is unreachable, skipping online lookups')
+    return false
+  }
 }
 
 export async function validateTagOnline(name: string): Promise<DanbooruApiTag | null> {

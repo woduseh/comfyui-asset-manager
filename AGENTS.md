@@ -257,6 +257,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.12.6** — 패키징된 앱에서 Danbooru 태그 DB 로드 실패 수정: process.resourcesPath → app.getAppPath() 경로 해석 변경, MCP 태그 도구 자동 재로드, 에러 메시지 상세화. 오프라인 환경 대응: 네트워크 사전 프로브(2초+60초 캐시), unverified 상태 추가, MCP 응답에 online_available 플래그. 테스트 233개
 **0.12.5** — 대량 배치 성능 최적화: taskDurations O(n²)→O(1) 이동 평균, 배치 모드 DB 디바운스 10초, 이미지 버퍼 이중 복사 제거, JobsView 폴링 10초+디바운스, GalleryView 새로고침 10초, App.vue IPC 리스너 정리. 테스트 229개
 **0.12.4** — Copilot CLI MCP 지원(`~/.copilot/mcp-config.json` 자동 생성), CLI별 개별 상태 표시, 사이드바 접기 시 다이아몬드 아이콘, 터미널 MCP 자동 시작, GitHub Actions Node.js 24 마이그레이션(upload-artifact@v6, download-artifact@v8). 테스트 229개
 **0.12.3** — 모듈 아이템 폼 수정: i18n 충돌로 인한 긍정 프롬프트 필드 미표시 해결, 비-네거티브 모듈 및 변형에서 negative 필드 완전 제거 (UI + 합성 엔진), 갤러리 상세 뷰어 사이드바 좌→우 이동. 테스트 229개

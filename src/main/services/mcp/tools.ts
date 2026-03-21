@@ -457,7 +457,7 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'validate_danbooru_tags',
-    'Validate whether given tags are valid Danbooru tags. Returns validation result for each tag with suggestions for invalid ones. IMPORTANT: Always use this tool to verify your tags before creating module items with prompts.',
+    'Validate whether given tags are valid Danbooru tags. Returns validation result for each tag with suggestions for invalid ones. IMPORTANT: Always use this tool to verify your tags before creating module items with prompts. Local DB has ~6500 popular tags. Tags not found locally are checked via Danbooru API if online_fallback is true. If the API is unreachable, unknown tags are marked as "unverified" (valid=null) instead of invalid.',
     {
       tags: z
         .array(z.string())
@@ -466,19 +466,33 @@ export function registerMcpTools(server: McpServer): void {
         .boolean()
         .optional()
         .default(true)
-        .describe('If true, check Danbooru API for tags not found locally (default: true)')
+        .describe(
+          'If true, check Danbooru API for tags not found locally (default: true). Set to false in offline environments to skip network checks entirely.'
+        )
     },
     async ({ tags, online_fallback }) => {
       if (!tagService.isLoaded()) {
-        return {
-          content: [{ type: 'text', text: 'Tag database not loaded. Please try again later.' }],
-          isError: true
+        tagService.load()
+        if (!tagService.isLoaded()) {
+          const detail = tagService.lastError ? ` (${tagService.lastError})` : ''
+          return {
+            content: [
+              { type: 'text', text: `Tag database not loaded${detail}. Please check the log.` }
+            ],
+            isError: true
+          }
         }
       }
 
-      const results = await tagService.validate(tags, online_fallback)
-      const validCount = results.filter((r) => r.valid).length
-      const invalidCount = results.filter((r) => !r.valid).length
+      const { results, onlineAvailable } = await tagService.validate(tags, online_fallback)
+      const validCount = results.filter((r) => r.valid === true).length
+      const invalidCount = results.filter((r) => r.valid === false).length
+      const unverifiedCount = results.filter((r) => r.valid === null).length
+
+      let summary = `${validCount}/${tags.length} tags valid`
+      if (invalidCount > 0) summary += `, ${invalidCount} invalid`
+      if (unverifiedCount > 0)
+        summary += `, ${unverifiedCount} unverified (not in local DB, online unavailable)`
 
       return {
         content: [
@@ -486,7 +500,9 @@ export function registerMcpTools(server: McpServer): void {
             type: 'text',
             text: JSON.stringify(
               {
-                summary: `${validCount}/${tags.length} tags valid${invalidCount > 0 ? `, ${invalidCount} invalid` : ''}`,
+                summary,
+                online_available: onlineAvailable,
+                local_tag_count: tagService.getTagCount(),
                 results
               },
               null,
@@ -500,7 +516,7 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'search_danbooru_tags',
-    'Search for Danbooru tags matching a query. Use this to find the correct tag name for a concept. Supports wildcard (*) patterns. Results are sorted by popularity (post count).',
+    'Search for Danbooru tags matching a query. Use this to find the correct tag name for a concept. Supports wildcard (*) patterns. Results are sorted by popularity (post count). Searches local DB (~6500 tags) first, supplements with Danbooru API if reachable. Works fully offline with local results only.',
     {
       query: z
         .string()
@@ -513,9 +529,15 @@ export function registerMcpTools(server: McpServer): void {
     },
     async ({ query, category, limit }) => {
       if (!tagService.isLoaded()) {
-        return {
-          content: [{ type: 'text', text: 'Tag database not loaded. Please try again later.' }],
-          isError: true
+        tagService.load()
+        if (!tagService.isLoaded()) {
+          const detail = tagService.lastError ? ` (${tagService.lastError})` : ''
+          return {
+            content: [
+              { type: 'text', text: `Tag database not loaded${detail}. Please check the log.` }
+            ],
+            isError: true
+          }
         }
       }
 
@@ -543,7 +565,7 @@ export function registerMcpTools(server: McpServer): void {
 
   server.tool(
     'get_popular_danbooru_tags',
-    'Get popular Danbooru tags sorted by usage count. Use group_by_semantic=true to get tags organized by category (hair, eyes, clothing, pose, etc.) — very useful when writing character prompts.',
+    'Get popular Danbooru tags sorted by usage count. Use group_by_semantic=true to get tags organized by category (hair, eyes, clothing, pose, etc.) — very useful when writing character prompts. Uses local DB only — works fully offline.',
     {
       category: z
         .enum(['general', 'artist', 'copyright', 'character', 'meta'])
@@ -564,9 +586,15 @@ export function registerMcpTools(server: McpServer): void {
     },
     async ({ category, limit, group_by_semantic }) => {
       if (!tagService.isLoaded()) {
-        return {
-          content: [{ type: 'text', text: 'Tag database not loaded. Please try again later.' }],
-          isError: true
+        tagService.load()
+        if (!tagService.isLoaded()) {
+          const detail = tagService.lastError ? ` (${tagService.lastError})` : ''
+          return {
+            content: [
+              { type: 'text', text: `Tag database not loaded${detail}. Please check the log.` }
+            ],
+            isError: true
+          }
         }
       }
 

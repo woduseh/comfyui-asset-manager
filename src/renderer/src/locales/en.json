@@ -65,7 +65,7 @@
         "description": "LLM CLIs launched in the embedded terminal will automatically connect to MCP tools.",
         "envTitle": "Environment Variables (Auto-injected)",
         "envDescription": "Automatically set when a new shell opens in the terminal.",
-        "setupClaudeCode": "Setup Claude Code",
+        "setupClaudeCode": "Setup CLI Configs",
         "updateConfig": "Update Config",
         "configured": "Configured",
         "remove": "Remove",

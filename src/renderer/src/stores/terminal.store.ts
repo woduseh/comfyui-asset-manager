@@ -18,11 +18,13 @@ export const useTerminalStore = defineStore('terminal', () => {
   })
   const mcpConfigStatus = ref<{
     claudeCode: boolean
+    copilotCli: boolean
     geminiCli: boolean
     codexCli: boolean
     configPath: string
   }>({
     claudeCode: false,
+    copilotCli: false,
     geminiCli: false,
     codexCli: false,
     configPath: ''
@@ -39,6 +41,17 @@ export const useTerminalStore = defineStore('terminal', () => {
     }
     tabs.value.push(tab)
     activeTabId.value = terminalId
+
+    // Auto-start MCP server when first terminal is created
+    if (!mcpStatus.value.isRunning) {
+      await startMcpServer(mcpStatus.value.port)
+      // Persist the enabled state so it auto-starts on next app launch
+      await window.electron.ipcRenderer.invoke('settings:set', {
+        key: 'mcp_enabled',
+        value: 'true'
+      })
+    }
+
     return terminalId
   }
 

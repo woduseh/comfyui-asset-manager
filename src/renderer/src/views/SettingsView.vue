@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard,
@@ -31,6 +31,13 @@ const port = ref(8188)
 const outputDir = ref('')
 const mcpEnabled = ref(false)
 const mcpPort = ref(39464)
+const hasAnyCliConfig = computed(
+  () =>
+    terminalStore.mcpConfigStatus.claudeCode ||
+    terminalStore.mcpConfigStatus.copilotCli ||
+    terminalStore.mcpConfigStatus.geminiCli ||
+    terminalStore.mcpConfigStatus.codexCli
+)
 
 const languageOptions = [
   { label: '한국어', value: 'ko' },
@@ -279,23 +286,27 @@ onMounted(async () => {
           </span>
         </NAlert>
 
-        <!-- CLI Config Status (.mcp.json + .gemini/settings.json) -->
+        <!-- CLI Config Status -->
         <NSpace align="center" :size="8">
           <NButton
             size="small"
-            :type="terminalStore.mcpConfigStatus.claudeCode ? 'default' : 'primary'"
+            :type="hasAnyCliConfig ? 'default' : 'primary'"
             :disabled="!terminalStore.mcpStatus.isRunning"
             @click="handleSetupCli"
           >
             {{
-              terminalStore.mcpConfigStatus.claudeCode
+              hasAnyCliConfig
                 ? t('settings.mcp.cliSetup.updateConfig')
                 : t('settings.mcp.cliSetup.setupClaudeCode')
             }}
           </NButton>
           <NTag v-if="terminalStore.mcpConfigStatus.claudeCode" type="success" size="small" round>
             <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            .mcp.json ✓
+            Claude Code ✓
+          </NTag>
+          <NTag v-if="terminalStore.mcpConfigStatus.copilotCli" type="success" size="small" round>
+            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+            Copilot CLI ✓
           </NTag>
           <NTag v-if="terminalStore.mcpConfigStatus.geminiCli" type="success" size="small" round>
             <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
@@ -306,11 +317,7 @@ onMounted(async () => {
             Codex CLI ✓
           </NTag>
           <NButton
-            v-if="
-              terminalStore.mcpConfigStatus.claudeCode ||
-              terminalStore.mcpConfigStatus.geminiCli ||
-              terminalStore.mcpConfigStatus.codexCli
-            "
+            v-if="hasAnyCliConfig"
             size="tiny"
             quaternary
             type="error"

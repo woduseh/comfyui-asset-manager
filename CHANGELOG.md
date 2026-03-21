@@ -2,6 +2,25 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.4] - 2026-03-21
+
+Copilot CLI MCP 연동 지원, 사이드바 접기 UX 개선, MCP 자동 시작, GitHub Actions Node.js 24 마이그레이션.
+
+### Added
+
+- **사이드바 접기 시 아이콘 표시**: 좌측 네비게이션 바 접기 시 "ComfyUI AM" 텍스트 대신 다이아몬드 로고 아이콘으로 전환 (fade 트랜지션)
+- **터미널 탭 생성 시 MCP 자동 시작**: 터미널 탭을 처음 열 때 MCP 서버가 자동으로 실행되어 별도 수동 시작 불필요
+
+### Fixed
+
+- **Copilot CLI MCP 미연동**: Copilot CLI는 `~/.copilot/mcp-config.json`에서 설정을 읽지만 해당 파일이 생성되지 않던 문제 수정. `type: "http"`, `url`, `tools: ["*"]` 형식으로 자동 생성
+- **GitHub Actions Node.js 20 경고**: `upload-artifact@v4`→`@v6`, `download-artifact@v4`→`@v8`로 업그레이드, `softprops/action-gh-release`에 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` env 적용
+
+### Changed
+
+- **MCP CLI 설정 UI**: 각 CLI별 개별 상태 태그 표시 (Claude Code, Copilot CLI, Gemini CLI, Codex CLI)
+- **설정 버튼 라벨**: "Claude Code 설정" → "CLI 설정 생성"으로 변경 (모든 CLI 대상)
+
 ## [0.12.3] - 2026-03-21
 
 모듈 아이템 추가 폼 버그 수정 + 네거티브 프롬프트 정리.

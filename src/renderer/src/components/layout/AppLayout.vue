@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type Component } from 'vue'
+import { computed, ref, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -21,7 +21,8 @@ import {
   FlashOutline,
   ImagesOutline,
   SettingsOutline,
-  TerminalOutline
+  TerminalOutline,
+  DiamondOutline
 } from '@vicons/ionicons5'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
@@ -34,6 +35,7 @@ const { t } = useI18n()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 const terminalStore = useTerminalStore()
+const sidebarCollapsed = ref(false)
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -108,6 +110,7 @@ async function handleToggleConnection(): Promise<void> {
 <template>
   <NLayout has-sider style="height: 100vh">
     <NLayoutSider
+      v-model:collapsed="sidebarCollapsed"
       bordered
       :width="200"
       :collapsed-width="64"
@@ -116,7 +119,12 @@ async function handleToggleConnection(): Promise<void> {
       content-style="display: flex; flex-direction: column; height: 100%;"
     >
       <div class="app-logo">
-        <span class="logo-text">ComfyUI AM</span>
+        <Transition name="logo-fade" mode="out-in">
+          <NIcon v-if="sidebarCollapsed" :size="24" class="logo-icon">
+            <DiamondOutline />
+          </NIcon>
+          <span v-else class="logo-text">ComfyUI AM</span>
+        </Transition>
       </div>
 
       <NMenu
@@ -194,6 +202,10 @@ async function handleToggleConnection(): Promise<void> {
   font-weight: bold;
   font-size: 17px;
   border-bottom: 1px solid var(--n-border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
 }
 
 .logo-text {
@@ -201,6 +213,21 @@ async function handleToggleConnection(): Promise<void> {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  white-space: nowrap;
+}
+
+.logo-icon {
+  color: #8b5cf6;
+}
+
+.logo-fade-enter-active,
+.logo-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.logo-fade-enter-from,
+.logo-fade-leave-to {
+  opacity: 0;
 }
 
 .status-dot {

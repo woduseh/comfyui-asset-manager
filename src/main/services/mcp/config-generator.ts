@@ -7,7 +7,10 @@ const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`
 
 interface McpJsonConfig {
-  mcpServers: Record<string, { type?: string; url?: string; command?: string; args?: string[] }>
+  mcpServers: Record<
+    string,
+    { type?: string; url?: string; command?: string; args?: string[]; tools?: string[] }
+  >
 }
 
 interface GeminiSettings {
@@ -17,7 +20,7 @@ interface GeminiSettings {
 
 /**
  * Writes or merges our MCP server entry into a `.mcp.json` file
- * (Claude Code, Copilot CLI, and other standard MCP clients).
+ * (Claude Code and other standard MCP clients).
  */
 function writeDotMcpJson(url: string, targetDir?: string): string {
   const dir = targetDir || homedir()
@@ -118,6 +121,41 @@ function writeCodexConfig(url: string): string | null {
 }
 
 /**
+ * Writes our MCP server entry into GitHub Copilot CLI config.
+ * Copilot CLI reads from `~/.copilot/mcp-config.json` with `type: "http"`.
+ */
+function writeCopilotCliConfig(url: string): string | null {
+  const copilotDir = join(homedir(), '.copilot')
+  const filePath = join(copilotDir, 'mcp-config.json')
+
+  try {
+    if (!existsSync(copilotDir)) {
+      return null
+    }
+
+    let config: McpJsonConfig = { mcpServers: {} }
+
+    if (existsSync(filePath)) {
+      try {
+        const raw = readFileSync(filePath, 'utf-8')
+        config = JSON.parse(raw)
+        if (!config.mcpServers) config.mcpServers = {}
+      } catch {
+        // Don't overwrite corrupted config
+        return null
+      }
+    }
+
+    config.mcpServers[MCP_SERVER_NAME] = { type: 'http', url, tools: ['*'] }
+
+    writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8')
+    return filePath
+  } catch {
+    return null
+  }
+}
+
+/**
  * Writes MCP server config for all supported CLIs.
  */
 export function writeMcpJsonConfig(url: string, targetDir?: string): string {
@@ -133,6 +171,12 @@ export function writeMcpJsonConfig(url: string, targetDir?: string): string {
   const codexPath = writeCodexConfig(url)
   if (codexPath) {
     log.info(`[MCP] Codex CLI config written to ${codexPath}`)
+  }
+
+  // Also configure Copilot CLI if installed
+  const copilotPath = writeCopilotCliConfig(url)
+  if (copilotPath) {
+    log.info(`[MCP] Copilot CLI config written to ${copilotPath}`)
   }
 
   return mcpJsonPath
@@ -196,6 +240,22 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
     }
   }
 
+  // Remove from Copilot CLI config
+  const copilotConfigPath = join(homedir(), '.copilot', 'mcp-config.json')
+  if (existsSync(copilotConfigPath)) {
+    try {
+      const raw = readFileSync(copilotConfigPath, 'utf-8')
+      const config: McpJsonConfig = JSON.parse(raw)
+      if (config.mcpServers && config.mcpServers[MCP_SERVER_NAME]) {
+        delete config.mcpServers[MCP_SERVER_NAME]
+        writeFileSync(copilotConfigPath, JSON.stringify(config, null, 2), 'utf-8')
+        removed = true
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   return removed
 }
 
@@ -204,12 +264,14 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
  */
 export function getMcpConfigStatus(): {
   claudeCode: boolean
+  copilotCli: boolean
   geminiCli: boolean
   codexCli: boolean
   configPath: string
 } {
   const configPath = join(homedir(), '.mcp.json')
   let claudeCode = false
+  let copilotCli = false
   let geminiCli = false
   let codexCli = false
 
@@ -218,6 +280,17 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(configPath, 'utf-8')
       const config: McpJsonConfig = JSON.parse(raw)
       claudeCode = !!(config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const copilotConfigPath = join(homedir(), '.copilot', 'mcp-config.json')
+  if (existsSync(copilotConfigPath)) {
+    try {
+      const raw = readFileSync(copilotConfigPath, 'utf-8')
+      const config: McpJsonConfig = JSON.parse(raw)
+      copilotCli = !!(config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
     } catch {
       /* ignore */
     }
@@ -244,5 +317,5 @@ export function getMcpConfigStatus(): {
     }
   }
 
-  return { claudeCode, geminiCli, codexCli, configPath }
+  return { claudeCode, copilotCli, geminiCli, codexCli, configPath }
 }

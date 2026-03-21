@@ -40,3 +40,7 @@ export const WINDOW_DEFAULT_WIDTH = 1400
 export const WINDOW_DEFAULT_HEIGHT = 900
 export const WINDOW_MIN_WIDTH = 1000
 export const WINDOW_MIN_HEIGHT = 700
+
+// === MCP Bulk Operations ===
+export const MAX_BULK_UPDATE_ITEMS = 200
+export const MAX_LIST_ITEMS_LIMIT = 200

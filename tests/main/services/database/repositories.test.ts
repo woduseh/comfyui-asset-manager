@@ -303,6 +303,71 @@ describe('Database Repositories', () => {
       const items = itemRepo.list(moduleId)
       expect(items.map((i) => i.name)).toEqual(['First', 'Second', 'Third'])
     })
+
+    it('gets a single item by id', () => {
+      const id = itemRepo.create({ module_id: moduleId, name: 'Test', prompt: 'p' })
+      const item = itemRepo.get(id)
+      expect(item).not.toBeNull()
+      expect(item!.name).toBe('Test')
+      expect(item!.prompt).toBe('p')
+    })
+
+    it('returns null for non-existent item', () => {
+      expect(itemRepo.get('non-existent')).toBeNull()
+    })
+
+    it('counts items in a module', () => {
+      expect(itemRepo.count(moduleId)).toBe(0)
+      itemRepo.create({ module_id: moduleId, name: 'A', prompt: 'a' })
+      itemRepo.create({ module_id: moduleId, name: 'B', prompt: 'b' })
+      expect(itemRepo.count(moduleId)).toBe(2)
+    })
+
+    it('lists items with pagination', () => {
+      for (let i = 0; i < 5; i++) {
+        itemRepo.create({ module_id: moduleId, name: `Item${i}`, prompt: `p${i}`, sort_order: i })
+      }
+      const page1 = itemRepo.list(moduleId, { limit: 2, offset: 0 })
+      expect(page1).toHaveLength(2)
+      expect(page1[0].name).toBe('Item0')
+
+      const page2 = itemRepo.list(moduleId, { limit: 2, offset: 2 })
+      expect(page2).toHaveLength(2)
+      expect(page2[0].name).toBe('Item2')
+
+      const page3 = itemRepo.list(moduleId, { limit: 2, offset: 4 })
+      expect(page3).toHaveLength(1)
+    })
+
+    it('bulk updates multiple items', () => {
+      const id1 = itemRepo.create({ module_id: moduleId, name: 'A', prompt: 'old1' })
+      const id2 = itemRepo.create({ module_id: moduleId, name: 'B', prompt: 'old2' })
+      const result = itemRepo.bulkUpdate([
+        { id: id1, data: { prompt: 'new1', weight: 2.0 } },
+        { id: id2, data: { prompt: 'new2' } }
+      ])
+      expect(result.succeeded).toBe(2)
+      expect(result.failed).toBe(0)
+
+      const item1 = itemRepo.get(id1)!
+      expect(item1.prompt).toBe('new1')
+      expect(item1.weight).toBe(2.0)
+      expect(itemRepo.get(id2)!.prompt).toBe('new2')
+    })
+
+    it('bulk update skips items with no valid fields', () => {
+      const id = itemRepo.create({ module_id: moduleId, name: 'A', prompt: 'p' })
+      const result = itemRepo.bulkUpdate([{ id, data: { invalid_field: 'x' } }])
+      expect(result.succeeded).toBe(0)
+      expect(result.failed).toBe(1)
+      expect(result.errors[0].error).toContain('No valid fields')
+    })
+
+    it('bulk update returns empty result for empty array', () => {
+      const result = itemRepo.bulkUpdate([])
+      expect(result.succeeded).toBe(0)
+      expect(result.failed).toBe(0)
+    })
   })
 
   describe('CharacterRepository', () => {

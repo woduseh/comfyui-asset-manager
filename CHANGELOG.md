@@ -2,6 +2,24 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.13.0] - 2026-03-21
+
+MCP 일괄 작업 도구 추가. LLM이 모듈 아이템을 효율적으로 관리할 수 있는 고수준 도구 6개 신규/개선.
+
+### Added
+
+- **`bulk_update_module_items` MCP 도구**: 최대 200개 아이템 일괄 업데이트. 트랜잭션 기반 (BEGIN/COMMIT), 부분 실패 보고
+- **`replace_tag_in_module` MCP 도구**: 모듈 전체 아이템의 Danbooru 태그 일괄 치환/삭제. 정확한 태그 경계 매칭, `dry_run` 미리보기 지원, prompt_variants 포함
+- **`validate_module_tags` MCP 도구**: 모듈 단위 태그 추출→중복 제거→검증→수정 제안 원스톱. 문제 있는 아이템만 issues로 보고
+- **`search_module_items` MCP 도구**: 모듈 내 아이템 텍스트 검색 (이름/프롬프트/네거티브/변형, 대소문자 무시)
+- **`get_module_item` MCP 도구**: 단일 아이템 ID로 상세 조회 (prompt_variants 파싱 포함)
+- **태그 유틸리티**: `replaceTagInPrompt()`, `extractTagsFromPrompt()` — 정확한 태그 경계 매칭, 가중치 구문 보존
+
+### Changed
+
+- **`list_module_items` MCP 도구 개선**: `limit`/`offset` 페이지네이션 파라미터 추가, 응답에 `total`/`has_more` 포함
+- **`ModuleItemRepository` 확장**: `bulkUpdate()` (트랜잭션), `get()`, `count()`, `list()` 페이지네이션 지원
+
 ## [0.12.7] - 2026-03-21
 
 터미널 탭 전환 시 입력 깨짐 수정.

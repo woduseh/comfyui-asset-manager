@@ -1,5 +1,6 @@
 import { getDatabase, saveDatabase } from '../index'
 import { v4 as uuidv4 } from 'uuid'
+import log from '../../../logger'
 
 // Allowed field names for dynamic update queries (SQL injection prevention)
 const ALLOWED_UPDATE_FIELDS = {
@@ -285,18 +286,48 @@ export class ModuleRepository {
 }
 
 export class ModuleItemRepository {
-  list(moduleId: string): Record<string, unknown>[] {
+  list(moduleId: string, options?: { limit?: number; offset?: number }): Record<string, unknown>[] {
     const db = getDatabase()
-    const stmt = db.prepare(
-      'SELECT * FROM module_items WHERE module_id = ? ORDER BY sort_order ASC'
-    )
-    stmt.bind([moduleId])
+    let sql = 'SELECT * FROM module_items WHERE module_id = ? ORDER BY sort_order ASC'
+    const params: (string | number)[] = [moduleId]
+
+    if (options?.limit !== undefined) {
+      sql += ' LIMIT ?'
+      params.push(options.limit)
+      if (options?.offset !== undefined) {
+        sql += ' OFFSET ?'
+        params.push(options.offset)
+      }
+    }
+
+    const stmt = db.prepare(sql)
+    stmt.bind(params)
     const results: Record<string, unknown>[] = []
     while (stmt.step()) {
       results.push(stmt.getAsObject())
     }
     stmt.free()
     return results
+  }
+
+  count(moduleId: string): number {
+    const db = getDatabase()
+    const stmt = db.prepare('SELECT COUNT(*) as count FROM module_items WHERE module_id = ?')
+    stmt.bind([moduleId])
+    stmt.step()
+    const result = stmt.getAsObject() as { count: number }
+    stmt.free()
+    return result.count
+  }
+
+  get(id: string): Record<string, unknown> | null {
+    const db = getDatabase()
+    const stmt = db.prepare('SELECT * FROM module_items WHERE id = ?')
+    stmt.bind([id])
+    const found = stmt.step()
+    const result = found ? stmt.getAsObject() : null
+    stmt.free()
+    return result
   }
 
   create(data: {
@@ -353,6 +384,48 @@ export class ModuleItemRepository {
       db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
     }
     saveDatabase()
+  }
+
+  bulkUpdate(updates: Array<{ id: string; data: Partial<Record<string, unknown>> }>): {
+    succeeded: number
+    failed: number
+    errors: Array<{ id: string; error: string }>
+  } {
+    const db = getDatabase()
+    const errors: Array<{ id: string; error: string }> = []
+    let succeeded = 0
+
+    db.run('BEGIN TRANSACTION')
+    try {
+      for (const update of updates) {
+        try {
+          const sanitized = sanitizeUpdateFields(update.data, ALLOWED_UPDATE_FIELDS.module_items)
+          const fields = Object.keys(sanitized)
+          if (fields.length === 0) {
+            errors.push({ id: update.id, error: 'No valid fields to update' })
+            continue
+          }
+          const setClauses = fields.map((f) => `${f} = ?`).join(', ')
+          const values = fields.map((f) => sanitized[f])
+          db.run(`UPDATE module_items SET ${setClauses} WHERE id = ?`, [
+            ...(values as string[]),
+            update.id
+          ])
+          succeeded++
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          errors.push({ id: update.id, error: msg })
+          log.warn(`bulkUpdate failed for item ${update.id}: ${msg}`)
+        }
+      }
+      db.run('COMMIT')
+      saveDatabase()
+    } catch (e) {
+      db.run('ROLLBACK')
+      throw e
+    }
+
+    return { succeeded, failed: errors.length, errors }
   }
 }
 

@@ -2,6 +2,20 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.14.0] - 2026-03-21
+
+MCP 대량 생성/가져오기/복제/통계 도구 4개 추가. 파일에서 프롬프트 일괄 등록, 모듈 복제, 모듈 요약 통계 지원.
+
+### Added
+
+- **`bulk_create_module_items` MCP 도구**: 최대 200개 아이템 일괄 생성. 트랜잭션 기반, 생성된 ID 배열 반환
+- **`import_module_items_from_file` MCP 도구**: JSON/CSV/Markdown 파일에서 아이템 파싱→일괄 등록. 포맷 자동 감지, `dry_run` 미리보기, 1MB 크기 제한
+- **`duplicate_module` MCP 도구**: 모듈과 전체 아이템을 새 이름으로 원자적 복제
+- **`get_module_stats` MCP 도구**: 모듈별 아이템 수/활성/비활성/변형 여부/평균 프롬프트 길이 요약 통계
+- **파일 파서 유틸리티** (`src/main/services/mcp/file-parser.ts`): JSON 배열, CSV (RFC 4180 호환), Markdown (## 헤더 = 이름) 3가지 포맷 지원
+- **`ModuleItemRepository.bulkCreate()`**: 트랜잭션 기반 일괄 INSERT, 자동 sort_order, 부분 실패 보고
+- **`ModuleRepository.duplicate()`**: 모듈 + 전체 아이템 트랜잭션 복사
+
 ## [0.13.0] - 2026-03-21
 
 MCP 일괄 작업 도구 추가. LLM이 모듈 아이템을 효율적으로 관리할 수 있는 고수준 도구 6개 신규/개선.

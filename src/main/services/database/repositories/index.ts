@@ -283,6 +283,69 @@ export class ModuleRepository {
     db.run('DELETE FROM prompt_modules WHERE id = ?', [id])
     saveDatabase()
   }
+
+  duplicate(
+    sourceId: string,
+    newName: string
+  ): { newModuleId: string; itemsCopied: number } | null {
+    const db = getDatabase()
+    const source = this.get(sourceId)
+    if (!source) return null
+
+    const newModuleId = uuidv4()
+
+    db.run('BEGIN TRANSACTION')
+    try {
+      db.run(
+        `INSERT INTO prompt_modules (id, name, type, description, parent_id)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          newModuleId,
+          newName,
+          source.type as string,
+          source.description as string,
+          source.parent_id as string | null
+        ]
+      )
+
+      // Copy all items from source module
+      const stmt = db.prepare(
+        'SELECT * FROM module_items WHERE module_id = ? ORDER BY sort_order ASC'
+      )
+      stmt.bind([sourceId])
+      const sourceItems: Record<string, unknown>[] = []
+      while (stmt.step()) {
+        sourceItems.push(stmt.getAsObject())
+      }
+      stmt.free()
+
+      for (const item of sourceItems) {
+        const newItemId = uuidv4()
+        db.run(
+          `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            newItemId,
+            newModuleId,
+            item.name as string,
+            item.prompt as string,
+            (item.negative as string) || '',
+            (item.weight as number) ?? 1.0,
+            (item.sort_order as number) ?? 0,
+            (item.metadata as string) || '{}',
+            (item.prompt_variants as string) || '{}'
+          ]
+        )
+      }
+
+      db.run('COMMIT')
+      saveDatabase()
+      return { newModuleId, itemsCopied: sourceItems.length }
+    } catch (e) {
+      db.run('ROLLBACK')
+      throw e
+    }
+  }
 }
 
 export class ModuleItemRepository {
@@ -426,6 +489,68 @@ export class ModuleItemRepository {
     }
 
     return { succeeded, failed: errors.length, errors }
+  }
+
+  bulkCreate(
+    items: Array<{
+      module_id: string
+      name: string
+      prompt: string
+      negative?: string
+      weight?: number
+      sort_order?: number
+      metadata?: string
+      prompt_variants?: string
+    }>
+  ): {
+    ids: string[]
+    succeeded: number
+    failed: number
+    errors: Array<{ index: number; error: string }>
+  } {
+    const db = getDatabase()
+    const ids: string[] = []
+    const errors: Array<{ index: number; error: string }> = []
+    let succeeded = 0
+
+    db.run('BEGIN TRANSACTION')
+    try {
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const item = items[i]
+          const id = uuidv4()
+          db.run(
+            `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              id,
+              item.module_id,
+              item.name,
+              item.prompt,
+              item.negative || '',
+              item.weight ?? 1.0,
+              item.sort_order ?? i,
+              item.metadata || '{}',
+              item.prompt_variants || '{}'
+            ]
+          )
+          ids.push(id)
+          succeeded++
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          errors.push({ index: i, error: msg })
+          ids.push('')
+          log.warn(`bulkCreate failed for item at index ${i}: ${msg}`)
+        }
+      }
+      db.run('COMMIT')
+      saveDatabase()
+    } catch (e) {
+      db.run('ROLLBACK')
+      throw e
+    }
+
+    return { ids, succeeded, failed: errors.length, errors }
   }
 }
 

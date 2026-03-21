@@ -149,7 +149,8 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 - `src/main/services/mcp/` — MCP 서버 서비스
   - `index.ts`: 서버 매니저 (Streamable HTTP, 포트 설정, 시작/중지)
-  - `tools.ts`: 24개 도구 + 1개 프롬프트 정의 (모듈 CRUD, 아이템 CRUD + 일괄 작업, 워크플로우, 배치, 태그 검증/검색/인기/치환)
+  - `tools.ts`: 27개 도구 + 1개 프롬프트 정의 (모듈 CRUD/복제/통계, 아이템 CRUD + 일괄 생성/업데이트/파일 가져오기, 워크플로우, 배치, 태그 검증/검색/인기/치환)
+  - `file-parser.ts`: 파일 파서 (JSON/CSV/Markdown → 모듈 아이템 변환)
   - `../tags/utils.ts`: 태그 유틸리티 (replaceTagInPrompt, extractTagsFromPrompt)
   - `config-generator.ts`: 멀티 CLI 설정 자동 생성 (`~/.copilot/mcp-config.json`, `.mcp.json`, Gemini, Codex)
 - 기존 Repository 클래스를 직접 호출하므로 IPC를 거치지 않음
@@ -258,6 +259,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.14.0** — MCP 대량 생성/가져오기/복제/통계: bulk_create_module_items(최대 200개 트랜잭션 생성), import_module_items_from_file(JSON/CSV/MD 파일 파싱→등록, dry_run), duplicate_module(모듈+아이템 원자적 복제), get_module_stats(모듈 요약 통계). 파일 파서 유틸리티. 테스트 281개
 **0.13.0** — MCP 일괄 작업 도구: bulk_update_module_items(최대 200개 트랜잭션 업데이트), replace_tag_in_module(태그 일괄 치환, dry_run), validate_module_tags(모듈 단위 태그 검증), search_module_items(텍스트 검색), get_module_item(단일 조회), list_module_items 페이지네이션. 태그 유틸리티(replaceTagInPrompt, extractTagsFromPrompt). 테스트 257개
 **0.12.7** — 터미널 탭 전환 시 입력 깨짐 수정: display:none→visibility:hidden으로 xterm.js 캔버스 크기 유지, 초기 마운트 시 PTY resize IPC 전송, nextTick+rAF 조합으로 fit() 타이밍 안정화, ResizeObserver 비활성 탭 감지. 테스트 233개
 **0.12.6** — 패키징된 앱에서 Danbooru 태그 DB 로드 실패 수정: process.resourcesPath → app.getAppPath() 경로 해석 변경, MCP 태그 도구 자동 재로드, 에러 메시지 상세화. 오프라인 환경 대응: 네트워크 사전 프로브(2초+60초 캐시), unverified 상태 추가, MCP 응답에 online_available 플래그. 테스트 233개

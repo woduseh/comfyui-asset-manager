@@ -44,3 +44,4 @@ export const WINDOW_MIN_HEIGHT = 700
 // === MCP Bulk Operations ===
 export const MAX_BULK_UPDATE_ITEMS = 200
 export const MAX_LIST_ITEMS_LIMIT = 200
+export const MAX_IMPORT_FILE_SIZE_BYTES = 1_048_576 // 1MB

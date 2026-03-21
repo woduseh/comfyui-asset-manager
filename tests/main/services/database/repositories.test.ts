@@ -368,6 +368,104 @@ describe('Database Repositories', () => {
       expect(result.succeeded).toBe(0)
       expect(result.failed).toBe(0)
     })
+
+    it('bulk creates multiple items in a transaction', () => {
+      const result = itemRepo.bulkCreate([
+        { module_id: moduleId, name: 'A', prompt: 'prompt_a' },
+        { module_id: moduleId, name: 'B', prompt: 'prompt_b', negative: 'neg_b' },
+        { module_id: moduleId, name: 'C', prompt: 'prompt_c', weight: 1.5 }
+      ])
+      expect(result.succeeded).toBe(3)
+      expect(result.failed).toBe(0)
+      expect(result.ids).toHaveLength(3)
+      expect(result.ids.every((id) => id.length > 0)).toBe(true)
+      expect(itemRepo.count(moduleId)).toBe(3)
+    })
+
+    it('bulk create assigns sequential sort_order by default', () => {
+      const result = itemRepo.bulkCreate([
+        { module_id: moduleId, name: 'First', prompt: 'p1' },
+        { module_id: moduleId, name: 'Second', prompt: 'p2' },
+        { module_id: moduleId, name: 'Third', prompt: 'p3' }
+      ])
+      const items = itemRepo.list(moduleId)
+      expect(items[0].sort_order).toBe(0)
+      expect(items[1].sort_order).toBe(1)
+      expect(items[2].sort_order).toBe(2)
+      expect(result.ids).toHaveLength(3)
+    })
+
+    it('bulk create handles prompt_variants', () => {
+      const variants = JSON.stringify({
+        tags: { prompt: 'tag_prompt', negative: 'tag_neg' }
+      })
+      const result = itemRepo.bulkCreate([
+        { module_id: moduleId, name: 'V', prompt: 'base', prompt_variants: variants }
+      ])
+      expect(result.succeeded).toBe(1)
+      const item = itemRepo.get(result.ids[0])
+      expect(item!.prompt_variants).toBe(variants)
+    })
+
+    it('bulk create returns empty result for empty array', () => {
+      const result = itemRepo.bulkCreate([])
+      expect(result.succeeded).toBe(0)
+      expect(result.failed).toBe(0)
+      expect(result.ids).toHaveLength(0)
+    })
+  })
+
+  describe('ModuleRepository duplicate', () => {
+    let repo: ModuleRepository
+    let itemRepo: ModuleItemRepository
+
+    beforeEach(() => {
+      repo = new ModuleRepository()
+      itemRepo = new ModuleItemRepository()
+    })
+
+    it('duplicates a module with all items', () => {
+      const sourceId = repo.create({ name: 'Source', type: 'character', description: 'desc' })
+      itemRepo.create({ module_id: sourceId, name: 'Item1', prompt: 'p1', negative: 'n1' })
+      itemRepo.create({
+        module_id: sourceId,
+        name: 'Item2',
+        prompt: 'p2',
+        prompt_variants: '{"tags":{"prompt":"tp","negative":"tn"}}'
+      })
+
+      const result = repo.duplicate(sourceId, 'Copy of Source')
+      expect(result).not.toBeNull()
+      expect(result!.itemsCopied).toBe(2)
+
+      const newMod = repo.get(result!.newModuleId)
+      expect(newMod).not.toBeNull()
+      expect(newMod!.name).toBe('Copy of Source')
+      expect(newMod!.type).toBe('character')
+      expect(newMod!.description).toBe('desc')
+
+      const newItems = itemRepo.list(result!.newModuleId)
+      expect(newItems).toHaveLength(2)
+      expect(newItems[0].name).toBe('Item1')
+      expect(newItems[0].prompt).toBe('p1')
+      expect(newItems[1].prompt_variants).toBe('{"tags":{"prompt":"tp","negative":"tn"}}')
+
+      // Ensure original is unchanged
+      expect(itemRepo.list(sourceId)).toHaveLength(2)
+    })
+
+    it('returns null for non-existent source', () => {
+      const result = repo.duplicate('non-existent', 'Copy')
+      expect(result).toBeNull()
+    })
+
+    it('duplicates an empty module', () => {
+      const sourceId = repo.create({ name: 'Empty', type: 'emotion' })
+      const result = repo.duplicate(sourceId, 'Copy of Empty')
+      expect(result).not.toBeNull()
+      expect(result!.itemsCopied).toBe(0)
+      expect(itemRepo.list(result!.newModuleId)).toHaveLength(0)
+    })
   })
 
   describe('CharacterRepository', () => {

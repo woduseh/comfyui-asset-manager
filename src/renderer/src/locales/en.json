@@ -364,6 +364,7 @@
     "favoriteOn": "♥ Favorite",
     "favoriteOff": "♡ Favorite",
     "resetFilters": "Reset Filters",
+    "searchPlaceholder": "Search by filename",
     "selectionModeOff": "Deselect",
     "selectionModeOn": "Selection Mode",
     "selectAll": "Select All",

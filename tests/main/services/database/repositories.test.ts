@@ -784,5 +784,35 @@ describe('Database Repositories', () => {
       const ratings = result.items.map((i) => i.rating)
       expect(ratings).toEqual([5, 3, 1])
     })
+
+    it('filters by searchText (filename match)', () => {
+      repo.create({ file_path: '/output/alice_001.png' })
+      repo.create({ file_path: '/output/bob_002.png' })
+      repo.create({ file_path: '/output/alice_003.png' })
+
+      const result = repo.list({ page: 1, pageSize: 50, searchText: 'alice' })
+      expect(result.total).toBe(2)
+      expect(result.items).toHaveLength(2)
+    })
+
+    it('returns no results for non-matching searchText', () => {
+      repo.create({ file_path: '/output/test.png' })
+      const result = repo.list({ page: 1, pageSize: 50, searchText: 'nonexistent' })
+      expect(result.total).toBe(0)
+    })
+
+    it('combines searchText with other filters', () => {
+      repo.create({ file_path: '/output/alice_001.png', character_name: 'Alice' })
+      repo.create({ file_path: '/output/alice_002.png', character_name: 'Bob' })
+      repo.create({ file_path: '/output/bob_001.png', character_name: 'Alice' })
+
+      const result = repo.list({
+        page: 1,
+        pageSize: 50,
+        searchText: 'alice',
+        characterName: 'Alice'
+      })
+      expect(result.total).toBe(1)
+    })
   })
 })

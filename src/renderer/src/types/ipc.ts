@@ -263,6 +263,7 @@ export interface MatrixSelection {
 export interface GalleryQuery {
   page: number
   pageSize: number
+  searchText?: string
   characterName?: string
   outfitName?: string
   emotionName?: string

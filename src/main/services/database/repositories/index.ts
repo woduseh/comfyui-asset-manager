@@ -893,6 +893,7 @@ export class GeneratedImageRepository {
   list(query: {
     page: number
     pageSize: number
+    searchText?: string
     characterName?: string
     outfitName?: string
     emotionName?: string
@@ -907,6 +908,10 @@ export class GeneratedImageRepository {
     let whereClause = 'WHERE 1=1'
     const params: unknown[] = []
 
+    if (query.searchText) {
+      whereClause += ' AND file_path LIKE ?'
+      params.push(`%${query.searchText}%`)
+    }
     if (query.characterName) {
       whereClause += ' AND character_name = ?'
       params.push(query.characterName)

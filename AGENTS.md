@@ -116,7 +116,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 12개 파일, 302개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 12개 파일, 305개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -259,6 +259,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.1** — 갤러리 파일명 검색: 필터 바에 검색 입력창 추가, 300ms 디바운스, file_path LIKE 매칭. 테스트 305개
 **0.15.0** — MCP 내보내기/비교/동기화 도구: export_module_items_to_file(JSON/CSV/MD 파일 내보내기), diff_module_with_file(이름 기반 매칭+태그 단위 diff), sync_module_from_file(upsert 동기화, delete_missing, dry_run). 파일 직렬화 유틸리티, 비교 엔진. list_modules에 item_count 포함. 테스트 302개
 **0.14.0** — MCP 대량 생성/가져오기/복제/통계: bulk_create_module_items(최대 200개 트랜잭션 생성), import_module_items_from_file(JSON/CSV/MD 파일 파싱→등록, dry_run), duplicate_module(모듈+아이템 원자적 복제), get_module_stats(모듈 요약 통계). 파일 파서 유틸리티. 테스트 281개
 **0.13.0** — MCP 일괄 작업 도구: bulk_update_module_items(최대 200개 트랜잭션 업데이트), replace_tag_in_module(태그 일괄 치환, dry_run), validate_module_tags(모듈 단위 태그 검증), search_module_items(텍스트 검색), get_module_item(단일 조회), list_module_items 페이지네이션. 태그 유틸리티(replaceTagInPrompt, extractTagsFromPrompt). 테스트 257개

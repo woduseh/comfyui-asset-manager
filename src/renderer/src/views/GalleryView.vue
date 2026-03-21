@@ -12,6 +12,7 @@ import {
   NButton,
   NTag,
   NSelect,
+  NInput,
   NPagination,
   NModal,
   NCheckbox,
@@ -33,6 +34,7 @@ const galleryStore = useGalleryStore()
 const queueStore = useQueueStore()
 
 // Filters
+const searchText = ref('')
 const filterCharacter = ref<string | null>(null)
 const filterOutfit = ref<string | null>(null)
 const filterEmotion = ref<string | null>(null)
@@ -104,6 +106,7 @@ const totalPages = computed(() => Math.ceil(galleryStore.total / galleryStore.pa
 // Apply filters
 function applyFilters(): void {
   galleryStore.setFilters({
+    searchText: searchText.value || undefined,
     characterName: filterCharacter.value || undefined,
     outfitName: filterOutfit.value || undefined,
     emotionName: filterEmotion.value || undefined,
@@ -115,6 +118,14 @@ function applyFilters(): void {
   galleryStore.loadImages()
 }
 
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const SEARCH_DEBOUNCE_MS = 300
+
+function handleSearchInput(): void {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => applyFilters(), SEARCH_DEBOUNCE_MS)
+}
+
 function handleSortChange(val: string): void {
   const [field, order] = val.split(':')
   sortBy.value = field as 'created_at' | 'rating' | 'file_size'
@@ -123,6 +134,7 @@ function handleSortChange(val: string): void {
 }
 
 function clearFilters(): void {
+  searchText.value = ''
   filterCharacter.value = null
   filterOutfit.value = null
   filterEmotion.value = null
@@ -270,6 +282,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   window.removeEventListener('keydown', handleKeydown)
 })
 </script>
@@ -295,6 +308,15 @@ onUnmounted(() => {
     <!-- Filter bar -->
     <NCard size="small" style="margin-bottom: 16px">
       <NSpace align="center" :wrap="false" :size="12">
+        <NInput
+          v-model:value="searchText"
+          size="small"
+          clearable
+          :placeholder="t('gallery.searchPlaceholder')"
+          style="width: 200px"
+          @update:value="handleSearchInput"
+          @clear="applyFilters"
+        />
         <NSelect
           :value="sortBy + ':' + sortOrder"
           :options="sortOptions"
@@ -321,7 +343,7 @@ onUnmounted(() => {
           {{ filterFavorite ? t('gallery.favoriteOn') : t('gallery.favoriteOff') }}
         </NButton>
         <NButton
-          v-if="filterRating || filterFavorite"
+          v-if="searchText || filterRating || filterFavorite"
           size="small"
           quaternary
           @click="clearFilters"

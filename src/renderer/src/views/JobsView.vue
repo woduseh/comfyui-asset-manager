@@ -39,6 +39,7 @@ import {
   restoreSlotMappings,
   restoreVariableOverrides
 } from '@renderer/composables/useBatchWizard'
+import { JOBS_REFRESH_INTERVAL_MS } from '@renderer/constants'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -511,20 +512,25 @@ onMounted(() => {
       await loadBatchJobs()
       await loadQueueStatus()
     }
-  }, 3000)
+  }, JOBS_REFRESH_INTERVAL_MS)
 })
 
-// Auto-refresh job list when queueStore detects job completion
+// Refresh job list on job completion/addition (not on every task completion)
+let jobRefreshTimer: ReturnType<typeof setTimeout> | null = null
 watch(
   () => queueStore.activeJobs.length,
   () => {
-    loadBatchJobs()
-    loadQueueStatus()
+    if (jobRefreshTimer) clearTimeout(jobRefreshTimer)
+    jobRefreshTimer = setTimeout(() => {
+      loadBatchJobs()
+      loadQueueStatus()
+    }, 1000)
   }
 )
 
 onUnmounted(() => {
   if (refreshInterval) clearInterval(refreshInterval)
+  if (jobRefreshTimer) clearTimeout(jobRefreshTimer)
 })
 </script>
 

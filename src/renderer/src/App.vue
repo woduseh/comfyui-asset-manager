@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, lightTheme } from 'naive-ui'
 import type { GlobalTheme } from 'naive-ui'
@@ -15,48 +15,54 @@ const queueStore = useQueueStore()
 const { locale } = useI18n()
 const theme = ref<GlobalTheme | null>(darkTheme)
 
+// Named handlers for proper cleanup
+const onConnectionChanged = (_event: unknown, connected: boolean): void => {
+  connectionStore.setConnectionChanged(connected)
+}
+
+const onQueueProgress = (_event: unknown, data: QueueProgress): void => {
+  queueStore.updateProgress(data)
+}
+
+const onTaskCompleted = (
+  _event: unknown,
+  data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }
+): void => {
+  queueStore.onTaskCompleted(data)
+}
+
+const onTaskFailed = (_event: unknown, data: { jobId: string; etaMs?: number }): void => {
+  queueStore.onTaskFailed(data)
+}
+
+const onJobCompleted = (_event: unknown, data: { jobId: string }): void => {
+  queueStore.onJobCompleted(data.jobId)
+}
+
 onMounted(async () => {
   await settingsStore.loadSettings()
   locale.value = settingsStore.settings.language || 'ko'
   updateTheme(settingsStore.settings.theme)
 
   // Listen for main→renderer events
-  window.electron.ipcRenderer.on(
-    'comfyui:connection-changed',
-    (_event: unknown, connected: boolean) => {
-      connectionStore.setConnectionChanged(connected)
-    }
-  )
-
-  window.electron.ipcRenderer.on('queue:progress', (_event: unknown, data: QueueProgress) => {
-    queueStore.updateProgress(data)
-  })
-
-  window.electron.ipcRenderer.on(
-    'queue:task-completed',
-    (_event: unknown, data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }) => {
-      queueStore.onTaskCompleted(data)
-    }
-  )
-
-  window.electron.ipcRenderer.on(
-    'queue:task-failed',
-    (_event: unknown, data: { jobId: string; etaMs?: number }) => {
-      queueStore.onTaskFailed(data)
-    }
-  )
-
-  window.electron.ipcRenderer.on(
-    'queue:job-completed',
-    (_event: unknown, data: { jobId: string }) => {
-      queueStore.onJobCompleted(data.jobId)
-    }
-  )
+  window.electron.ipcRenderer.on('comfyui:connection-changed', onConnectionChanged)
+  window.electron.ipcRenderer.on('queue:progress', onQueueProgress)
+  window.electron.ipcRenderer.on('queue:task-completed', onTaskCompleted)
+  window.electron.ipcRenderer.on('queue:task-failed', onTaskFailed)
+  window.electron.ipcRenderer.on('queue:job-completed', onJobCompleted)
 
   // Auto-connect on startup if previously connected
   const host = settingsStore.settings.comfyui_host || 'localhost'
   const port = parseInt(settingsStore.settings.comfyui_port) || 8188
   connectionStore.connect(host, port).catch(() => {})
+})
+
+onUnmounted(() => {
+  window.electron.ipcRenderer.removeListener('comfyui:connection-changed', onConnectionChanged)
+  window.electron.ipcRenderer.removeListener('queue:progress', onQueueProgress)
+  window.electron.ipcRenderer.removeListener('queue:task-completed', onTaskCompleted)
+  window.electron.ipcRenderer.removeListener('queue:task-failed', onTaskFailed)
+  window.electron.ipcRenderer.removeListener('queue:job-completed', onJobCompleted)
 })
 
 watch(

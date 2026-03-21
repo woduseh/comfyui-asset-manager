@@ -16,6 +16,7 @@ import {
   WorkflowRepository,
   SettingsRepository
 } from '../database/repositories'
+import { setBatchMode } from '../database'
 import { IPC_CHANNELS } from '../../ipc/channels'
 import log from '../../logger'
 import {
@@ -23,7 +24,9 @@ import {
   PAUSE_CHECK_INTERVAL_MS,
   TASK_EXECUTION_TIMEOUT_MS,
   COMPLETION_POLL_INTERVAL_MS,
-  MAX_DUPLICATE_FILE_SUFFIX
+  MAX_DUPLICATE_FILE_SUFFIX,
+  MAX_DURATION_SAMPLES,
+  CLEAR_PROMPT_DATA_CHUNK_INTERVAL
 } from '../../constants'
 import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
 import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
@@ -93,6 +96,7 @@ class QueueManager {
     this._isPaused = false
     this._isCancelled = false
     this._currentJobId = jobId
+    setBatchMode(true)
     this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, true)
 
     // Load retry setting
@@ -109,6 +113,7 @@ class QueueManager {
     } finally {
       this._isProcessing = false
       this._currentJobId = null
+      setBatchMode(false)
       this.sendStatusToRenderer()
     }
   }
@@ -194,9 +199,10 @@ class QueueManager {
     let failedCount = (job.failed_tasks as number) || 0
     const totalTasks = (job.total_tasks as number) || 0
 
-    // ETA tracking
+    // ETA tracking — limited to moving average window to avoid O(n²) accumulation
     const taskDurations: number[] = []
     const CHUNK_SIZE = TASK_CHUNK_SIZE
+    let chunksSinceLastClear = 0
 
     // Determine execution mode: lazy (has snapshot) or legacy (pre-created tasks)
     const hasSnapshot = !!job.module_data_snapshot
@@ -251,7 +257,7 @@ class QueueManager {
               outputRoot
             )
             completedCount++
-            taskDurations.push(Date.now() - taskStartTime)
+            this.pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
             this.sendTaskCompletedEvent(jobId, taskId, completedCount, totalTasks, taskDurations)
@@ -271,7 +277,7 @@ class QueueManager {
                   outputRoot
                 )
                 completedCount++
-                taskDurations.push(Date.now() - retryStartTime)
+                this.pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
                 failedCount++
                 batchTaskRepo.updateStatus(taskId, 'failed', {
@@ -310,7 +316,11 @@ class QueueManager {
         if (this._isCancelled) break
 
         // Periodically clear prompt_data from completed tasks to free DB space
-        batchTaskRepo.clearPromptDataForCompleted(jobId)
+        chunksSinceLastClear++
+        if (chunksSinceLastClear >= CLEAR_PROMPT_DATA_CHUNK_INTERVAL) {
+          batchTaskRepo.clearPromptDataForCompleted(jobId)
+          chunksSinceLastClear = 0
+        }
       }
     } else {
       // Legacy mode: process pre-created tasks from DB
@@ -336,7 +346,7 @@ class QueueManager {
               outputRoot
             )
             completedCount++
-            taskDurations.push(Date.now() - taskStartTime)
+            this.pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
             this.sendTaskCompletedEvent(
@@ -362,7 +372,7 @@ class QueueManager {
                   outputRoot
                 )
                 completedCount++
-                taskDurations.push(Date.now() - retryStartTime)
+                this.pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
                 failedCount++
                 batchTaskRepo.updateStatus(task.id as string, 'failed', {
@@ -404,6 +414,13 @@ class QueueManager {
     if (!this._isCancelled) {
       batchJobRepo.updateStatus(jobId, 'completed')
       this.sendToRenderer(IPC_CHANNELS.QUEUE_JOB_COMPLETED, { jobId })
+    }
+  }
+
+  private pushDuration(durations: number[], value: number): void {
+    durations.push(value)
+    if (durations.length > MAX_DURATION_SAMPLES) {
+      durations.shift()
     }
   }
 
@@ -480,7 +497,7 @@ class QueueManager {
               img.filename
             )
             const savePath = this.getUniquePath(join(outputDir, fileName))
-            writeFileSync(savePath, Buffer.from(imageData))
+            writeFileSync(savePath, imageData)
             savedPaths.push(savePath)
 
             // Save to DB

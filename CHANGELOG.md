@@ -2,6 +2,25 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.12.5] - 2026-03-21
+
+대량 배치 작업(2800장+) 성능 저하 문제 해결. 장당 8~10초 → 20~25초로 느려지던 현상 수정.
+
+### Fixed
+
+- **ETA 계산 O(n²) 성능 저하**: `taskDurations` 배열이 전체 배치 동안 무한 증가하여 매 태스크마다 `reduce()` 비용이 선형 증가 → 최근 50개 이동 평균으로 제한 (O(1) 유지)
+- **DB 직렬화 과다 호출**: 배치 실행 중 1초 디바운스로 인메모리 DB 전체를 매초 직렬화 → 배치 모드 시 10초 디바운스로 전환하여 CPU 블로킹 80% 감소
+- **이미지 버퍼 이중 복사**: `Buffer.from(imageData)` 불필요한 복사 제거로 GC 압박 절감
+- **JobsView 과다 폴링**: 3초 간격 폴링 + watcher 중복 호출 → 10초 간격 + watcher 디바운스(1초) 적용
+- **GalleryView 배치 중 과다 새로고침**: 2초 디바운스 → 10초로 확장하여 배치 중 불필요한 DB 쿼리 감소
+- **App.vue IPC 리스너 미정리**: `onUnmounted()` 훅 추가로 모든 IPC 이벤트 리스너 정리
+- **완료 태스크 prompt_data 정리 과다**: 매 청크(50개)마다 → 5청크(250개)마다 실행으로 변경
+
+### Changed
+
+- `constants.ts`에 배치 최적화 상수 추가: `MAX_DURATION_SAMPLES`, `CLEAR_PROMPT_DATA_CHUNK_INTERVAL`, `DB_SAVE_DEBOUNCE_BATCH_MS`
+- Renderer `constants.ts`에 UI 폴링 상수 추가: `JOBS_REFRESH_INTERVAL_MS`, `GALLERY_BATCH_REFRESH_DEBOUNCE_MS`
+
 ## [0.12.4] - 2026-03-21
 
 Copilot CLI MCP 연동 지원, 사이드바 접기 UX 개선, MCP 자동 시작, GitHub Actions Node.js 24 마이그레이션.

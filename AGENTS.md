@@ -184,7 +184,9 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - **청크 기반 처리**: `listByJobPending(jobId, limit)` — 50개씩 미완료 태스크만 로드
 - **ComfyUI 히스토리 자동 정리**: 태스크 완료 후 `deleteFromHistory([promptId])` 호출
 - **DB 트랜잭션**: `createBulk()`가 `BEGIN`/`COMMIT`으로 감쌈
-- **ETA 계산**: 완료된 태스크 평균 소요 시간 × 남은 수 → `queue:task-completed` 이벤트에 `etaMs`, `avgTaskDurationMs` 포함
+- **ETA 계산**: 최근 50개 이동 평균 (`MAX_DURATION_SAMPLES`) × 남은 수. `pushDuration()` 헬퍼가 배열 크기 제한
+- **배치 모드 DB 저장**: `setBatchMode(true/false)`로 디바운스 1초→10초 전환. 배치 시작/종료 시 자동 토글
+- **prompt_data 정리 빈도**: `CLEAR_PROMPT_DATA_CHUNK_INTERVAL` (5청크=250태스크) 단위로 실행
 
 ### 지연 태스크 생성 (v0.9.0~)
 
@@ -255,6 +257,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.12.5** — 대량 배치 성능 최적화: taskDurations O(n²)→O(1) 이동 평균, 배치 모드 DB 디바운스 10초, 이미지 버퍼 이중 복사 제거, JobsView 폴링 10초+디바운스, GalleryView 새로고침 10초, App.vue IPC 리스너 정리. 테스트 229개
 **0.12.4** — Copilot CLI MCP 지원(`~/.copilot/mcp-config.json` 자동 생성), CLI별 개별 상태 표시, 사이드바 접기 시 다이아몬드 아이콘, 터미널 MCP 자동 시작, GitHub Actions Node.js 24 마이그레이션(upload-artifact@v6, download-artifact@v8). 테스트 229개
 **0.12.3** — 모듈 아이템 폼 수정: i18n 충돌로 인한 긍정 프롬프트 필드 미표시 해결, 비-네거티브 모듈 및 변형에서 negative 필드 완전 제거 (UI + 합성 엔진), 갤러리 상세 뷰어 사이드바 좌→우 이동. 테스트 229개
 **0.12.2** — CI 경고 전면 해소: GitHub Actions Node.js 24 마이그레이션(checkout@v6, setup-node@v5), Vue 속성 순서 경고 10건 수정, ESLint 에러 해결, Prettier 포맷팅 일괄 적용. 테스트 229개

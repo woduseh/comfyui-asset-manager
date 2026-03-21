@@ -2,11 +2,12 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { DB_SAVE_DEBOUNCE_MS } from '../../constants'
+import { DB_SAVE_DEBOUNCE_MS, DB_SAVE_DEBOUNCE_BATCH_MS } from '../../constants'
 
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let batchMode = false
 
 function getDbPath(): string {
   const userDataPath = app.getPath('userData')
@@ -54,13 +55,19 @@ export function saveDatabase(): void {
     clearTimeout(saveTimer)
   }
 
+  const debounceMs = batchMode ? DB_SAVE_DEBOUNCE_BATCH_MS : DB_SAVE_DEBOUNCE_MS
+
   saveTimer = setTimeout(() => {
     if (!db) return
     const data = db.export()
     const buffer = Buffer.from(data)
     writeFileSync(dbPath, buffer)
     saveTimer = null
-  }, DB_SAVE_DEBOUNCE_MS)
+  }, debounceMs)
+}
+
+export function setBatchMode(enabled: boolean): void {
+  batchMode = enabled
 }
 
 export function saveDatabaseSync(): void {

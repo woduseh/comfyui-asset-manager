@@ -25,6 +25,7 @@ import {
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
+import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -256,7 +257,10 @@ watch(
   () => queueStore.activeJobs.reduce((sum, j) => sum + j.completedTasks, 0),
   () => {
     if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
-    galleryRefreshTimer = setTimeout(() => galleryStore.loadImages(), 2000)
+    galleryRefreshTimer = setTimeout(
+      () => galleryStore.loadImages(),
+      GALLERY_BATCH_REFRESH_DEBOUNCE_MS
+    )
   }
 )
 

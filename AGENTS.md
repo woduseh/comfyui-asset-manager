@@ -254,6 +254,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.12.3** — 모듈 아이템 폼 수정: i18n 충돌로 인한 긍정 프롬프트 필드 미표시 해결, 비-네거티브 모듈 및 변형에서 negative 필드 완전 제거 (UI + 합성 엔진), 갤러리 상세 뷰어 사이드바 좌→우 이동. 테스트 229개
 **0.12.2** — CI 경고 전면 해소: GitHub Actions Node.js 24 마이그레이션(checkout@v6, setup-node@v5), Vue 속성 순서 경고 10건 수정, ESLint 에러 해결, Prettier 포맷팅 일괄 적용. 테스트 229개
 **0.12.1** — v0.12.0 호환성 수정: preload 샌드박스 번들링 수정, 갤러리 이미지 403/CSP 수정, 갤러리 상세 뷰어 좌우 분할 레이아웃 (Lightroom 스타일). 테스트 229개
 **0.12.0** — 보안 감사 기반 전면 개선: Electron 보안 하드닝(sandbox/webSecurity/CSP), IPC 입력 검증, Repository 필드 화이트리스트, 경로 순회 차단, 매직 넘버 상수 추출, 배치 위자드 composable, 에러 핸들링 개선, i18n 완성(6개 뷰), 구조화 로깅(electron-log), pre-commit 훅(husky+lint-staged), IPC 검증 테스트 32개. 테스트 229개

@@ -524,6 +524,25 @@ onUnmounted(() => {
 
           <!-- Image area -->
           <div class="detail-body">
+            <!-- Image section -->
+            <div class="detail-image-section">
+              <div class="detail-image-area">
+                <NImage
+                  :src="toFileUrl(detailImage.file_path)"
+                  object-fit="contain"
+                  style="max-height: 75vh; max-width: 100%; border-radius: 8px"
+                  :preview-disabled="false"
+                />
+              </div>
+              <div class="detail-image-meta">
+                {{ formatFileSize(detailImage.file_size) }}
+                <template v-if="detailImage.width && detailImage.height">
+                  · {{ detailImage.width }}×{{ detailImage.height }}
+                </template>
+                · {{ detailImage.created_at?.split('T')[0] || detailImage.created_at }}
+              </div>
+            </div>
+
             <!-- Sidebar: metadata -->
             <div class="detail-sidebar">
               <div class="sidebar-section">
@@ -610,25 +629,6 @@ onUnmounted(() => {
                   </div>
                 </NCollapseItem>
               </NCollapse>
-            </div>
-
-            <!-- Image section -->
-            <div class="detail-image-section">
-              <div class="detail-image-area">
-                <NImage
-                  :src="toFileUrl(detailImage.file_path)"
-                  object-fit="contain"
-                  style="max-height: 75vh; max-width: 100%; border-radius: 8px"
-                  :preview-disabled="false"
-                />
-              </div>
-              <div class="detail-image-meta">
-                {{ formatFileSize(detailImage.file_size) }}
-                <template v-if="detailImage.width && detailImage.height">
-                  · {{ detailImage.width }}×{{ detailImage.height }}
-                </template>
-                · {{ detailImage.created_at?.split('T')[0] || detailImage.created_at }}
-              </div>
             </div>
           </div>
         </div>
@@ -732,7 +732,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   overflow-y: auto;
   padding: 16px;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   gap: 4px;

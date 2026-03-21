@@ -168,7 +168,7 @@
     "editModule": "Edit Module",
     "item": {
       "namePlaceholder": "Item name",
-      "promptPlaceholder": "Enter prompt... Wildcards: {red|blue|green}, Variables: {{character_name}}",
+      "promptPlaceholder": "Enter prompt... wildcards and variables supported",
       "negativePlaceholder": "Negative prompt (optional)",
       "variantNamePlaceholder": "Variant name (e.g., natural, tags)"
     },

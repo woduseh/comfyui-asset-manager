@@ -116,21 +116,18 @@ export function buildPrompt(
       if (!item.enabled) continue
 
       let promptText = item.prompt
-      let negativeText = item.negative || ''
 
       if (variables) {
         promptText = interpolateVariables(promptText, variables)
-        negativeText = interpolateVariables(negativeText, variables)
       }
 
       promptText = resolveWildcards(promptText, seed)
-      negativeText = resolveWildcards(negativeText, seed)
 
       // 'negative' type modules contribute to negative prompt only
       if (mod.type === 'negative') {
         fragments.push({ text: '', negative: promptText, weight: item.weight })
       } else {
-        fragments.push({ text: promptText, negative: negativeText, weight: item.weight })
+        fragments.push({ text: promptText, negative: '', weight: item.weight })
       }
     }
   }
@@ -179,11 +176,9 @@ export function previewPrompt(
       if (!item.enabled) continue
 
       let promptText = item.prompt
-      let negativeText = item.negative || ''
 
       if (variables) {
         promptText = interpolateVariables(promptText, variables)
-        negativeText = interpolateVariables(negativeText, variables)
       }
 
       if (mod.type === 'negative') {
@@ -191,7 +186,6 @@ export function previewPrompt(
       } else {
         const weighted = applyWeight(promptText, item.weight)
         if (weighted) positives.push(weighted)
-        if (negativeText.trim()) negatives.push(negativeText.trim())
       }
     }
   }

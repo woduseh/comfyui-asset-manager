@@ -239,7 +239,7 @@ describe('Prompt Composition Engine', () => {
       expect(result.negative).toBe('')
     })
 
-    it('combines negatives from items and negative modules', () => {
+    it('combines negatives only from negative modules', () => {
       const modules = [
         {
           type: 'character',
@@ -252,7 +252,7 @@ describe('Prompt Composition Engine', () => {
       ]
       const result = buildPrompt(modules, undefined, 42)
       expect(result.positive).toBe('1girl')
-      expect(result.negative).toContain('bad anatomy')
+      expect(result.negative).not.toContain('bad anatomy')
       expect(result.negative).toContain('worst quality')
     })
   })

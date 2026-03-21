@@ -374,7 +374,7 @@ describe('Task Generator', () => {
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde hair')
       })
 
-      it('uses variant negative prompt for negative slots', () => {
+      it('ignores variant negative prompt for non-negative modules in negative slots', () => {
         const config = makeConfig({
           moduleSelections: [
             { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
@@ -398,7 +398,8 @@ describe('Task Generator', () => {
         })
         const tasks = expandBatchToTasks(config, variantModuleData)
         expect(tasks).toHaveLength(1)
-        expect(tasks[0].promptData.slotPrompts!['n2:text']).toContain('bad_anatomy')
+        // Non-negative module's negative field is ignored by composition engine
+        expect(tasks[0].promptData.slotPrompts!['n2:text']).not.toContain('bad_anatomy')
       })
 
       it('supports different variants per slot', () => {

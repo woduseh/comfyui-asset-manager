@@ -600,14 +600,6 @@ onMounted(() => {
             :placeholder="t('module.item.promptPlaceholder')"
           />
         </NFormItem>
-        <NFormItem :label="t('module.negative')">
-          <NInput
-            v-model:value="editingItem.negative"
-            type="textarea"
-            :rows="2"
-            :placeholder="t('module.item.negativePlaceholder')"
-          />
-        </NFormItem>
         <!-- Prompt Variants -->
         <NDivider style="margin: 12px 0 8px">
           <span style="font-size: 12px; opacity: 0.7">{{ t('module.variant.title') }}</span>
@@ -639,14 +631,6 @@ onMounted(() => {
             :rows="2"
             size="small"
             :placeholder="t('module.prompt')"
-            style="margin-bottom: 4px"
-          />
-          <NInput
-            v-model:value="variant.negative"
-            type="textarea"
-            :rows="1"
-            size="small"
-            :placeholder="t('module.negative')"
           />
         </div>
         <NButton size="small" dashed block style="margin-bottom: 12px" @click="addVariant">

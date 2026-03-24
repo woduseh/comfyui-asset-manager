@@ -16,7 +16,7 @@ npm run typecheck:node   # Typecheck main process + preload only
 npm run typecheck:web    # Typecheck renderer (Vue) only
 ```
 
-Tests: 19 test files, 344 tests across main services, IPC validators, and renderer pure-helper suites (Vitest, sql.js in-memory DB for repository tests, vi.mock for HTTP mocks).
+Tests: 19 test files, 357 tests across main services, IPC validators, and renderer pure-helper suites (Vitest, sql.js in-memory DB for repository tests, vi.mock for HTTP mocks).
 
 ## Architecture
 
@@ -81,6 +81,7 @@ BatchConfig → cartesianProduct() → GeneratedTask[] → QueueManager.processT
 
 - **Task generator** (`src/main/services/batch/task-generator.ts`): Cartesian product of module item selections × countPerCombination.
 - **Queue manager** (`src/main/services/batch/queue-manager.ts`): Sequential execution. Supports pause/resume/cancel. Retries configurable via settings.
+- **Output root convention**: `QueueManager` must prefer `output_directory` and only fall back to legacy `output.directory` for backward compatibility with older settings DBs.
 
 ### Prompt Composition
 

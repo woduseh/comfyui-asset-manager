@@ -237,4 +237,41 @@ describe('QueueManager Recovery', () => {
       expect(jobRepo.get(jobId)?.status).toBe('draft')
     })
   })
+
+  describe('resolveConfiguredOutputRoot', () => {
+    it('prefers output_directory over legacy output.directory', async () => {
+      const { resolveConfiguredOutputRoot } =
+        await import('../../../../src/main/services/output-root')
+      const settings = {
+        get(key: string) {
+          return (
+            (
+              {
+                output_directory: 'C:\\gallery-output',
+                'output.directory': 'C:\\legacy-output'
+              } as Record<string, string | undefined>
+            )[key] ?? null
+          )
+        }
+      }
+
+      expect(resolveConfiguredOutputRoot(settings, 'C:\\fallback')).toBe('C:\\gallery-output')
+    })
+
+    it('falls back to legacy output.directory when output_directory is missing', async () => {
+      const { resolveConfiguredOutputRoot } =
+        await import('../../../../src/main/services/output-root')
+      const settings = {
+        get(key: string) {
+          return (
+            ({ 'output.directory': 'C:\\legacy-output' } as Record<string, string | undefined>)[
+              key
+            ] ?? null
+          )
+        }
+      }
+
+      expect(resolveConfiguredOutputRoot(settings, 'C:\\fallback')).toBe('C:\\legacy-output')
+    })
+  })
 })

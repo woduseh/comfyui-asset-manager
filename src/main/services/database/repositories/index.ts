@@ -1025,6 +1025,30 @@ export class GeneratedImageRepository {
     return id
   }
 
+  hasTrackedAssetPath(filePath: string | readonly string[]): boolean {
+    const db = getDatabase()
+    const candidatePaths = Array.from(
+      new Set((Array.isArray(filePath) ? filePath : [filePath]).filter((value) => value.length > 0))
+    )
+
+    if (candidatePaths.length === 0) {
+      return false
+    }
+
+    const placeholders = candidatePaths.map(() => '?').join(', ')
+    const stmt = db.prepare(
+      `SELECT 1 FROM generated_images
+       WHERE file_path IN (${placeholders}) OR thumbnail_path IN (${placeholders})
+       LIMIT 1`
+    )
+    try {
+      stmt.bind([...candidatePaths, ...candidatePaths])
+      return stmt.step()
+    } finally {
+      stmt.free()
+    }
+  }
+
   updateRating(id: string, rating: number): void {
     const db = getDatabase()
     db.run('UPDATE generated_images SET rating = ? WHERE id = ?', [rating, id])

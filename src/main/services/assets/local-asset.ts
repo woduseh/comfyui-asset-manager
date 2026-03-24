@@ -1,5 +1,6 @@
 import { realpathSync } from 'fs'
 import { isAbsolute, normalize, relative, resolve } from 'path'
+import { resolveConfiguredOutputRoot, type OutputRootSettings } from '../output-root'
 
 const LOCAL_ASSET_PREFIX = 'local-asset://image/'
 const LOCAL_ASSET_FALLBACK_PREFIX = 'local-asset://'
@@ -7,6 +8,20 @@ const LOCAL_ASSET_FALLBACK_PREFIX = 'local-asset://'
 export interface LocalAssetResolverDeps {
   realpathSync: (filePath: string) => string
   platform: NodeJS.Platform
+  isTrackedAssetPath: (candidatePaths: readonly string[]) => boolean
+}
+
+export interface LocalAssetRequestHandlerDeps {
+  outputDirectory: string | null | undefined
+  fetchAsset: (filePath: string) => Response | Promise<Response>
+  resolverDeps?: Partial<LocalAssetResolverDeps>
+}
+
+export interface LocalAssetSettingsRequestHandlerDeps {
+  settings: OutputRootSettings
+  fallbackRoot?: string
+  fetchAsset: (filePath: string) => Response | Promise<Response>
+  resolverDeps?: Partial<LocalAssetResolverDeps>
 }
 
 function normalizeResolvedPath(filePath: string): string {
@@ -62,10 +77,6 @@ export function resolveLocalAssetPath(
   outputDirectory: string | null | undefined,
   deps: Partial<LocalAssetResolverDeps> = {}
 ): string | null {
-  if (!outputDirectory?.trim()) {
-    return null
-  }
-
   const encodedPath = extractEncodedPath(requestUrl)
   if (!encodedPath) {
     return null
@@ -80,12 +91,48 @@ export function resolveLocalAssetPath(
 
   const realpathResolver = deps.realpathSync ?? realpathSync.native
   const platform = deps.platform ?? process.platform
-  const resolvedOutputDirectory = tryResolveRealPath(outputDirectory, realpathResolver)
+  const normalizedRequestedPath = normalizeResolvedPath(decodedPath)
   const resolvedTargetPath = tryResolveRealPath(decodedPath, realpathResolver)
 
-  if (!isPathWithinDirectory(resolvedOutputDirectory, resolvedTargetPath, platform)) {
-    return null
+  if (outputDirectory?.trim()) {
+    const resolvedOutputDirectory = tryResolveRealPath(outputDirectory, realpathResolver)
+
+    if (isPathWithinDirectory(resolvedOutputDirectory, resolvedTargetPath, platform)) {
+      return resolvedTargetPath
+    }
   }
 
-  return resolvedTargetPath
+  const trackedAssetCandidates = Array.from(
+    new Set([normalizedRequestedPath, resolvedTargetPath].filter(Boolean))
+  )
+
+  if (deps.isTrackedAssetPath?.(trackedAssetCandidates)) {
+    return resolvedTargetPath
+  }
+
+  return null
+}
+
+export function handleLocalAssetRequest(
+  requestUrl: string,
+  deps: LocalAssetRequestHandlerDeps
+): Response | Promise<Response> {
+  const filePath = resolveLocalAssetPath(requestUrl, deps.outputDirectory, deps.resolverDeps)
+
+  if (!filePath) {
+    return new Response('Forbidden', { status: 403 })
+  }
+
+  return deps.fetchAsset(filePath)
+}
+
+export function handleLocalAssetRequestFromSettings(
+  requestUrl: string,
+  deps: LocalAssetSettingsRequestHandlerDeps
+): Response | Promise<Response> {
+  return handleLocalAssetRequest(requestUrl, {
+    outputDirectory: resolveConfiguredOutputRoot(deps.settings, deps.fallbackRoot),
+    fetchAsset: deps.fetchAsset,
+    resolverDeps: deps.resolverDeps
+  })
 }

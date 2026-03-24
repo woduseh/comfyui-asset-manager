@@ -2,6 +2,16 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.3] - 2026-03-24
+
+`0.15.2` 갤러리 회귀 수정. 출력 경로 설정 키 드리프트와 `local-asset` 허용 범위가 어긋나며 갤러리 이미지가 엑스박스로 보이던 문제를 바로잡았습니다.
+
+### Fixed
+
+- **갤러리 이미지 렌더링 복구**: `queue-manager`와 `local-asset` 프로토콜이 같은 출력 루트 해석 규칙(`output_directory` 우선, legacy `output.directory` fallback)을 사용하도록 정렬
+- **`local-asset` gallery allowlist 정렬**: 현재 출력 디렉터리 내부 파일뿐 아니라 DB에 등록된 `generated_images.file_path` / `thumbnail_path`도 허용하고, 요청 경로/realpath 양쪽 후보를 비교해 기존 갤러리 자산이 다시 보이도록 수정
+- **회귀 테스트 확장**: `local-asset`, `queue-manager`, `GeneratedImageRepository`에 gallery 경로 회귀와 protocol handler coverage를 추가
+
 ## [0.15.2] - 2026-03-24
 
 감사 후속 보안 하드닝과 운영 드리프트 정리. 로컬 파일 접근, 갤러리 쿼리, 로컬 MCP 서버, JSON 파싱 경계를 배포 기준으로 정리했습니다.

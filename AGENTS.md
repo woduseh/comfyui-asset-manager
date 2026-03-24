@@ -116,7 +116,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 19개 파일, 344개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 19개 파일, 357개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -228,7 +228,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 - Electron 렌더러: `sandbox: true`, `webSecurity: true`, `bypassCSP: false` — 절대 변경 금지
 - Preload 번들링: `externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })` — sandbox 모드에서 preload가 정상 로드되려면 `@electron-toolkit/preload`를 반드시 인라인 번들링
-- 파일 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
+- 파일 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로와 DB에 등록된 gallery 자산 경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
 - IPC 핸들러: 데이터 변경(`CREATE`, `UPDATE`, `DELETE`, `SET`) 핸들러에 `validators.ts` 검증 필수
 - Repository `update()`: `ALLOWED_UPDATE_FIELDS` 화이트리스트 외 필드 거부. 새 컬럼 추가 시 화이트리스트도 갱신
 - JSON 파싱: main은 `src/main/utils/safe-json.ts`, renderer는 `src/renderer/src/utils/safe-json.ts`를 사용해 구조 검증과 오류 메시지를 함께 처리. 검증 없는 `JSON.parse()` 직접 사용 금지
@@ -259,6 +259,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.3** — 갤러리 이미지 회귀 수정: `queue-manager`와 `local-asset` 프로토콜이 같은 출력 루트 해석 규칙을 사용하고, `local-asset`은 현재 출력 디렉터리 + DB 등록 gallery 자산 경로만 허용하도록 조정. 테스트 357개
 **0.15.2** — 감사 후속 하드닝: `local-asset` 출력 디렉터리 화이트리스트, 갤러리 쿼리 검증/ORDER BY 화이트리스트, MCP loopback origin 제한 + Settings opt-in 시작, safe-json helper 도입, shipped navigation 정리. 테스트 344개
 **0.15.1** — 갤러리 파일명 검색: 필터 바에 검색 입력창 추가, 300ms 디바운스, file_path LIKE 매칭. 테스트 305개
 **0.15.0** — MCP 내보내기/비교/동기화 도구: export_module_items_to_file(JSON/CSV/MD 파일 내보내기), diff_module_with_file(이름 기반 매칭+태그 단위 diff), sync_module_from_file(upsert 동기화, delete_missing, dry_run). 파일 직렬화 유틸리티, 비교 엔진. list_modules에 item_count 포함. 테스트 302개

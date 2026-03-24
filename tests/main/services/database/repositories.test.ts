@@ -694,6 +694,50 @@ describe('Database Repositories', () => {
       expect(result.items).toHaveLength(2)
     })
 
+    it('recognizes a stored file path as a tracked gallery asset', () => {
+      repo.create({ file_path: '/img/test.png' })
+
+      expect(repo.hasTrackedAssetPath('/img/test.png')).toBe(true)
+    })
+
+    it('recognizes a stored thumbnail path as a tracked gallery asset', () => {
+      repo.create({ file_path: '/img/test.png', thumbnail_path: '/img/test-thumb.png' })
+
+      expect(repo.hasTrackedAssetPath('/img/test-thumb.png')).toBe(true)
+    })
+
+    it('returns false for an untracked gallery asset path', () => {
+      repo.create({ file_path: '/img/test.png', thumbnail_path: '/img/test-thumb.png' })
+
+      expect(repo.hasTrackedAssetPath('/img/other.png')).toBe(false)
+    })
+
+    it('matches when any candidate tracked asset path is provided', () => {
+      repo.create({ file_path: '/img/test.png', thumbnail_path: '/img/test-thumb.png' })
+
+      expect(repo.hasTrackedAssetPath(['/img/alias.png', '/img/test-thumb.png'])).toBe(true)
+    })
+
+    it('frees the prepared statement when tracked path binding throws', () => {
+      const free = vi.fn()
+      const originalPrepare = mockDb.prepare.bind(mockDb)
+
+      mockDb.prepare = vi.fn(() => ({
+        bind: () => {
+          throw new Error('bind failed')
+        },
+        step: vi.fn(),
+        free
+      })) as unknown as typeof mockDb.prepare
+
+      try {
+        expect(() => repo.hasTrackedAssetPath('/img/test.png')).toThrow('bind failed')
+        expect(free).toHaveBeenCalledTimes(1)
+      } finally {
+        mockDb.prepare = originalPrepare
+      }
+    })
+
     it('paginates results', () => {
       for (let i = 0; i < 15; i++) {
         repo.create({ file_path: `/img/${i}.png` })

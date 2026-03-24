@@ -9,11 +9,12 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
 import { queueManager } from './services/batch/queue-manager'
-import { resolveLocalAssetPath } from './services/assets/local-asset'
+import { handleLocalAssetRequestFromSettings } from './services/assets/local-asset'
 import {
   SettingsRepository,
   BatchJobRepository,
-  BatchTaskRepository
+  BatchTaskRepository,
+  GeneratedImageRepository
 } from './services/database/repositories'
 import { comfyuiManager } from './services/comfyui/manager'
 import {
@@ -78,17 +79,17 @@ app.whenReady().then(async () => {
   // Initialize database
   await initDatabase()
   const settingsRepo = new SettingsRepository()
+  const imageRepo = new GeneratedImageRepository()
 
   // Register protocol handler for local file access
   protocol.handle('local-asset', (request) => {
-    const outputDirectory = settingsRepo.get('output_directory')
-    const filePath = resolveLocalAssetPath(request.url, outputDirectory)
-
-    if (!filePath) {
-      return new Response('Forbidden', { status: 403 })
-    }
-
-    return net.fetch(pathToFileURL(filePath).toString())
+    return handleLocalAssetRequestFromSettings(request.url, {
+      settings: settingsRepo,
+      fetchAsset: (filePath) => net.fetch(pathToFileURL(filePath).toString()),
+      resolverDeps: {
+        isTrackedAssetPath: (candidatePaths) => imageRepo.hasTrackedAssetPath(candidatePaths)
+      }
+    })
   })
 
   // Recover jobs interrupted by previous crash/force-quit

@@ -9,6 +9,7 @@ import { BrowserWindow } from 'electron'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join, dirname, basename, extname } from 'path'
 import { comfyuiManager } from '../comfyui/manager'
+import { resolveConfiguredOutputRoot } from '../output-root'
 import {
   BatchJobRepository,
   BatchTaskRepository,
@@ -264,9 +265,7 @@ class QueueManager {
       isJsonObject,
       'Workflow API JSON must be an object'
     )
-    const outputRoot =
-      settingsRepo.get('output.directory') ||
-      join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
+    const outputRoot = resolveConfiguredOutputRoot(settingsRepo)
     const jobConfig = parseRequiredJson<BatchConfig>(
       job.config as string,
       'Batch job config',

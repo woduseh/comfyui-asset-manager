@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, protocol, net } from 'electron'
-import { join, normalize, resolve } from 'path'
+import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -9,6 +9,7 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
 import { queueManager } from './services/batch/queue-manager'
+import { resolveLocalAssetPath } from './services/assets/local-asset'
 import {
   SettingsRepository,
   BatchJobRepository,
@@ -70,30 +71,25 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.comfyui-asset-manager')
 
-  // Register protocol handler for local file access
-  protocol.handle('local-asset', (request) => {
-    // URL format: local-asset://image/<encoded-path>
-    const prefix = 'local-asset://image/'
-    const encoded = request.url.startsWith(prefix)
-      ? request.url.slice(prefix.length)
-      : request.url.slice('local-asset://'.length)
-    const filePath = normalize(decodeURIComponent(encoded))
-
-    // Path traversal protection: block relative path segments
-    if (filePath.includes('..')) {
-      return new Response('Forbidden', { status: 403 })
-    }
-
-    const resolvedPath = resolve(filePath)
-    return net.fetch(pathToFileURL(resolvedPath).toString())
-  })
-
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   // Initialize database
   await initDatabase()
+  const settingsRepo = new SettingsRepository()
+
+  // Register protocol handler for local file access
+  protocol.handle('local-asset', (request) => {
+    const outputDirectory = settingsRepo.get('output_directory')
+    const filePath = resolveLocalAssetPath(request.url, outputDirectory)
+
+    if (!filePath) {
+      return new Response('Forbidden', { status: 403 })
+    }
+
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
 
   // Recover jobs interrupted by previous crash/force-quit
   queueManager.recoverInterruptedJobs()
@@ -101,9 +97,8 @@ app.whenReady().then(async () => {
   // Register IPC handlers
   registerIpcHandlers()
 
-  // Auto-start MCP server if enabled
+  // Auto-start MCP server only when the user explicitly enabled it in Settings.
   try {
-    const settingsRepo = new SettingsRepository()
     const mcpEnabled = settingsRepo.get('mcp_enabled')
     if (mcpEnabled === 'true') {
       const mcpPort = parseInt(settingsRepo.get('mcp_port') || String(DEFAULT_MCP_PORT))
@@ -111,8 +106,8 @@ app.whenReady().then(async () => {
         log.error('[MCP] Auto-start failed:', err.message)
       })
     }
-  } catch {
-    /* settings not ready yet */
+  } catch (error) {
+    log.debug('[MCP] Auto-start skipped while settings were unavailable:', error)
   }
 
   createWindow()

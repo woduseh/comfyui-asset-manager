@@ -58,6 +58,98 @@ export function validateStringArray(val: unknown, maxLen = 1000): string[] {
   return val.map((item) => validateId(item))
 }
 
+export type GallerySortBy = 'created_at' | 'rating' | 'file_size'
+export type GallerySortOrder = 'asc' | 'desc'
+
+export interface ValidatedGalleryQuery {
+  page: number
+  pageSize: number
+  searchText?: string
+  characterName?: string
+  outfitName?: string
+  emotionName?: string
+  styleName?: string
+  minRating?: number
+  isFavorite?: boolean
+  tags?: string[]
+  jobId?: string
+  sortBy?: GallerySortBy
+  sortOrder?: GallerySortOrder
+}
+
+const GALLERY_SORT_FIELDS = {
+  created_at: true,
+  rating: true,
+  file_size: true
+} as const
+
+const GALLERY_SORT_ORDERS = {
+  asc: true,
+  desc: true
+} as const
+
+function isGallerySortBy(val: string): val is GallerySortBy {
+  return Object.prototype.hasOwnProperty.call(GALLERY_SORT_FIELDS, val)
+}
+
+function isGallerySortOrder(val: string): val is GallerySortOrder {
+  return Object.prototype.hasOwnProperty.call(GALLERY_SORT_ORDERS, val)
+}
+
+function validateRequiredPositiveInt(val: unknown, fieldName: string): number {
+  const num = validatePositiveInt(val)
+  if (num < 1) {
+    throw new Error(`Gallery ${fieldName} must be a positive integer`)
+  }
+  return num
+}
+
+export function validateGalleryQuery(val: unknown): ValidatedGalleryQuery {
+  if (typeof val !== 'object' || val === null || Array.isArray(val)) {
+    throw new Error('Expected gallery query object')
+  }
+
+  const raw = val as Record<string, unknown>
+  const query: ValidatedGalleryQuery = {
+    page: validateRequiredPositiveInt(raw.page, 'page'),
+    pageSize: validateRequiredPositiveInt(raw.pageSize, 'page size')
+  }
+
+  if (raw.searchText !== undefined) query.searchText = validateString(raw.searchText)
+  if (raw.characterName !== undefined) query.characterName = validateString(raw.characterName)
+  if (raw.outfitName !== undefined) query.outfitName = validateString(raw.outfitName)
+  if (raw.emotionName !== undefined) query.emotionName = validateString(raw.emotionName)
+  if (raw.styleName !== undefined) query.styleName = validateString(raw.styleName)
+  if (raw.minRating !== undefined) query.minRating = validateRating(raw.minRating)
+  if (raw.tags !== undefined) query.tags = validateStringArray(raw.tags)
+  if (raw.jobId !== undefined) query.jobId = validateId(raw.jobId)
+
+  if (raw.isFavorite !== undefined) {
+    if (typeof raw.isFavorite !== 'boolean') {
+      throw new Error('Gallery favorite filter must be boolean')
+    }
+    query.isFavorite = raw.isFavorite
+  }
+
+  if (raw.sortBy !== undefined) {
+    const sortBy = validateString(raw.sortBy, 100)
+    if (!isGallerySortBy(sortBy)) {
+      throw new Error('Invalid gallery sort field')
+    }
+    query.sortBy = sortBy
+  }
+
+  if (raw.sortOrder !== undefined) {
+    const sortOrder = validateString(raw.sortOrder, 10)
+    if (!isGallerySortOrder(sortOrder)) {
+      throw new Error('Invalid gallery sort order')
+    }
+    query.sortOrder = sortOrder
+  }
+
+  return query
+}
+
 /** Validate JSON parse result has expected shape for prompt variants */
 export function validatePromptVariants(
   raw: unknown

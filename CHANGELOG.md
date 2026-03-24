@@ -2,6 +2,29 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.2] - 2026-03-24
+
+감사 후속 보안 하드닝과 운영 드리프트 정리. 로컬 파일 접근, 갤러리 쿼리, 로컬 MCP 서버, JSON 파싱 경계를 배포 기준으로 정리했습니다.
+
+### Added
+
+- **안전한 JSON 파싱 helper**: `src/main/utils/safe-json.ts`, `src/renderer/src/utils/safe-json.ts` 추가. main/renderer 모두 `ok/value/error` 형태로 JSON 경계 처리
+- **MCP origin 정책 테스트**: `tests/main/services/mcp/index.test.ts` 추가. Origin 없음, `localhost`, `127.0.0.1`, 외부 origin, `/health` 동작 검증
+- **순수 helper 테스트 확장**: `tests/main/utils/safe-json.test.ts`, `tests/renderer/safe-json.test.ts`, `tests/renderer/navigation.test.ts` 추가
+
+### Changed
+
+- **shipped navigation 단일 정의**: `src/renderer/src/navigation.ts`를 기준으로 router/menu/IPC contract를 정리하고 레거시 화면 문자열 드리프트 제거
+- **MCP 시작 정책 변경**: 터미널 탭 생성은 더 이상 MCP 서버를 자동 시작하거나 `mcp_enabled`를 변경하지 않음. Settings opt-in만 서버 시작/자동 시작을 제어
+- **테스트 규모 확대**: 19개 파일, 344개 테스트 케이스
+
+### Fixed
+
+- **`local-asset://` 경로 보안**: 설정된 `output_directory` 밖의 파일, URL 인코딩 traversal, realpath escape 차단
+- **갤러리 정렬 입력 하드닝**: `gallery:list` IPC 검증 추가, repository `ORDER BY`를 화이트리스트 매핑으로 교체
+- **로컬 MCP HTTP 표면 제한**: 외부 브라우저 origin 차단, loopback origin만 허용, `/health`는 계속 제공
+- **JSON 파싱 오류 가시화**: 워크플로우 import, 모듈 import, queue persisted JSON 복원, 작업 설정 복원, 파일 파서에서 조용한 `JSON.parse` 실패를 명시적 오류로 교체
+
 ## [0.15.1] - 2026-03-22
 
 갤러리 파일명 검색 기능 추가. 필터 바에 검색 입력창을 추가하여 파일명 부분 매칭으로 이미지 검색 가능.

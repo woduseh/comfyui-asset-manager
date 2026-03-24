@@ -112,6 +112,10 @@ function makeCustomWorkflow(): string {
 
 describe('Workflow Parser', () => {
   describe('parseWorkflow', () => {
+    it('throws a helpful error for invalid workflow JSON', () => {
+      expect(() => parseWorkflow('{', 'Broken Workflow')).toThrow(/Workflow JSON/)
+    })
+
     it('extracts variables from known node types', () => {
       const result = parseWorkflow(makeGenerationWorkflow(), 'Test')
       expect(result.name).toBe('Test')

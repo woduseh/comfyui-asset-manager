@@ -3,909 +3,1155 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>프로덕션 준비 상태 감사 보고서</title>
+    <title>프로덕션 준비도 감사 보고서</title>
     <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0f17;
+        --panel: #111827;
+        --panel-2: #0f172a;
+        --panel-3: #0c1320;
+        --border: #243044;
+        --text: #e5edf7;
+        --muted: #94a3b8;
+        --accent: #60a5fa;
+        --accent-2: #22d3ee;
+        --good: #22c55e;
+        --warn: #f59e0b;
+        --bad: #ef4444;
+        --minor: #38bdf8;
+        --chip: #172131;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+        --radius: 18px;
+      }
+
       * {
-        margin: 0;
-        padding: 0;
         box-sizing: border-box;
       }
+
+      html,
       body {
-        font-family:
-          'Segoe UI',
-          system-ui,
-          -apple-system,
-          sans-serif;
-        background: #0d1117;
-        color: #c9d1d9;
-        line-height: 1.6;
-        padding: 24px;
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      h1 {
-        font-size: 1.8rem;
-        color: #58a6ff;
-        margin-bottom: 8px;
-      }
-      h2 {
-        font-size: 1.3rem;
-        color: #79c0ff;
-        margin: 32px 0 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #21262d;
-      }
-      h3 {
-        font-size: 1.05rem;
-        color: #d2a8ff;
-        margin: 20px 0 8px;
-      }
-      h4 {
-        font-size: 0.95rem;
-        color: #c9d1d9;
-        margin: 14px 0 6px;
-      }
-      p,
-      li {
-        font-size: 0.9rem;
-        color: #8b949e;
-      }
-      a {
-        color: #58a6ff;
-        text-decoration: none;
-      }
-      code {
-        background: #161b22;
-        color: #e6edf3;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 0.85rem;
-        font-family: 'Cascadia Code', 'Fira Code', monospace;
-      }
-      pre {
-        background: #161b22;
-        padding: 12px 16px;
-        border-radius: 8px;
-        overflow-x: auto;
-        font-size: 0.82rem;
-        margin: 8px 0;
-        border: 1px solid #21262d;
-      }
-      pre code {
-        background: none;
+        margin: 0;
         padding: 0;
+        background:
+          radial-gradient(circle at top right, rgba(34, 211, 238, 0.12), transparent 28%),
+          radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 24%),
+          var(--bg);
+        color: var(--text);
+        font:
+          15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR",
+          sans-serif;
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 12px 0;
-        font-size: 0.88rem;
+
+      body {
+        padding: 24px;
       }
-      th {
-        background: #161b22;
-        color: #79c0ff;
-        text-align: left;
-        padding: 10px 12px;
-        border: 1px solid #21262d;
-        font-weight: 600;
+
+      code {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 0.92em;
+        background: rgba(148, 163, 184, 0.12);
+        padding: 0.16rem 0.34rem;
+        border-radius: 6px;
+        word-break: break-word;
       }
-      td {
-        padding: 8px 12px;
-        border: 1px solid #21262d;
-        color: #c9d1d9;
+
+      .wrap {
+        max-width: 1360px;
+        margin: 0 auto;
+        display: grid;
+        gap: 22px;
       }
-      tr:nth-child(even) td {
-        background: #0d1117;
-      }
-      tr:nth-child(odd) td {
-        background: #161b22;
-      }
+
       .card {
-        background: #161b22;
-        border: 1px solid #21262d;
-        border-radius: 12px;
-        padding: 20px;
-        margin: 16px 0;
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.97), rgba(12, 19, 32, 0.97));
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
       }
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
+        gap: 18px;
+        padding: 24px;
       }
-      .score {
-        font-size: 2.2rem;
-        font-weight: 700;
-        line-height: 1;
-      }
-      .score-label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        opacity: 0.7;
-        margin-top: 2px;
-      }
-      .badge {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        font-weight: 600;
-      }
-      .badge-red {
-        background: #da363340;
-        color: #f85149;
-        border: 1px solid #da363360;
-      }
-      .badge-orange {
-        background: #d2960040;
-        color: #d29922;
-        border: 1px solid #d2960060;
-      }
-      .badge-yellow {
-        background: #e3b34140;
-        color: #e3b341;
-        border: 1px solid #e3b34160;
-      }
-      .badge-blue {
-        background: #388bfd40;
-        color: #58a6ff;
-        border: 1px solid #388bfd60;
-      }
-      .badge-green {
-        background: #2ea04340;
-        color: #3fb950;
-        border: 1px solid #2ea04360;
-      }
-      .grade-box {
+
+      .eyebrow {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(96, 165, 250, 0.12);
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      p,
+      ul,
+      ol {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.15;
+        margin-top: 14px;
+      }
+
+      h2 {
+        font-size: 20px;
+        margin-bottom: 14px;
+      }
+
+      h3 {
+        font-size: 16px;
+        margin-bottom: 12px;
+      }
+
+      .lede {
+        margin-top: 14px;
+        max-width: 70ch;
+        color: #d7e3f4;
+      }
+
+      .hero-side {
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+
+      .scorebox {
+        padding: 20px;
+        background:
+          linear-gradient(160deg, rgba(96, 165, 250, 0.15), rgba(34, 211, 238, 0.06)),
+          var(--panel-2);
+        border: 1px solid rgba(96, 165, 250, 0.25);
         border-radius: 16px;
-        font-size: 2rem;
+      }
+
+      .scorebox .label {
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .scorebox .grade {
+        margin-top: 8px;
+        font-size: 56px;
+        line-height: 1;
         font-weight: 800;
       }
-      .grade-B {
-        background: linear-gradient(135deg, #388bfd40, #1f6feb40);
-        color: #58a6ff;
-        border: 2px solid #388bfd;
+
+      .scorebox .total {
+        margin-top: 8px;
+        font-size: 18px;
+        color: #d7e3f4;
       }
-      .grid-2 {
+
+      .hero-metrics {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
-      }
-      .grid-3 {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
       }
-      .finding {
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin: 8px 0;
-        border-left: 4px solid;
+
+      .metric {
+        padding: 16px;
+        background: var(--panel-3);
+        border: 1px solid var(--border);
+        border-radius: 14px;
       }
-      .finding-critical {
-        background: #da363315;
-        border-color: #f85149;
+
+      .metric .k {
+        font-size: 12px;
+        color: var(--muted);
       }
-      .finding-major {
-        background: #d2960015;
-        border-color: #d29922;
+
+      .metric .v {
+        margin-top: 6px;
+        font-size: 24px;
+        font-weight: 800;
       }
-      .finding-minor {
-        background: #e3b34115;
-        border-color: #e3b341;
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 22px;
       }
-      .finding-suggestion {
-        background: #388bfd15;
-        border-color: #58a6ff;
+
+      .card-body {
+        padding: 22px;
       }
-      .finding-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #e6edf3;
-        margin-bottom: 4px;
+
+      .stack-list,
+      .meta-list,
+      .finding-list,
+      .action-list,
+      .summary-list {
+        display: grid;
+        gap: 10px;
       }
-      .finding-meta {
-        font-size: 0.78rem;
-        opacity: 0.7;
-        margin-bottom: 6px;
-      }
-      .finding-body {
-        font-size: 0.85rem;
-        color: #8b949e;
-      }
-      .tag {
-        display: inline-block;
-        padding: 1px 8px;
-        border-radius: 12px;
-        font-size: 0.72rem;
-        font-weight: 500;
-        margin-left: 6px;
-      }
-      .tag-oversight {
-        background: #da363330;
-        color: #f85149;
-      }
-      .tag-tradeoff {
-        background: #388bfd30;
-        color: #58a6ff;
-      }
-      .progress-bar {
-        height: 8px;
-        background: #21262d;
-        border-radius: 4px;
-        overflow: hidden;
-        margin: 4px 0;
-      }
-      .progress-fill {
-        height: 100%;
-        border-radius: 4px;
-      }
-      .summary-box {
-        background: linear-gradient(135deg, #161b22, #0d1117);
-        border: 2px solid #30363d;
-        border-radius: 16px;
-        padding: 28px;
-        margin: 24px 0;
-      }
-      .verdict-text {
-        font-size: 0.95rem;
-        color: #c9d1d9;
-        line-height: 1.8;
-      }
-      .action-item {
+
+      .stack-pills {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
-        align-items: flex-start;
-        padding: 8px 0;
-        border-bottom: 1px solid #21262d;
+        margin-top: 12px;
       }
-      .action-tag {
-        flex-shrink: 0;
-        font-size: 0.72rem;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-weight: 600;
+
+      .pill {
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: var(--chip);
+        border: 1px solid var(--border);
+        color: #d8e5f8;
+        font-size: 13px;
       }
-      .action-qw {
-        background: #2ea04330;
-        color: #3fb950;
+
+      .note {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
       }
-      .action-hd {
-        background: #d2960030;
-        color: #d29922;
+
+      .score-table,
+      .matrix-table {
+        width: 100%;
+        border-collapse: collapse;
       }
-      .action-st {
-        background: #388bfd30;
-        color: #58a6ff;
+
+      .score-table th,
+      .score-table td,
+      .matrix-table th,
+      .matrix-table td {
+        padding: 11px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        vertical-align: top;
+        text-align: left;
       }
-      @media (max-width: 768px) {
-        .grid-2,
-        .grid-3 {
+
+      .score-table th,
+      .matrix-table th {
+        color: #bfd0e7;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+
+      .score-table tr:last-child td,
+      .matrix-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .section-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .section-card {
+        padding: 18px;
+        background: rgba(15, 23, 42, 0.72);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+      }
+
+      .finding-list li,
+      .meta-list li,
+      .action-list li,
+      .summary-list li {
+        list-style: none;
+      }
+
+      .finding-list li,
+      .action-list li {
+        padding: 12px 13px;
+        background: rgba(15, 23, 42, 0.66);
+        border: 1px solid rgba(148, 163, 184, 0.1);
+        border-radius: 12px;
+      }
+
+      .finding-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .sev,
+      .tag,
+      .plan-tag,
+      .score-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1.2;
+      }
+
+      .sev-critical {
+        background: rgba(239, 68, 68, 0.16);
+        color: #fda4af;
+      }
+
+      .sev-major {
+        background: rgba(245, 158, 11, 0.16);
+        color: #fcd34d;
+      }
+
+      .sev-minor {
+        background: rgba(56, 189, 248, 0.16);
+        color: #93c5fd;
+      }
+
+      .sev-good {
+        background: rgba(34, 197, 94, 0.16);
+        color: #86efac;
+      }
+
+      .tag {
+        background: rgba(148, 163, 184, 0.12);
+        color: #cbd5e1;
+      }
+
+      .finding-text {
+        color: #dce6f4;
+      }
+
+      .finding-text small {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+      }
+
+      .plan-tag.quick {
+        background: rgba(56, 189, 248, 0.16);
+        color: #bae6fd;
+      }
+
+      .plan-tag.harden {
+        background: rgba(245, 158, 11, 0.16);
+        color: #fde68a;
+      }
+
+      .plan-tag.strategic {
+        background: rgba(168, 85, 247, 0.16);
+        color: #d8b4fe;
+      }
+
+      .summary-zone {
+        padding: 24px;
+        border: 1px solid rgba(96, 165, 250, 0.28);
+        background:
+          linear-gradient(160deg, rgba(96, 165, 250, 0.12), rgba(34, 211, 238, 0.05)),
+          linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(12, 19, 32, 0.98));
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr);
+        gap: 22px;
+        align-items: start;
+      }
+
+      .grade-panel {
+        padding: 20px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(96, 165, 250, 0.26);
+      }
+
+      .grade-panel .small {
+        color: #bfd0e7;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .grade-panel .big {
+        margin-top: 12px;
+        font-size: 72px;
+        line-height: 0.95;
+        font-weight: 900;
+      }
+
+      .grade-panel .sub {
+        margin-top: 10px;
+        color: #d7e3f4;
+        font-size: 18px;
+      }
+
+      .summary-block {
+        display: grid;
+        gap: 14px;
+      }
+
+      .score-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .score-chip {
+        background: rgba(148, 163, 184, 0.12);
+        color: #dbeafe;
+      }
+
+      .verdict {
+        color: #e3edf9;
+      }
+
+      .ruling {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.24);
+        color: #fecaca;
+        font-weight: 700;
+      }
+
+      .foot {
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      .divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.25), transparent);
+        margin: 18px 0;
+      }
+
+      @media (max-width: 1100px) {
+        .hero,
+        .detail-grid,
+        .summary-grid,
+        .section-grid {
           grid-template-columns: 1fr;
         }
-        body {
-          padding: 12px;
+
+        .hero-metrics {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
         }
       }
-      .mono {
-        font-family: 'Cascadia Code', 'Fira Code', monospace;
-        font-size: 0.82rem;
-      }
-      .muted {
-        color: #484f58;
-      }
-      .bright {
-        color: #e6edf3;
-      }
-      .separator {
-        border: none;
-        border-top: 1px solid #21262d;
-        margin: 32px 0;
+
+      @media (max-width: 720px) {
+        body {
+          padding: 14px;
+        }
+
+        .hero,
+        .card-body,
+        .summary-zone {
+          padding: 18px;
+        }
+
+        .hero-metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .score-table,
+        .matrix-table {
+          display: block;
+          overflow-x: auto;
+        }
       }
     </style>
   </head>
   <body>
-    <!-- ============ DETAIL ZONE ============ -->
-
-    <h1>🔍 프로덕션 준비 상태 감사 보고서</h1>
-    <p class="muted">ComfyUI Asset Manager v0.11.0 · 감사일: 2026-03-20</p>
-
-    <!-- A. Overview & Stack -->
-    <h2>A. 프로젝트 개요 및 기술 스택</h2>
-
-    <p>
-      ComfyUI 기반 대량 이미지 생성 자동화 및 자산 관리를 위한 Electron 데스크톱 애플리케이션. 배치
-      매트릭스 빌더, 프롬프트 모듈 시스템, 실시간 큐 관리, 갤러리, MCP 서버 통합을 제공한다.
-    </p>
-
-    <div class="grid-3">
-      <div class="card">
-        <div class="score-label">소스 코드</div>
-        <div class="score" style="color: #58a6ff">10,704</div>
-        <div class="score-label">Lines · 47개 파일</div>
-      </div>
-      <div class="card">
-        <div class="score-label">테스트</div>
-        <div class="score" style="color: #3fb950">197</div>
-        <div class="score-label">케이스 · 7개 파일 · 2,190 LOC</div>
-      </div>
-      <div class="card">
-        <div class="score-label">커밋 이력</div>
-        <div class="score" style="color: #d2a8ff">52</div>
-        <div class="score-label">커밋 · 단독 개발 · v0.1.0~v0.11.0</div>
-      </div>
-    </div>
-
-    <table>
-      <tr>
-        <th>기술</th>
-        <th>버전</th>
-        <th>역할</th>
-      </tr>
-      <tr>
-        <td>Electron</td>
-        <td>39.2.6</td>
-        <td>데스크톱 프레임워크 (3-프로세스 아키텍처)</td>
-      </tr>
-      <tr>
-        <td>Vue 3</td>
-        <td>3.5.25</td>
-        <td>렌더러 UI (Composition API + <code>&lt;script setup&gt;</code>)</td>
-      </tr>
-      <tr>
-        <td>TypeScript</td>
-        <td>5.9.3</td>
-        <td>전 프로세스 타입 시스템</td>
-      </tr>
-      <tr>
-        <td>Naive UI</td>
-        <td>2.42.0</td>
-        <td>UI 컴포넌트 라이브러리</td>
-      </tr>
-      <tr>
-        <td>Pinia</td>
-        <td>3.0.3</td>
-        <td>상태 관리 (Composition API 패턴)</td>
-      </tr>
-      <tr>
-        <td>sql.js</td>
-        <td>1.12.0</td>
-        <td>WASM SQLite 인메모리 데이터베이스</td>
-      </tr>
-      <tr>
-        <td>Vite / electron-vite</td>
-        <td>7.2.6 / 5.0.0</td>
-        <td>빌드 도구 (HMR, 코드 분할)</td>
-      </tr>
-      <tr>
-        <td>Vitest</td>
-        <td>4.1.0</td>
-        <td>테스트 프레임워크 (V8 커버리지)</td>
-      </tr>
-      <tr>
-        <td>ESLint 9 + Prettier</td>
-        <td>9.39.1 / 3.7.4</td>
-        <td>정적 분석 + 코드 포맷팅</td>
-      </tr>
-      <tr>
-        <td>node-pty + xterm.js</td>
-        <td>1.1.0 / 6.0.0</td>
-        <td>내장 터미널 (PTY)</td>
-      </tr>
-      <tr>
-        <td>MCP SDK</td>
-        <td>1.27.1</td>
-        <td>LLM 도구 서버 (Streamable HTTP)</td>
-      </tr>
-    </table>
-
-    <!-- B. Scores Table -->
-    <h2>B. 평가 점수</h2>
-
-    <table>
-      <tr>
-        <th>카테고리</th>
-        <th>가중치</th>
-        <th>점수</th>
-        <th>가중 점수</th>
-        <th>한줄 요약</th>
-      </tr>
-      <tr>
-        <td>코드 품질 및 유지보수성</td>
-        <td>25%</td>
-        <td class="bright">7.0</td>
-        <td>1.75</td>
-        <td>모듈 분리 양호, 하지만 동적 SQL 필드명·JSON-in-string 패턴·중복 로직이 기술 부채</td>
-      </tr>
-      <tr>
-        <td>보안 및 안정성</td>
-        <td>25%</td>
-        <td class="bright">4.5</td>
-        <td>1.13</td>
-        <td>Electron 샌드박스 비활성화 + 경로 순회 취약점이 치명적. 입력 검증 전반 부재</td>
-      </tr>
-      <tr>
-        <td>엔지니어링 재현성 및 운영 준비</td>
-        <td>20%</td>
-        <td class="bright">7.5</td>
-        <td>1.50</td>
-        <td>CI/CD 구축, 락파일 존재, 테스트 실행 가능. 다만 핵심 경로 테스트 커버리지 부족</td>
-      </tr>
-      <tr>
-        <td>아키텍처 및 확장성</td>
-        <td>20%</td>
-        <td class="bright">7.0</td>
-        <td>1.40</td>
-        <td>3-프로세스 분리 명확. 싱글턴 패턴 의존, 동시성 제한, 옵저버빌리티 부재</td>
-      </tr>
-      <tr>
-        <td>기술 스택 및 의존성 건강</td>
-        <td>10%</td>
-        <td class="bright">8.5</td>
-        <td>0.85</td>
-        <td>CVE 0건, 의존성 합리적, 정적 분석 도구 완비. 모범적</td>
-      </tr>
-    </table>
-
-    <div class="card" style="text-align: center">
-      <div style="display: flex; align-items: center; justify-content: center; gap: 20px">
+    <div class="wrap">
+      <section class="card hero">
         <div>
-          <div class="score-label">가중 총점</div>
-          <div class="score" style="color: #58a6ff; font-size: 3rem">6.63</div>
+          <div class="eyebrow">프로덕션 준비도 게이트 리뷰</div>
+          <h1>구조는 성숙하지만, 특권 경계 세 곳이 아직 비어 있다</h1>
+          <p class="lede">
+            이 저장소는 단순 데모 수준은 아니다. 문서, 테스트, 릴리스 규율, 타입/린트 체인이
+            분명하고 실제로 <code>npm test</code>, <code>npm run lint</code>,
+            <code>npm run build</code>, <code>npm audit --json</code>가 모두 통과했다.
+            다만 로컬 파일 접근, 로컬 HTTP 도구 서버, 갤러리 정렬 SQL 조합이라는 세 개의
+            경계 결함이 남아 있어 현재 상태 그대로는 배포 승인하기 어렵다.
+          </p>
         </div>
-        <div class="grade-box grade-B">B</div>
-      </div>
-      <p style="margin-top: 8px; font-size: 0.82rem" class="muted">
-        가중치 조정: 기본값 적용. 로컬 전용 데스크톱 앱이므로 네트워크 보안 가중치를 낮출 수 있으나,
-        Electron 앱은 렌더러 프로세스 자체가 공격 표면이므로 보안 25% 유지.
-      </p>
-    </div>
 
-    <!-- C. Key Findings -->
-    <h2>C. 주요 발견 사항</h2>
-
-    <!-- C1. Code Quality -->
-    <h3>1. 코드 품질 및 유지보수성 <span class="badge badge-yellow">7.0 / 10</span></h3>
-
-    <div class="finding finding-major">
-      <div class="finding-title">
-        🟠 주요: 동적 SQL 필드명 인젝션 벡터 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">
-        <code>repositories/index.ts</code> — 4개 리포지토리 update 메서드 (라인 115, 229, 294, 361)
-      </div>
-      <div class="finding-body">
-        <code>Object.keys(data).map(f =&gt; `${f} = ?`)</code> 패턴이 필드명을 화이트리스트 없이
-        SQL에 삽입. 값은 파라미터화되어 있지만 <strong>필드명은 미검증</strong>. IPC를 통해 렌더러가
-        임의 필드명을 전달 가능. 실제 익스플로잇 가능성은 낮으나 방어적 코드가 아님.
-      </div>
-    </div>
-
-    <div class="finding finding-major">
-      <div class="finding-title">
-        🟠 주요: 중복 로직 — 배치 위자드 코드 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">
-        <code>BatchView.vue</code> + <code>JobsView.vue</code> — 모듈 선택, 슬롯 복원, 작업 상태
-        복구
-      </div>
-      <div class="finding-body">
-        BatchView와 JobsView가 모듈 매트릭스 추가·슬롯 복원·변수 오버라이드 복원 로직을 각각
-        ~100줄씩 동일하게 구현. <code>setTimeout(500)</code> 지연 등 매직넘버도 함께 복제됨. 공유
-        유틸리티 추출이 필요.
-      </div>
-    </div>
-
-    <div class="finding finding-minor">
-      <div class="finding-title">
-        🟡 경미: 매직 넘버 산재 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">main + renderer 전역 — 약 20+개 인스턴스</div>
-      <div class="finding-body">
-        폴링 간격(3000ms), 청크 크기(50), 재연결 간격(3000~30000ms), 세션 제한(10), 페이지 크기(50),
-        터미널 폰트(14), 스크롤백(5000) 등이 상수 추출 없이 인라인. 설정 가능해야 할 값들이
-        하드코딩됨.
-      </div>
-    </div>
-
-    <div class="finding finding-suggestion">
-      <div class="finding-title">
-        🔵 제안: 에러 핸들링 일관성 부족 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">handlers.ts, App.vue, DashboardView.vue, QueueView.vue 등</div>
-      <div class="finding-body">
-        일부 핸들러는 상세한 에러 메시지를 반환(<code>ModuleView</code>)하지만, 다른 곳에서는
-        <code>catch { /* ignore */ }</code>로 조용히 무시. 특히 큐 상태
-        조회(<code>loadQueueStatus</code>)의 에러 무시는 사용자에게 잘못된 상태를 보여줄 수 있음.
-      </div>
-    </div>
-
-    <h4>AI 생성 코드 안티패턴</h4>
-    <div class="finding finding-minor">
-      <div class="finding-title">🟡 Bug Déjà-vu: parsePromptVariants 중복 정의</div>
-      <div class="finding-body">
-        <code>handlers.ts:26-29</code>와 <code>tools.ts:15-18</code>에 동일한
-        <code>parsePromptVariants()</code> 함수가 독립적으로 존재. 한쪽을 수정하면 다른 쪽에 동일
-        수정을 잊을 위험. 빈도: 2곳. 리스크: 낮음 (단순 JSON 파싱).
-      </div>
-    </div>
-
-    <!-- C2. Security -->
-    <h3>2. 보안 및 안정성 <span class="badge badge-red">4.5 / 10</span></h3>
-
-    <div class="finding finding-critical">
-      <div class="finding-title">
-        🔴 치명적: Electron 샌드박스 비활성화
-        <span class="tag tag-tradeoff">TRADE-OFF: node-pty 네이티브 모듈 호환성</span>
-      </div>
-      <div class="finding-meta">
-        <code>src/main/index.ts:35-36</code> — <code>sandbox: false</code>,
-        <code>webSecurity: false</code>
-      </div>
-      <div class="finding-body">
-        렌더러 프로세스의 격리가 해제됨. <code>sandbox: false</code>는 렌더러에서 Node.js API 접근을
-        허용하고, <code>webSecurity: false</code>는 동일 출처 정책(SOP)을 비활성화. XSS가 발생하면
-        RCE(원격 코드 실행)로 직결. <code>node-pty</code> 네이티브 모듈 때문일 가능성 높으나, 이
-        모듈은 main 프로세스에서만 사용하므로 sandbox 활성화 가능.
-      </div>
-    </div>
-
-    <div class="finding finding-critical">
-      <div class="finding-title">
-        🔴 치명적: 로컬 에셋 프로토콜 경로 순회 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">
-        <code>src/main/index.ts:60-69</code> — <code>decodeURIComponent</code> 후 경로 검증 없음
-      </div>
-      <div class="finding-body">
-        <code>local-asset://image/</code> 프로토콜 핸들러가 디코딩된 경로를 검증 없이
-        <code>pathToFileURL()</code>로 변환. <code>..%2F..%2Fetc%2Fpasswd</code> 같은 경로 순회
-        가능. 또한 <code>bypassCSP: true</code>로 CSP까지 우회하여 공격 표면 확대.
-      </div>
-    </div>
-
-    <div class="finding finding-major">
-      <div class="finding-title">
-        🟠 주요: IPC 핸들러 입력 검증 부재 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta"><code>handlers.ts</code> — 전체 40+ IPC 핸들러</div>
-      <div class="finding-body">
-        모든 IPC 핸들러가 렌더러로부터 받은 인자를 검증 없이 사용. <code>SETTINGS_SET</code>은 임의
-        키-값 쓰기 가능, <code>WORKFLOW_UPDATE</code>는 임의 필드 업데이트 가능. Electron에서
-        렌더러는 신뢰 경계(trust boundary)의 바깥에 있으므로 입력 검증이 필수.
-      </div>
-    </div>
-
-    <h4>보안 취약점 유형별 점검 결과</h4>
-    <table>
-      <tr>
-        <th>취약점 유형</th>
-        <th>결과</th>
-        <th>상세</th>
-      </tr>
-      <tr>
-        <td>SQL 인젝션 (CWE-89)</td>
-        <td><span class="badge badge-orange">경고</span></td>
-        <td>
-          값은 파라미터화, 필드명은 미검증 (4개 update 메서드). 실제 인젝션은 IPC 경유 시에만 가능
-        </td>
-      </tr>
-      <tr>
-        <td>XSS (CWE-79/80)</td>
-        <td><span class="badge badge-green">양호</span></td>
-        <td>
-          <code>v-html</code> 0건, <code>innerHTML</code> 0건. Vue 템플릿의
-          <code>{{ }}</code> 이스케이핑으로 안전
-        </td>
-      </tr>
-      <tr>
-        <td>로그 인젝션 (CWE-117)</td>
-        <td><span class="badge badge-yellow">경미</span></td>
-        <td>
-          <code>console.log/error</code> 사용 시 사용자 입력 포함 가능. 구조화 로깅 미사용으로
-          직접적 위험은 낮음
-        </td>
-      </tr>
-      <tr>
-        <td>역직렬화 취약점</td>
-        <td><span class="badge badge-yellow">경미</span></td>
-        <td>
-          <code>JSON.parse()</code> 후 스키마 검증 없음 (10+개소). 프로토타입 오염 위험은 없으나
-          비정상 데이터로 크래시 가능
-        </td>
-      </tr>
-      <tr>
-        <td>비밀번호/인증 처리</td>
-        <td><span class="badge badge-blue">해당없음</span></td>
-        <td>인증 시스템 미존재. 로컬 전용 앱. MCP 서버는 localhost만 바인딩</td>
-      </tr>
-    </table>
-
-    <!-- C3. Engineering Reproducibility -->
-    <h3>3. 엔지니어링 재현성 및 운영 준비 <span class="badge badge-yellow">7.5 / 10</span></h3>
-
-    <div class="finding finding-suggestion">
-      <div class="finding-title">
-        🔵 긍정: 재현 가능한 빌드 환경 <span class="tag tag-tradeoff">TRADE-OFF: 간결한 CI</span>
-      </div>
-      <div class="finding-meta">
-        <code>package-lock.json</code> 커밋됨, <code>npm ci</code> 사용, CI/CD 파이프라인 구축
-      </div>
-      <div class="finding-body">
-        <code>package-lock.json</code>이 커밋되어 있고, CI에서 <code>npm ci</code>로 재현 가능한
-        설치. GitHub Actions로 lint → typecheck → test → build → release 파이프라인 완성.
-        <code>npm audit</code> CVE 0건.
-      </div>
-    </div>
-
-    <div class="finding finding-major">
-      <div class="finding-title">
-        🟠 주요: 핵심 경로 테스트 커버리지 제외
-        <span class="tag tag-tradeoff">TRADE-OFF: 네이티브 의존성 테스트 어려움</span>
-      </div>
-      <div class="finding-meta">
-        <code>vitest.config.ts</code> — WebSocket, QueueManager 커버리지 제외
-      </div>
-      <div class="finding-body">
-        197개 테스트가 존재하고 품질이 우수하나(실제 데이터 기반 픽스처, 엣지 케이스 커버),
-        <code>websocket.ts</code>(실시간 완료 감지)와 <code>queue-manager.ts</code>(배치 실행
-        엔진)가 커버리지 측정에서 명시적으로 제외됨. IPC 핸들러(40+), MCP 도구(18개), Vue 컴포넌트는
-        테스트 미존재. 핵심 비즈니스 로직인 <code>processJob()</code>의 통합 테스트가 없음.
-      </div>
-    </div>
-
-    <div class="finding finding-minor">
-      <div class="finding-title">
-        🟡 경미: 옵저버빌리티 부재 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">전체 코드베이스 — 구조화 로깅 없음</div>
-      <div class="finding-body">
-        <code>console.log/error</code>만 사용. 로그 레벨, 타임스탬프, 구조화 포맷 미적용. 프로덕션
-        디버깅 시 문제 추적이 어려움. 헬스체크 엔드포인트 없음 (MCP 서버에도).
-      </div>
-    </div>
-
-    <!-- C4. Architecture -->
-    <h3>4. 아키텍처 및 확장성 <span class="badge badge-yellow">7.0 / 10</span></h3>
-
-    <div class="finding finding-suggestion">
-      <div class="finding-title">
-        🔵 긍정: 명확한 3-프로세스 분리
-        <span class="tag tag-tradeoff">TRADE-OFF: Electron 표준 패턴</span>
-      </div>
-      <div class="finding-meta">
-        <code>src/main/</code>, <code>src/preload/</code>, <code>src/renderer/</code>
-      </div>
-      <div class="finding-body">
-        main(Node.js), preload(브릿지), renderer(Vue) 프로세스가 명확히 분리. 렌더러는 IPC를
-        통해서만 main 프로세스와 통신하며, 프리로드 스크립트의 API 노출 표면이 최소화되어 있음.
-        서비스 계층도 기능별로 분리 (comfyui, batch, database, mcp, tags, terminal, prompt).
-      </div>
-    </div>
-
-    <div class="finding finding-major">
-      <div class="finding-title">
-        🟠 주요: 싱글턴 의존과 동시성 제한
-        <span class="tag tag-tradeoff">TRADE-OFF: 단순성 우선</span>
-      </div>
-      <div class="finding-meta">
-        <code>queueManager</code>, <code>comfyuiManager</code>, <code>mcpServerManager</code>,
-        <code>db</code>
-      </div>
-      <div class="finding-body">
-        6개 싱글턴이 모듈 수준에서 인스턴스화. 전역 뮤터블 상태인 DB 인스턴스(<code
-          >let db: SqlJsDatabase | null</code
-        >)를 모든 리포지토리가 공유. QueueManager는 동시에 하나의 작업만 실행 가능. 단독 사용자
-        데스크톱 앱이므로 현재 적합하지만, 멀티윈도우·멀티큐 확장 시 병목.
-      </div>
-    </div>
-
-    <div class="finding finding-minor">
-      <div class="finding-title">
-        🟡 경미: i18n 불완전 — 하드코딩된 한국어 문자열
-        <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta">
-        GalleryView, QueueView, DashboardView, JobsView, BatchView — 40+개 문자열
-      </div>
-      <div class="finding-body">
-        i18n 프레임워크가 구축되어 있고 <code>ko.json</code>/<code>en.json</code> 203줄씩 정의되어
-        있으나, 실제 뷰 컴포넌트에서 <code>t()</code> 대신 직접 한국어 문자열을 사용하는 곳이 40곳
-        이상. 영어 사용자에게 혼합 언어 UI가 표시됨.
-      </div>
-    </div>
-
-    <!-- C5. Tech Stack -->
-    <h3>5. 기술 스택 및 의존성 건강 <span class="badge badge-green">8.5 / 10</span></h3>
-
-    <div class="finding finding-suggestion">
-      <div class="finding-title">🔵 긍정: 건강한 의존성 트리</div>
-      <div class="finding-meta">
-        <code>npm audit</code> — 취약점 0건, 총 902개 의존성 (프로덕션 160개)
-      </div>
-      <div class="finding-body">
-        프로덕션 의존성 11개 모두 명확한 용도를 가짐. 중복 의존성 없음. 모든 패키지가 활발히
-        유지보수되는 최신 버전. <code>package-lock.json</code>으로 버전 고정. ESLint 9(flat config)
-        + Prettier + TypeScript strict로 정적 분석 삼중 보호.
-      </div>
-    </div>
-
-    <div class="finding finding-minor">
-      <div class="finding-title">
-        🟡 경미: pre-commit 훅 미설정 <span class="tag tag-oversight">OVERSIGHT</span>
-      </div>
-      <div class="finding-meta"><code>husky</code> 또는 <code>lint-staged</code> 미사용</div>
-      <div class="finding-body">
-        CI에서 lint·typecheck·test를 실행하지만, 로컬 커밋 전 자동 검증이 없음. 불량 코드가 push
-        후에야 발견됨. 단독 개발이므로 현재 리스크는 낮으나, 협업 시 필요.
-      </div>
-    </div>
-
-    <!-- D. Action Plan -->
-    <h2>D. 조치 계획</h2>
-
-    <div class="action-item">
-      <span class="action-tag action-qw">Quick Win</span>
-      <div>
-        <strong>Electron 샌드박스 활성화</strong> — <code>index.ts</code>에서
-        <code>sandbox: true</code>, <code>webSecurity: true</code>로 변경. <code>node-pty</code>는
-        main 프로세스에서만 사용하므로 영향 없을 가능성 높음. 테스트 필요.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-qw">Quick Win</span>
-      <div>
-        <strong>로컬 에셋 경로 검증</strong> — <code>protocol.handle</code>에서
-        <code>path.normalize()</code> 후 허용 디렉토리 화이트리스트 검증 추가.
-        <code>bypassCSP</code>를 <code>false</code>로 변경.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-hd">Hardening</span>
-      <div>
-        <strong>IPC 입력 검증 레이어</strong> — 각 핸들러에 zod 스키마 또는 필드 화이트리스트 적용.
-        특히 <code>update()</code> 계열 리포지토리 메서드의 동적 필드명을 허용 목록으로 제한.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-hd">Hardening</span>
-      <div>
-        <strong>핵심 경로 테스트 확대</strong> — <code>processJob()</code> 통합 테스트, IPC 핸들러
-        단위 테스트, MCP 도구 테스트 추가. <code>vitest.config.ts</code>의 커버리지 제외 항목
-        재검토.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-hd">Hardening</span>
-      <div>
-        <strong>하드코딩된 i18n 문자열 추출</strong> — GalleryView, JobsView 등의 40+개 한국어
-        문자열을 <code>t()</code> 호출로 교체. 영어 사용자 경험 정상화.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-st">Strategic</span>
-      <div>
-        <strong>중복 코드 리팩토링</strong> — BatchView/JobsView의 모듈 선택·슬롯 복원 로직을
-        <code>composable</code> 또는 유틸리티로 추출. <code>parsePromptVariants()</code> 등 중복
-        함수 통합.
-      </div>
-    </div>
-
-    <div class="action-item">
-      <span class="action-tag action-st">Strategic</span>
-      <div>
-        <strong>구조화 로깅 도입</strong> — <code>console.log</code>를 구조화 로거(electron-log
-        등)로 교체. 로그 레벨, 타임스탬프, 파일 출력 지원. App.vue의 IPC 리스너 정리 코드도 함께
-        추가.
-      </div>
-    </div>
-
-    <hr class="separator" />
-
-    <!-- ============ SUMMARY ZONE ============ -->
-
-    <h2>E. 코드베이스 성격</h2>
-    <div class="card">
-      <p class="verdict-text" style="font-style: italic">
-        빠른 기능 추가를 우선하되 타입 안전성과 테스트를 소홀히 하지 않은,
-        <strong>의도적으로 속도와 품질 사이에서 균형을 잡은 단독 개발 코드베이스</strong>. 아키텍처
-        결정은 합리적이나 보안 하드닝은 후순위로 밀린 상태.
-      </p>
-    </div>
-
-    <h2>F. 최종 평결</h2>
-
-    <div class="summary-box">
-      <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px">
-        <div class="grade-box grade-B">B</div>
-        <div>
-          <div class="score" style="color: #58a6ff">
-            6.63 <span style="font-size: 1rem; color: #8b949e">/ 10</span>
+        <div class="hero-side">
+          <div class="scorebox">
+            <div class="label">최종 등급</div>
+            <div class="grade">B</div>
+            <div class="total">가중 총점 6.2 / 10</div>
           </div>
-          <div class="score-label">가중 총점</div>
+
+          <div class="hero-metrics">
+            <div class="metric">
+              <div class="k">추적 파일</div>
+              <div class="v">107</div>
+            </div>
+            <div class="metric">
+              <div class="k">테스트</div>
+              <div class="v">305</div>
+            </div>
+            <div class="metric">
+              <div class="k">앱 소스 LOC</div>
+              <div class="v">15,635</div>
+            </div>
+            <div class="metric">
+              <div class="k">커밋</div>
+              <div class="v">66</div>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <div class="detail-grid">
+        <section class="card">
+          <div class="card-body">
+            <h2>A. 개요와 스택</h2>
+            <p>
+              이 코드는 로컬 생성 워크플로우 서버와 연결해 대량 생성, 프롬프트 모듈 관리,
+              갤러리, 내장 터미널, 로컬 도구 서버를 제공하는 Electron 데스크톱 앱이다.
+              범위는 개인 생산성 도구보다 넓고, 파일시스템·IPC·로컬 HTTP를 동시에 다루는
+              특권형 클라이언트에 가깝다.
+            </p>
+
+            <div class="stack-pills">
+              <span class="pill">Electron 39.2.6</span>
+              <span class="pill">Vue 3.5.25</span>
+              <span class="pill">TypeScript 5.9.3</span>
+              <span class="pill">Pinia 3.0.3</span>
+              <span class="pill">Vue Router 4.5.1</span>
+              <span class="pill">Vue I18n 11.1.5</span>
+              <span class="pill">Naive UI 2.42.0</span>
+              <span class="pill">sql.js 1.12.0</span>
+              <span class="pill">ofetch 1.4.1</span>
+              <span class="pill">ws 8.18.2</span>
+              <span class="pill">node-pty 1.1.0</span>
+              <span class="pill">@modelcontextprotocol/sdk 1.27.1</span>
+              <span class="pill">electron-vite 5.0.0</span>
+              <span class="pill">electron-builder 26.0.12</span>
+              <span class="pill">Vitest 4.1.0</span>
+              <span class="pill">ESLint 9.39.1</span>
+              <span class="pill">Prettier 3.7.4</span>
+              <span class="pill">Husky 9.1.7</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <ul class="meta-list">
+              <li>
+                <strong>검증된 수치.</strong> <code>git ls-files</code> 기준 추적 파일 107개,
+                <code>git rev-list --count HEAD</code> 기준 커밋 66개.
+              </li>
+              <li>
+                <strong>라인 수 산정법.</strong> 추적된 텍스트 파일만 확장자 기반으로 집계했다.
+                바이너리 아이콘 4개는 내용 감사에서 제외했고, 앱 소스 62개 텍스트 파일
+                15,635 LOC, 테스트 12개 파일 3,076 LOC, 문서 5개 파일 1,256 LOC, 설정/메타
+                21개 파일 14,065 LOC, 총 텍스트 34,032 LOC다.
+              </li>
+              <li>
+                <strong>테스트 산정법.</strong> <code>tests/**/*.test.ts</code>에서
+                <code>it</code>/<code>test</code> 블록을 세어 305건으로 집계했고,
+                <code>npm test</code> 실행 결과도 305/305 통과로 일치했다.
+              </li>
+              <li>
+                <strong>의존성 규모.</strong> <code>package.json</code> 직접 의존성은 런타임
+                12개, 개발용 31개다. <code>npm audit --json</code> 기준 전체 설치 트리는
+                937개 패키지다.
+              </li>
+              <li>
+                <strong>실행 검증.</strong> <code>npm test</code>, <code>npm run lint</code>,
+                <code>npm run build</code>, <code>npm audit --json</code>를 실제로 실행해
+                모두 종료 코드 0을 확인했다.
+              </li>
+              <li>
+                <strong>운영 관측성.</strong> <code>src/main/logger.ts:1-8</code>에는
+                <code>electron-log</code> 기반 파일/콘솔 로그가 있고,
+                <code>src/main/services/mcp/index.ts:136-138</code>에는 선택형 로컬 도구 서버용
+                <code>/health</code>가 있다. 다만 앱 전체를 대표하는 헬스체크나 렌더러 계층의
+                일관된 오류 표면화까지 갖춘 상태는 아니다.
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-body">
+            <h2>B. 점수표</h2>
+            <table class="score-table">
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>가중치</th>
+                  <th>점수</th>
+                  <th>가중 점수</th>
+                  <th>한줄 요약</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>코드 품질·유지보수성</td>
+                  <td>25%</td>
+                  <td>6.5</td>
+                  <td>1.6</td>
+                  <td>기본 구조는 좋지만 화면/IPC 드리프트가 비용을 키운다.</td>
+                </tr>
+                <tr>
+                  <td>보안·신뢰성</td>
+                  <td>30%</td>
+                  <td>5.0</td>
+                  <td>1.5</td>
+                  <td>핵심 경계 버그 세 건이 프로덕션 승인을 막는다.</td>
+                </tr>
+                <tr>
+                  <td>재현성·운영 준비도</td>
+                  <td>20%</td>
+                  <td>6.7</td>
+                  <td>1.3</td>
+                  <td>로컬 재현은 강하지만 자동화 wiring이 어긋났다.</td>
+                </tr>
+                <tr>
+                  <td>아키텍처·확장성</td>
+                  <td>15%</td>
+                  <td>6.4</td>
+                  <td>1.0</td>
+                  <td>현재 규모엔 맞지만 성장 여유는 넉넉하지 않다.</td>
+                </tr>
+                <tr>
+                  <td>스택·의존성 건전성</td>
+                  <td>10%</td>
+                  <td>7.7</td>
+                  <td>0.8</td>
+                  <td>도구 선택은 현대적이지만 보안 자동화는 얕다.</td>
+                </tr>
+                <tr>
+                  <td><strong>총점</strong></td>
+                  <td><strong>100%</strong></td>
+                  <td><strong>6.2</strong></td>
+                  <td><strong>6.2</strong></td>
+                  <td><strong>하드닝 없이는 배포 보류</strong></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p class="note">
+              기본 가중치는 유지보수 25 / 보안 25 / 재현성 20 / 아키텍처 20 / 스택 10이다.
+              이번 평가는 로컬 파일 접근·IPC·내장 HTTP 서버 같은 특권 경계가 핵심인
+              데스크톱 앱이므로 보안·신뢰성을 +5%, 수평 확장성의 비중을 -5% 조정했다.
+            </p>
+          </div>
+        </section>
       </div>
 
-      <p style="margin-bottom: 16px; color: #c9d1d9; font-size: 0.92rem">
-        <strong>프로젝트 설명:</strong> 이미지 생성 AI 서버와 연동하여 대량 이미지를 자동 생성하고
-        관리하는 데스크톱 애플리케이션. 프롬프트 조합 매트릭스, 배치 큐, 갤러리, AI CLI 도구 서버를
-        포함하는 올인원 워크스테이션.
-      </p>
+      <section class="card">
+        <div class="card-body">
+          <h2>C. 핵심 근거</h2>
 
-      <p style="margin-bottom: 16px; color: #8b949e; font-size: 0.88rem">
-        <strong>스택:</strong> Electron 39 · Vue 3 · TypeScript 5.9 · Pinia · Naive UI · sql.js ·
-        Vite · Vitest · ESLint 9 · GitHub Actions
-      </p>
+          <div class="section-grid">
+            <section class="section-card">
+              <h3>1. 코드 품질·유지보수성</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    라우팅과 실제 화면 세트가 갈라졌다. <code>src/renderer/src/router/index.ts:4-38</code>와
+                    <code>src/renderer/src/components/layout/AppLayout.vue:44-88</code>는
+                    현재 6개 화면만 노출하지만, <code>DashboardView.vue</code>,
+                    <code>BatchView.vue</code>, <code>QueueView.vue</code>,
+                    <code>Versions.vue</code>는 참조가 끊겼다.
+                    <code>src/renderer/src/views/DashboardView.vue:127-187</code>는 존재하지 않는
+                    <code>/batch</code>로 이동을 시도한다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    IPC 계약이 중앙 타입에서 이탈했다. <code>src/renderer/src/types/ipc.ts:3-74</code>가
+                    채널 집합을 정의하지만 <code>src/renderer/src/stores/gallery.store.ts:86-92</code>,
+                    <code>src/renderer/src/stores/terminal.store.ts:94-129</code>,
+                    <code>src/renderer/src/views/QueueView.vue:185-189</code>는 여기에 없는 채널을
+                    직접 호출한다. 타입 시스템이 실제 계약을 완전히 설명하지 못한다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-good">✅ 강점</span>
+                  </div>
+                  <div class="finding-text">
+                    구조 자체는 읽기 쉽다. <code>src/main/services/database/repositories/index.ts:5-32</code>의
+                    필드 화이트리스트, <code>src/main/ipc/validators.ts:1-90</code>의 검증 유틸리티,
+                    <code>src/renderer/src/composables/useBatchWizard.ts:1-156</code>의 공통화는
+                    “아무 분리도 없는 바이브 코드”와는 거리가 있다.
+                  </div>
+                </li>
+              </ul>
+            </section>
 
-      <table style="margin-bottom: 20px">
-        <tr>
-          <th>카테고리</th>
-          <th>점수</th>
-          <th>평가</th>
-        </tr>
-        <tr>
-          <td>코드 품질</td>
-          <td class="bright">7.0</td>
-          <td>동작하고 읽을 수 있으나 기술 부채 축적 중</td>
-        </tr>
-        <tr>
-          <td>보안</td>
-          <td style="color: #f85149">4.5</td>
-          <td>데스크톱 앱 치고 샌드박스 해제는 치명적</td>
-        </tr>
-        <tr>
-          <td>재현성/운영</td>
-          <td class="bright">7.5</td>
-          <td>CI/CD 있고 테스트 돌아감, 커버리지 불균형</td>
-        </tr>
-        <tr>
-          <td>아키텍처</td>
-          <td class="bright">7.0</td>
-          <td>분리 잘 됨, 싱글턴 한계 인지 필요</td>
-        </tr>
-        <tr>
-          <td>기술 스택</td>
-          <td style="color: #3fb950">8.5</td>
-          <td>모범적. CVE 0건, 도구 체인 완비</td>
-        </tr>
-      </table>
+            <section class="section-card">
+              <h3>2. 보안·신뢰성</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-critical">🔴 치명적</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    커스텀 프로토콜이 임의 로컬 파일을 열 수 있다.
+                    <code>src/main/index.ts:74-89</code>는 <code>..</code>만 막고
+                    <code>resolve(filePath)</code>를 그대로 <code>net.fetch(pathToFileURL(...))</code>에
+                    넘긴다. 같은 저장소의 <code>SKILL.md:8-35</code>는 허용 디렉터리 화이트리스트를
+                    요구하지만 실제 구현은 그 단계가 빠져 있다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-critical">🔴 치명적</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    갤러리 정렬 입력이 SQL에 직접 삽입된다.
+                    <code>src/main/ipc/handlers.ts:528-531</code>는 쿼리를 검증 없이 넘기고,
+                    <code>src/main/services/database/repositories/index.ts:893-957</code>는
+                    <code>ORDER BY ${sortBy} ${sortOrder}</code>를 그대로 조합한다.
+                    다른 쿼리는 대부분 파라미터 바인딩을 쓰는데, 이 한 곳이 전체 보안 점수를 깎는다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[TRADE-OFF: 단일 사용자 로컬 도구]</span>
+                  </div>
+                  <div class="finding-text">
+                    로컬 도구 서버는 루프백 한정이지만 권한 경계가 약하다.
+                    <code>src/main/services/mcp/index.ts:105-138,171-215</code>는
+                    <code>127.0.0.1</code>에 바인딩하면서도 <code>Access-Control-Allow-Origin: *</code>와
+                    무인증 세션 초기화를 허용한다. 게다가
+                    <code>src/renderer/src/stores/terminal.store.ts:45-53</code>는 첫 터미널 탭 생성 시
+                    서버를 자동 시작하고 설정까지 영구화한다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-good">✅ 강점</span>
+                  </div>
+                  <div class="finding-text">
+                    기초 하드닝은 실제로 들어가 있다. <code>src/main/index.ts:27-35,47-60</code>는
+                    <code>bypassCSP: false</code>, <code>sandbox: true</code>,
+                    <code>webSecurity: true</code>를 사용하고,
+                    <code>src/main/ipc/validators.ts:1-90</code>와
+                    <code>src/main/services/database/repositories/index.ts:5-32</code>는
+                    입력·필드 화이트리스트를 제공한다.
+                  </div>
+                </li>
+              </ul>
+            </section>
 
-      <div class="verdict-text">
-        <p style="margin-bottom: 12px">
-          10,700줄에 197개 테스트를 갖춘, 기능적으로 상당히 완성도 높은 코드베이스다. 기술 선택은
-          합리적이고 의존성은 깨끗하며, 테스트 품질(실제 데이터 픽스처, 엣지 케이스)이 특히
-          인상적이다. Pinia 스토어 설계와 서비스 계층 분리도 깔끔하다. 다만
-          <strong>Electron 보안 설정이 사실상 무장해제 상태</strong>로,
-          <code>sandbox: false</code>와 <code>webSecurity: false</code>의 조합은 렌더러 프로세스의
-          XSS를 시스템 전체의 RCE로 확대시킨다. 경로 순회 취약점과 IPC 입력 검증 부재가 이를
-          악화시킨다. 코드 품질 측면에서는 동적 SQL 필드명 패턴, 중복된 배치 위자드 로직, 불완전한
-          i18n이 실질적 유지보수 부담이다.
-        </p>
-        <p
-          style="
-            font-weight: 700;
-            color: #d29922;
-            font-size: 0.95rem;
-            padding: 12px;
-            background: #d2960015;
-            border-radius: 8px;
-            border-left: 4px solid #d29922;
-          "
-        >
-          🟠 프로덕션 배포 판정: <strong>보안 하드닝 필수</strong> — 샌드박스 활성화와 경로 검증
-          2건을 수정하면 베타 배포 가능 수준. 현재 상태로는 로컬 개발/데모 용도로만 적합.
-        </p>
+            <section class="section-card">
+              <h3>3. 재현성·운영 준비도</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    CI가 현재 기본 브랜치를 지키지 못한다.
+                    <code>.github/workflows/ci.yml:3-7</code>는 <code>master</code>만 감시하지만,
+                    실제 작업 브랜치는 <code>main</code>이다. 로컬에선
+                    <code>npm test</code>, <code>npm run lint</code>, <code>npm run build</code>가
+                    통과했어도, 기본 브랜치에서 자동 검증이 빠질 수 있다는 뜻이다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-minor">🟡 경미</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    메타데이터 드리프트가 보인다. <code>package.json:2-7</code>은 버전
+                    <code>0.15.1</code>인데 <code>package-lock.json:1-10</code>의 루트 버전은
+                    아직 <code>0.11.0</code>이다. 여기에
+                    <code>package.json:6-7</code>, <code>README.md:66-69</code>,
+                    <code>electron-builder.yml:48-51</code>의 저장소 URL도 서로 맞지 않는다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-good">✅ 강점</span>
+                  </div>
+                  <div class="finding-text">
+                    로컬 재현성은 강하다. <code>README.md:57-207</code>가 설치·실행·빌드·테스트를
+                    설명하고, <code>package.json:8-25,74-80</code>와 <code>.husky/pre-commit:1</code>는
+                    린트·포맷 훅을 제공한다. 실제 실행에서도 테스트 305건, 린트, 빌드, 감사 스캔이 모두
+                    통과했다.
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section class="section-card">
+              <h3>4. 아키텍처·확장성</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[TRADE-OFF: 단일 사용자 데스크톱]</span>
+                  </div>
+                  <div class="finding-text">
+                    현재 구조는 지금 규모엔 맞지만 수평 성장 여유는 적다.
+                    <code>src/main/services/database/index.ts:17-81</code>는 메모리 상의
+                    <code>sql.js</code> DB를 통째로 export 해서 저장하고,
+                    <code>src/main/index.ts:7-17</code>는 큐, 연결 관리자, 도구 서버를
+                    싱글턴으로 붙인다. 팀형 서비스나 대형 데이터셋으로 확대하면 병목이 선명해진다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    큰 기능이 다시 뷰 단위 모놀리스로 뭉친다.
+                    <code>src/renderer/src/views/JobsView.vue</code>,
+                    <code>GalleryView.vue</code>, <code>ModuleView.vue</code>,
+                    <code>BatchView.vue</code>, <code>QueueView.vue</code>는 각자 거대한
+                    화면 단위에서 상태, 파싱, 메시지, 복구 로직을 함께 안고 있다.
+                    <code>useBatchWizard.ts</code>가 일부를 덜어냈지만 전체 분해는 아직 덜 됐다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-good">✅ 강점</span>
+                  </div>
+                  <div class="finding-text">
+                    큰 그림의 분리는 분명하다. <code>electron.vite.config.ts:5-24</code>와
+                    <code>src/preload/index.ts:1-22</code>는 메인·프리로드·렌더러를 나누고,
+                    <code>src/main/services/database/repositories/index.ts</code>는 저장소 계층,
+                    <code>src/renderer/src/main.ts</code>는 UI 부트스트랩 책임을 분리한다.
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section class="section-card">
+              <h3>5. 스택·의존성 건전성</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-good">✅ 강점</span>
+                  </div>
+                  <div class="finding-text">
+                    스택 선택은 합리적이다. <code>package.json:27-81</code> 기준 직접 의존성은
+                    런타임 12개, 개발용 31개로 과도하지 않고,
+                    <code>eslint.config.mjs:1-40</code>, <code>vitest.config.ts:1-25</code>,
+                    <code>tsconfig.node.json:1-8</code>, <code>tsconfig.web.json:1-18</code>가
+                    타입·린트·테스트 의도를 명확히 드러낸다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-minor">🟡 경미</span>
+                    <span class="tag">[OVERSIGHT]</span>
+                  </div>
+                  <div class="finding-text">
+                    오늘 시점 취약점은 깨끗하지만 자동화가 얕다. <code>npm audit --json</code>는
+                    전체 937개 패키지 트리에서 취약점 0건을 보고했지만, 추적된
+                    <code>.github</code>에는 Dependabot, CodeQL, PR/이슈 템플릿이 없다.
+                    현재는 사람의 습관이 공급망 통제를 대신한다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-minor">🟡 경미</span>
+                    <span class="tag">[TRADE-OFF: 현재 배포 초점은 Windows]</span>
+                  </div>
+                  <div class="finding-text">
+                    패키징 표면은 넓지만 릴리스 자동화는 좁다. <code>electron-builder.yml:28-51</code>는
+                    macOS/Linux 타깃까지 선언하지만 <code>release.yml:38-67,97-103</code>는
+                    Windows 산출물만 만들고, <code>build/entitlements.mac.plist:5-10</code>는
+                    macOS 하드닝보다 호환성을 우선한 설정을 사용한다.
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section class="section-card">
+              <h3>보안 취약 유형 체크</h3>
+              <table class="matrix-table">
+                <thead>
+                  <tr>
+                    <th>유형</th>
+                    <th>판정</th>
+                    <th>근거</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>SQL Injection (CWE-89)</td>
+                    <td>발견</td>
+                    <td>
+                      <code>src/main/services/database/repositories/index.ts:952-957</code>의
+                      <code>ORDER BY ${sortBy} ${sortOrder}</code>. 호출부는
+                      <code>src/main/ipc/handlers.ts:528-531</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>XSS (CWE-79/80)</td>
+                    <td>N/A에 가까운 미발견</td>
+                    <td>
+                      <code>src/renderer/index.html:7-10</code>에 CSP가 있고, 렌더러 전체 검색에서
+                      <code>v-html</code>, <code>innerHTML</code>,
+                      <code>insertAdjacentHTML</code>가 나오지 않았다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Log Injection (CWE-117)</td>
+                    <td>경미하게 발견</td>
+                    <td>
+                      <code>src/main/services/mcp/file-parser.ts:264-268</code>,
+                      <code>src/main/services/tags/danbooru-api.ts:68-99</code>가 파일 경로와 외부
+                      입력 문자열을 로그에 그대로 남긴다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Insecure Deserialization</td>
+                    <td>발견</td>
+                    <td>
+                      <code>src/main/ipc/handlers.ts:95-120,620-644</code>,
+                      <code>src/main/services/comfyui/workflow-parser.ts:24-79,152-190</code>,
+                      <code>src/renderer/src/views/JobsView.vue:457-475</code>,
+                      <code>src/renderer/src/views/WorkflowView.vue:64-69</code> 등에서
+                      구조 검증 없는 <code>JSON.parse()</code>가 반복된다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>부적절한 비밀번호 처리</td>
+                    <td>N/A</td>
+                    <td>
+                      저장소 안에 사용자 인증·비밀번호 저장·해시 처리 모델이 없다. 관련 공격면 자체가
+                      구현돼 있지 않다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>부적절한 객체 참조</td>
+                    <td>구조상 존재</td>
+                    <td>
+                      <code>src/main/ipc/handlers.ts:220-809</code>와
+                      <code>src/main/services/mcp/tools.ts</code>는 ID를 넘기면 수정·삭제를 수행한다.
+                      단일 사용자 앱이라 설계상 단순화한 면이 있지만, 렌더러가 뚫리면 보호막이 없다.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+
+            <section class="section-card">
+              <h3>AI 생성 코드 패턴</h3>
+              <ul class="finding-list">
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                  </div>
+                  <div class="finding-text">
+                    <strong>리팩터링 회피형 누적.</strong> 빈도는 최소 4개 UI 단위다.
+                    <code>DashboardView.vue</code>, <code>BatchView.vue</code>,
+                    <code>QueueView.vue</code>, <code>Versions.vue</code>가 남아 있는데
+                    라우터와 메뉴에서는 빠졌다. 실제 위험은 “죽은 코드는 무해하다”가 아니라,
+                    오래된 경로와 버튼이 계속 거짓말을 하기 시작한다는 점이다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-major">🟠 주요</span>
+                  </div>
+                  <div class="finding-text">
+                    <strong>Bug déjà-vu형 중복.</strong> 빈도는 큰 블록 기준 2곳 이상이다.
+                    <code>src/main/services/batch/task-generator.ts:105-318,449-597</code>는
+                    배치 조합 로직이 평행하게 반복되고, 
+                    <code>tests/main/services/database/repositories.test.ts:24-86</code>는
+                    실제 DB 스키마를 테스트 안에 다시 복제한다. 위험은 버그가 “한 번만” 생기지
+                    않는다는 데 있다.
+                  </div>
+                </li>
+                <li>
+                  <div class="finding-head">
+                    <span class="sev sev-minor">🟡 경미</span>
+                  </div>
+                  <div class="finding-text">
+                    <strong>바닐라 재구현.</strong> 빈도는 1개 유틸리티지만 호출 범위는 넓다.
+                    <code>src/renderer/src/utils/ipc.ts:1-13</code>는 Vue 프록시를 벗기기 위해
+                    <code>JSON.stringify/parse</code> 기반 복제를 직접 만든다. 위험은 즉시 취약점이
+                    아니라, <code>undefined</code>, 날짜, 버퍼, 특수 객체를 조용히 잃어버리는
+                    데이터 변형이다.
+                  </div>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-body">
+          <h2>D. 상위 조치 계획</h2>
+          <ol class="action-list">
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag harden">하드닝 (Hardening)</span>
+              </div>
+              <div class="finding-text">
+                <strong><code>local-asset://</code>를 허용 디렉터리 기반으로 다시 묶어라.</strong>
+                <code>src/main/index.ts:74-89</code>를
+                <code>SKILL.md:24-35</code> 패턴처럼 출력 디렉터리 화이트리스트로 바꾸고,
+                임의 절대경로·심볼릭 링크·인코딩 우회를 막는 테스트를 추가해야 한다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag quick">빠른 수습 (Quick Win)</span>
+              </div>
+              <div class="finding-text">
+                <strong>갤러리 정렬 입력을 IPC 경계에서 화이트리스트 검증하라.</strong>
+                <code>sortBy</code>, <code>sortOrder</code>, <code>page</code>,
+                <code>pageSize</code>를 별도 validator로 제한하고,
+                <code>GeneratedImageRepository.list()</code>는 문자열 조합이 아니라
+                허용된 열 이름 매핑만 사용해야 한다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag harden">하드닝 (Hardening)</span>
+              </div>
+              <div class="finding-text">
+                <strong>로컬 도구 서버를 명시적 opt-in 보안 모드로 바꿔라.</strong>
+                자동 시작과 <code>Access-Control-Allow-Origin: *</code>를 제거하고,
+                적어도 origin allowlist 또는 임시 토큰을 넣어야 한다. 터미널 탭 생성이
+                서버 상태와 설정을 바꾸는 현재 동작은 분리하는 편이 낫다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag quick">빠른 수습 (Quick Win)</span>
+              </div>
+              <div class="finding-text">
+                <strong>CI 브랜치와 메타데이터를 현재 상태에 맞춰 정렬하라.</strong>
+                <code>.github/workflows/ci.yml</code>를 <code>main</code>으로 맞추고,
+                <code>package-lock.json</code> 루트 버전과 저장소 URL, 오래된 테스트 수치를
+                한 번에 정리하면 운영 신뢰도가 즉시 올라간다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag strategic">구조 개선 (Strategic)</span>
+              </div>
+              <div class="finding-text">
+                <strong>죽은 화면과 문자열 IPC를 함께 정리하라.</strong>
+                더 이상 쓰지 않는 뷰/컴포넌트를 제거하거나 라우트로 복귀시키고,
+                모든 채널을 <code>src/renderer/src/types/ipc.ts</code> 한 곳에서
+                강제하도록 바꾸면 유지보수 비용이 크게 줄어든다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag strategic">구조 개선 (Strategic)</span>
+              </div>
+              <div class="finding-text">
+                <strong>JSON 경계에 스키마 검증을 도입하라.</strong>
+                워크플로우 가져오기, 모듈 import/export, 배치 설정 복원, 도구 서버 입력을
+                공통 스키마로 검증하고, 지금처럼 <code>catch {}</code>나 빈 객체 반환으로
+                삼키는 경로를 줄여야 한다.
+              </div>
+            </li>
+            <li>
+              <div class="finding-head">
+                <span class="plan-tag strategic">구조 개선 (Strategic)</span>
+              </div>
+              <div class="finding-text">
+                <strong>테스트 범위를 UI·복잡 오케스트레이션으로 넓혀라.</strong>
+                현재 305개 테스트는 전부 메인 계층에 몰려 있고,
+                <code>vitest.config.ts:8-18</code>는 렌더러와 가장 복잡한 일부 경로를
+                커버리지 판단 밖에 둔다. 주요 사용자 흐름과 보안 회귀 테스트를 추가해야 한다.
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="summary-zone card">
+        <div class="summary-grid">
+          <aside class="grade-panel">
+            <div class="small">등급</div>
+            <div class="big">B</div>
+            <div class="sub">총점 6.2 / 10</div>
+          </aside>
+
+          <div class="summary-block">
+            <div>
+              <h2>E. 코드베이스 성격</h2>
+              <p>
+                규칙과 테스트는 성실한데, 구현은 오래된 화면·문자열 계약·부분 검증 누락이
+                겹쳐 있는 “잘 굴러가지만 아직 날카로운 단일 앱형 모놀리스”다.
+              </p>
+            </div>
+
+            <div>
+              <h2>F. 최종 판정</h2>
+              <ul class="summary-list">
+                <li>
+                  <strong>프로젝트 설명.</strong> 로컬 이미지 생성 서버와 연동해 배치 실행,
+                  프롬프트 자산 관리, 갤러리, 로컬 도구 서버까지 제공하는 Electron 데스크톱 앱이다.
+                  개인 도구처럼 보이지만 실제로는 파일시스템과 로컬 네트워크 경계를 다루는 특권형 클라이언트다.
+                </li>
+                <li>
+                  <strong>스택 요약.</strong> Electron, Vue 3, TypeScript, Pinia,
+                  sql.js, Vite, Vitest.
+                </li>
+              </ul>
+            </div>
+
+            <div class="score-chips">
+              <span class="score-chip">코드 품질 6.5 — 구조는 양호, 드리프트 존재</span>
+              <span class="score-chip">보안·신뢰성 5.0 — 핵심 경계 결함 존재</span>
+              <span class="score-chip">재현성·운영 6.7 — 로컬 검증 강함, 자동화 비틀림</span>
+              <span class="score-chip">아키텍처 6.4 — 현재 규모 적합, 성장 여유 제한</span>
+              <span class="score-chip">스택 7.7 — 현대적, 자동 스캐닝은 얕음</span>
+              <span class="score-chip">가중 총점 6.2 — B</span>
+            </div>
+
+            <p class="verdict">
+              이 코드는 “겉만 번듯한 바이브 코드”는 아니다. 문서가 길고, 릴리스 히스토리가
+              이어지고, 테스트가 실제 로직을 꽤 많이 건드리며, 타입/린트/빌드 체인도 살아 있다.
+              다만 프로덕션 게이트의 기준은 “돌아간다”가 아니라 “뚫리지 않고, 고장 나도 추적 가능하다”다.
+              그 기준에서 보면 로컬 파일 프로토콜, 로컬 도구 서버, SQL 정렬 입력 검증은 지금 바로 막아야 할 결함이다.
+              이 세 건만 정리해도 평가가 크게 올라갈 것이지만, 현재 상태에서 즉시 승인하는 판단은 너무 낙관적이다.
+            </p>
+
+            <div class="ruling">프로덕션 판정: 보안 경계 3건을 막기 전까지는 배포 보류.</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="foot">
+        감사 범위는 <code>git ls-files</code> 기준 전수 점검이며, 바이너리 아이콘 4개는 경로와
+        역할만 분류했다. 실행 증거는 로컬 명령 결과에 기반한다.
       </div>
     </div>
   </body>

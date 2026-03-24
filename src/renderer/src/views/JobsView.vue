@@ -33,6 +33,7 @@ import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { toPlain } from '@renderer/utils/ipc'
+import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
 import {
   addModuleToMatrix as addModuleToMatrixShared,
   restoreModuleSelections,
@@ -47,6 +48,40 @@ const moduleStore = useModuleStore()
 const workflowStore = useWorkflowStore()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
+
+interface RestorableJobConfig {
+  description?: string
+  workflowId?: string | null
+  countPerCombination?: number
+  seedMode?: 'random' | 'fixed' | 'incremental'
+  fixedSeed?: number
+  outputFolderPattern?: string
+  fileNamePattern?: string
+  moduleSelections?: Array<{ moduleId: string; moduleType?: string; selectedItemIds?: string[] }>
+  slotMappings?: Array<Record<string, unknown>>
+  variableOverrides?: Array<Record<string, unknown>>
+}
+
+function isRestorableJobConfig(value: unknown): value is RestorableJobConfig {
+  return (
+    isJsonObject(value) &&
+    (value.description === undefined || typeof value.description === 'string') &&
+    (value.workflowId === undefined ||
+      value.workflowId === null ||
+      typeof value.workflowId === 'string') &&
+    (value.countPerCombination === undefined || typeof value.countPerCombination === 'number') &&
+    (value.seedMode === undefined ||
+      value.seedMode === 'random' ||
+      value.seedMode === 'fixed' ||
+      value.seedMode === 'incremental') &&
+    (value.fixedSeed === undefined || typeof value.fixedSeed === 'number') &&
+    (value.outputFolderPattern === undefined || typeof value.outputFolderPattern === 'string') &&
+    (value.fileNamePattern === undefined || typeof value.fileNamePattern === 'string') &&
+    (value.moduleSelections === undefined || Array.isArray(value.moduleSelections)) &&
+    (value.slotMappings === undefined || Array.isArray(value.slotMappings)) &&
+    (value.variableOverrides === undefined || Array.isArray(value.variableOverrides))
+  )
+}
 
 // ─── Job list ───
 const batchJobs = ref<Record<string, unknown>[]>([])
@@ -456,7 +491,16 @@ async function handleCreateBatch(): Promise<void> {
 // ─── Wizard: edit/clone helpers ───
 async function restoreConfig(job: Record<string, unknown>, isClone: boolean): Promise<void> {
   try {
-    const config = JSON.parse(job.config as string)
+    const parsedConfig = safeJsonParse<RestorableJobConfig>(job.config as string, {
+      context: 'Batch job config',
+      validate: isRestorableJobConfig,
+      invalidShapeMessage: 'Batch job config has an invalid shape'
+    })
+    if (!parsedConfig.ok) {
+      throw new Error(parsedConfig.error)
+    }
+
+    const config = parsedConfig.value
     await moduleStore.loadModules()
     await workflowStore.loadWorkflows()
     availableModules.value = moduleStore.modules

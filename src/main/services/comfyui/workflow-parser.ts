@@ -1,4 +1,5 @@
 import { VARIABLE_NODE_TYPES, type ComfyUINode } from './types'
+import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
 
 export interface ParsedVariable {
   nodeId: string
@@ -22,7 +23,7 @@ export interface ParsedWorkflow {
  * Parse a ComfyUI API-format workflow JSON and extract configurable variables.
  */
 export function parseWorkflow(apiJson: string, name?: string): ParsedWorkflow {
-  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+  const nodes = parseWorkflowNodes(apiJson)
   const variables: ParsedVariable[] = []
 
   for (const [nodeId, node] of Object.entries(nodes)) {
@@ -153,7 +154,7 @@ export function applyVariables(
   apiJson: string,
   variableValues: Record<string, Record<string, unknown>>
 ): Record<string, ComfyUINode> {
-  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+  const nodes = parseWorkflowNodes(apiJson)
 
   for (const [nodeId, fields] of Object.entries(variableValues)) {
     if (nodes[nodeId]) {
@@ -173,7 +174,7 @@ export function applyVariables(
 export function getPromptNodes(
   apiJson: string
 ): Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> {
-  const nodes: Record<string, ComfyUINode> = JSON.parse(apiJson)
+  const nodes = parseWorkflowNodes(apiJson)
   const result: Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> =
     []
 
@@ -188,6 +189,33 @@ export function getPromptNodes(
   }
 
   return result
+}
+
+function isComfyUINode(value: unknown): value is ComfyUINode {
+  return (
+    isJsonObject(value) &&
+    typeof value.class_type === 'string' &&
+    isJsonObject(value.inputs) &&
+    (value._meta === undefined || isJsonObject(value._meta))
+  )
+}
+
+function isWorkflowNodeMap(value: unknown): value is Record<string, ComfyUINode> {
+  return isJsonObject(value) && Object.values(value).every(isComfyUINode)
+}
+
+function parseWorkflowNodes(apiJson: string): Record<string, ComfyUINode> {
+  const parsed = safeJsonParse<Record<string, ComfyUINode>>(apiJson, {
+    context: 'Workflow JSON',
+    validate: isWorkflowNodeMap,
+    invalidShapeMessage: 'Workflow JSON must be a ComfyUI API-format node map'
+  })
+
+  if (!parsed.ok) {
+    throw new Error(parsed.error)
+  }
+
+  return parsed.value
 }
 
 /**

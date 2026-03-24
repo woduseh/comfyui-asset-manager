@@ -785,6 +785,22 @@ describe('Database Repositories', () => {
       expect(ratings).toEqual([5, 3, 1])
     })
 
+    it('does not interpolate invalid sort fields into SQL', () => {
+      repo.create({ file_path: '/1.png' })
+      repo.create({ file_path: '/2.png' })
+
+      expect(() =>
+        repo.list({
+          page: 1,
+          pageSize: 50,
+          sortBy: 'created_at; DROP TABLE generated_images --',
+          sortOrder: 'desc'
+        })
+      ).not.toThrow()
+
+      expect(repo.list({ page: 1, pageSize: 50 }).total).toBe(2)
+    })
+
     it('filters by searchText (filename match)', () => {
       repo.create({ file_path: '/output/alice_001.png' })
       repo.create({ file_path: '/output/bob_002.png' })

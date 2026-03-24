@@ -55,14 +55,23 @@
     "mcp": {
       "title": "MCP Server",
       "enabled": "Enable MCP Server",
+      "description": "Opening a terminal tab no longer starts the MCP server automatically. Turn this switch on to start it now and keep auto-start enabled for the next app launch.",
       "port": "Port",
       "status": "Status",
       "running": "Running",
       "stopped": "Stopped",
       "url": "Server URL",
+      "msg": {
+        "startFailed": "Failed to start MCP server: {error}",
+        "stopFailed": "Failed to stop MCP server: {error}",
+        "enablePersistFailed": "Failed to persist MCP settings, so the start was rolled back: {error}",
+        "disablePersistFailed": "Failed to persist MCP settings, so the stop was rolled back: {error}",
+        "rollbackFailed": "Rollback failed: {error}",
+        "unknownError": "Unknown error"
+      },
       "cliSetup": {
         "title": "CLI Auto-Connection",
-        "description": "LLM CLIs launched in the embedded terminal will automatically connect to MCP tools.",
+        "description": "Start the server here first, then LLM CLIs launched in the embedded terminal can connect to MCP tools.",
         "envTitle": "Environment Variables (Auto-injected)",
         "envDescription": "Automatically set when a new shell opens in the terminal.",
         "setupClaudeCode": "Setup CLI Configs",

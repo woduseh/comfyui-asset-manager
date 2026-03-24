@@ -1,41 +1,23 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { NAV_ITEMS, type RouteName } from '../navigation'
+
+const VIEW_COMPONENTS: Record<RouteName, () => Promise<unknown>> = {
+  workflows: () => import('@renderer/views/WorkflowView.vue'),
+  modules: () => import('@renderer/views/ModuleView.vue'),
+  jobs: () => import('@renderer/views/JobsView.vue'),
+  gallery: () => import('@renderer/views/GalleryView.vue'),
+  terminal: () => import('@renderer/views/TerminalView.vue'),
+  settings: () => import('@renderer/views/SettingsView.vue')
+}
 
 const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    redirect: '/workflows'
-  },
-  {
-    path: '/workflows',
-    name: 'workflows',
-    component: () => import('@renderer/views/WorkflowView.vue')
-  },
-  {
-    path: '/modules',
-    name: 'modules',
-    component: () => import('@renderer/views/ModuleView.vue')
-  },
-  {
-    path: '/jobs',
-    name: 'jobs',
-    component: () => import('@renderer/views/JobsView.vue')
-  },
-  {
-    path: '/gallery',
-    name: 'gallery',
-    component: () => import('@renderer/views/GalleryView.vue')
-  },
-  {
-    path: '/terminal',
-    name: 'terminal',
-    component: () => import('@renderer/views/TerminalView.vue')
-  },
-  {
-    path: '/settings',
-    name: 'settings',
-    component: () => import('@renderer/views/SettingsView.vue')
-  }
+  { path: '/', redirect: '/workflows' },
+  ...NAV_ITEMS.map((item) => ({
+    path: item.path,
+    name: item.name,
+    component: VIEW_COMPONENTS[item.name]
+  }))
 ]
 
 const router = createRouter({

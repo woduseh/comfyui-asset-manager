@@ -42,7 +42,7 @@ export const useGalleryStore = defineStore('gallery', () => {
         page: page.value,
         pageSize: pageSize.value,
         ...filters.value
-      } as GalleryQuery
+      }
 
       const result = await window.electron.ipcRenderer.invoke('gallery:list', toPlain(query))
       if (result) {

@@ -42,16 +42,6 @@ export const useTerminalStore = defineStore('terminal', () => {
     tabs.value.push(tab)
     activeTabId.value = terminalId
 
-    // Auto-start MCP server when first terminal is created
-    if (!mcpStatus.value.isRunning) {
-      await startMcpServer(mcpStatus.value.port)
-      // Persist the enabled state so it auto-starts on next app launch
-      await window.electron.ipcRenderer.invoke('settings:set', {
-        key: 'mcp_enabled',
-        value: 'true'
-      })
-    }
-
     return terminalId
   }
 

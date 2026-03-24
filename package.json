@@ -1,10 +1,17 @@
 {
   "name": "comfyui-asset-manager",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "description": "ComfyUI 대량 이미지 생성 및 자산 관리 도구",
   "main": "./out/main/index.js",
   "author": "ComfyUI Asset Manager",
-  "homepage": "https://github.com/comfyui-asset-manager",
+  "homepage": "https://github.com/woduseh/comfyui-asset-manager",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/woduseh/comfyui-asset-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/woduseh/comfyui-asset-manager/issues"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

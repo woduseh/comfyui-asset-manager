@@ -27,6 +27,7 @@ import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
+import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -78,11 +79,12 @@ function formatFileSize(bytes: number | null): string {
 
 function parseGenerationParams(json: string | null): Record<string, unknown> | null {
   if (!json) return null
-  try {
-    return JSON.parse(json)
-  } catch {
-    return null
-  }
+  const parsed = safeJsonParse<Record<string, unknown>>(json, {
+    context: 'Generation params',
+    validate: isJsonObject,
+    invalidShapeMessage: 'Generation params must be an object'
+  })
+  return parsed.ok ? parsed.value : null
 }
 
 const sortOptions = [

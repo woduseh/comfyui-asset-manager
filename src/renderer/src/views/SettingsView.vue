@@ -14,7 +14,8 @@ import {
   NSwitch,
   NTag,
   NIcon,
-  NAlert
+  NAlert,
+  useMessage
 } from 'naive-ui'
 import { CopyOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@renderer/stores/settings.store'
@@ -22,6 +23,7 @@ import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 
 const { t, locale } = useI18n()
+const message = useMessage()
 const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
 const terminalStore = useTerminalStore()
@@ -82,13 +84,94 @@ async function handleSettingChange(key: string, value: string): Promise<void> {
   await settingsStore.setSetting(key, value)
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function mergeErrorMessages(primaryError: string, rollbackError: string | null): string {
+  return rollbackError
+    ? `${primaryError} (${t('settings.mcp.msg.rollbackFailed', { error: rollbackError })})`
+    : primaryError
+}
+
+async function syncMcpToggleState(): Promise<void> {
+  await terminalStore.fetchMcpStatus()
+  const isRunning = terminalStore.mcpStatus.isRunning
+  mcpEnabled.value = isRunning
+  settingsStore.settings.mcp_enabled = isRunning ? 'true' : 'false'
+}
+
 async function handleMcpEnabledChange(enabled: boolean): Promise<void> {
-  mcpEnabled.value = enabled
-  await settingsStore.setSetting('mcp_enabled', String(enabled))
   if (enabled) {
-    await terminalStore.startMcpServer(mcpPort.value)
-  } else {
+    const result = await terminalStore.startMcpServer(mcpPort.value)
+    if (!result.success) {
+      mcpEnabled.value = false
+      message.error(
+        t('settings.mcp.msg.startFailed', {
+          error: result.error ?? t('settings.mcp.msg.unknownError')
+        })
+      )
+      return
+    }
+
+    try {
+      await settingsStore.setSetting('mcp_enabled', 'true')
+      mcpEnabled.value = true
+    } catch (error) {
+      let rollbackError: string | null = null
+
+      try {
+        await terminalStore.stopMcpServer()
+      } catch (rollbackFailure) {
+        rollbackError = getErrorMessage(rollbackFailure)
+        await syncMcpToggleState()
+      }
+
+      if (!rollbackError) {
+        mcpEnabled.value = false
+      }
+
+      message.error(
+        t('settings.mcp.msg.enablePersistFailed', {
+          error: mergeErrorMessages(getErrorMessage(error), rollbackError)
+        })
+      )
+    }
+
+    return
+  }
+
+  try {
     await terminalStore.stopMcpServer()
+  } catch (error) {
+    mcpEnabled.value = true
+    message.error(
+      t('settings.mcp.msg.stopFailed', {
+        error: getErrorMessage(error)
+      })
+    )
+    return
+  }
+
+  try {
+    await settingsStore.setSetting('mcp_enabled', 'false')
+    mcpEnabled.value = false
+  } catch (error) {
+    let rollbackError: string | null = null
+    const rollback = await terminalStore.startMcpServer(mcpPort.value)
+
+    if (!rollback.success) {
+      rollbackError = rollback.error ?? t('settings.mcp.msg.unknownError')
+      await syncMcpToggleState()
+    } else {
+      mcpEnabled.value = true
+    }
+
+    message.error(
+      t('settings.mcp.msg.disablePersistFailed', {
+        error: mergeErrorMessages(getErrorMessage(error), rollbackError)
+      })
+    )
   }
 }
 
@@ -229,6 +312,10 @@ onMounted(async () => {
 
     <!-- MCP Server Settings -->
     <NCard :title="t('settings.mcp.title')">
+      <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
+        {{ t('settings.mcp.description') }}
+      </NAlert>
+
       <NForm label-placement="left" label-width="200">
         <NFormItem :label="t('settings.mcp.enabled')">
           <NSwitch :value="mcpEnabled" @update:value="handleMcpEnabledChange" />

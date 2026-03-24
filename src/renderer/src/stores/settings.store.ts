@@ -45,8 +45,18 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function setSetting(key: string, value: string): Promise<void> {
+    const previousValue = settings.value[key]
     settings.value[key] = value
-    await window.electron.ipcRenderer.invoke('settings:set', { key, value })
+    try {
+      await window.electron.ipcRenderer.invoke('settings:set', { key, value })
+    } catch (error) {
+      if (previousValue === undefined) {
+        delete settings.value[key]
+      } else {
+        settings.value[key] = previousValue
+      }
+      throw error
+    }
   }
 
   async function getSetting(key: string): Promise<string | null> {

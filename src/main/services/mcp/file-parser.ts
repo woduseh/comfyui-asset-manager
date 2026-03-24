@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import log from '../../logger'
 import { MAX_IMPORT_FILE_SIZE_BYTES } from '../../constants'
+import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
 
 export interface ParsedModuleItem {
   name: string
@@ -17,6 +18,20 @@ export interface ParseResult {
 }
 
 type FileFormat = 'json' | 'csv' | 'md'
+
+function isPromptVariantsRecord(
+  value: unknown
+): value is Record<string, { prompt: string; negative: string }> {
+  return (
+    isJsonObject(value) &&
+    Object.values(value).every(
+      (entry) =>
+        isJsonObject(entry) &&
+        typeof entry.prompt === 'string' &&
+        typeof entry.negative === 'string'
+    )
+  )
+}
 
 function detectFormat(filePath: string): FileFormat {
   const ext = path.extname(filePath).toLowerCase()
@@ -38,21 +53,21 @@ function parseJSON(content: string): ParseResult {
   const errors: Array<{ line: number; error: string }> = []
   const items: ParsedModuleItem[] = []
 
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return { items: [], format: 'json', errors: [{ line: 1, error: `Invalid JSON: ${msg}` }] }
+  const parsedResult = safeJsonParse<unknown[]>(content, {
+    context: 'JSON import content',
+    validate: Array.isArray,
+    invalidShapeMessage: 'JSON must be an array of objects'
+  })
+
+  if (!parsedResult.ok) {
+    const error = parsedResult.error.startsWith('JSON import content is not valid JSON:')
+      ? `Invalid JSON: ${parsedResult.error.replace('JSON import content is not valid JSON: ', '')}`
+      : parsedResult.error
+
+    return { items: [], format: 'json', errors: [{ line: 1, error }] }
   }
 
-  if (!Array.isArray(parsed)) {
-    return {
-      items: [],
-      format: 'json',
-      errors: [{ line: 1, error: 'JSON must be an array of objects' }]
-    }
-  }
+  const parsed = parsedResult.value
 
   for (let i = 0; i < parsed.length; i++) {
     const entry = parsed[i]
@@ -141,13 +156,19 @@ function parseCSV(content: string): ParseResult {
     }
 
     if (variantsIdx !== -1 && fields[variantsIdx]) {
-      try {
-        const variants = JSON.parse(fields[variantsIdx])
-        if (typeof variants === 'object' && variants !== null) {
-          item.prompt_variants = variants
+      const variantsResult = safeJsonParse<Record<string, { prompt: string; negative: string }>>(
+        fields[variantsIdx],
+        {
+          context: 'prompt_variants column',
+          validate: isPromptVariantsRecord,
+          invalidShapeMessage: 'prompt_variants column must contain a JSON object'
         }
-      } catch {
-        errors.push({ line: lineNum, error: 'Invalid JSON in prompt_variants column' })
+      )
+
+      if (variantsResult.ok) {
+        item.prompt_variants = variantsResult.value
+      } else {
+        errors.push({ line: lineNum, error: variantsResult.error })
       }
     }
 

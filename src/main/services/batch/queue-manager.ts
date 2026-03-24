@@ -29,13 +29,82 @@ import {
   CLEAR_PROMPT_DATA_CHUNK_INTERVAL
 } from '../../constants'
 import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
-import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
+import type { BatchConfig, ModuleDataSnapshot, GeneratedTask } from '../batch/task-generator'
+import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
 const workflowRepo = new WorkflowRepository()
 const settingsRepo = new SettingsRepository()
+
+type TaskPromptData = GeneratedTask['promptData']
+type TaskMetadata = GeneratedTask['metadata']
+
+function isBatchConfig(value: unknown): value is BatchConfig {
+  return (
+    isJsonObject(value) &&
+    typeof value.name === 'string' &&
+    typeof value.workflowId === 'string' &&
+    Array.isArray(value.moduleSelections) &&
+    typeof value.countPerCombination === 'number' &&
+    (value.seedMode === 'random' ||
+      value.seedMode === 'fixed' ||
+      value.seedMode === 'incremental') &&
+    typeof value.outputFolderPattern === 'string' &&
+    typeof value.fileNamePattern === 'string'
+  )
+}
+
+function isModuleDataSnapshot(value: unknown): value is ModuleDataSnapshot {
+  return Array.isArray(value)
+}
+
+function isTaskPromptData(value: unknown): value is TaskPromptData {
+  return (
+    isJsonObject(value) &&
+    typeof value.positive === 'string' &&
+    typeof value.negative === 'string' &&
+    typeof value.seed === 'number' &&
+    (value.extraVariables === undefined || isJsonObject(value.extraVariables)) &&
+    (value.slotMappings === undefined || Array.isArray(value.slotMappings)) &&
+    (value.slotPrompts === undefined || isJsonObject(value.slotPrompts)) &&
+    (value.variableOverrides === undefined || Array.isArray(value.variableOverrides))
+  )
+}
+
+function isTaskMetadata(value: unknown): value is TaskMetadata {
+  return (
+    isJsonObject(value) &&
+    (value.characterName === undefined || typeof value.characterName === 'string') &&
+    (value.outfitName === undefined || typeof value.outfitName === 'string') &&
+    (value.emotionName === undefined || typeof value.emotionName === 'string') &&
+    (value.styleName === undefined || typeof value.styleName === 'string') &&
+    (value.artistName === undefined || typeof value.artistName === 'string') &&
+    typeof value.combinationIndex === 'number' &&
+    typeof value.imageIndex === 'number' &&
+    typeof value.totalInCombination === 'number'
+  )
+}
+
+function parseRequiredJson<T>(
+  input: string | null | undefined,
+  context: string,
+  validate: (value: unknown) => value is T,
+  invalidShapeMessage: string
+): T {
+  const parsed = safeJsonParse<T>(input, {
+    context,
+    validate,
+    invalidShapeMessage
+  })
+
+  if (!parsed.ok) {
+    throw new Error(parsed.error)
+  }
+
+  return parsed.value
+}
 
 export interface QueueManagerEvents {
   progress: (data: { jobId: string; taskId: string; value: number; max: number }) => void
@@ -189,11 +258,21 @@ class QueueManager {
     const workflow = workflowRepo.get(job.workflow_id as string)
     if (!workflow) throw new Error(`Workflow not found for job`)
 
-    const apiJson = JSON.parse(workflow.api_json as string)
+    const apiJson = parseRequiredJson<Record<string, unknown>>(
+      workflow.api_json as string,
+      'Workflow API JSON',
+      isJsonObject,
+      'Workflow API JSON must be an object'
+    )
     const outputRoot =
       settingsRepo.get('output.directory') ||
       join(process.env.USERPROFILE || '', 'Pictures', 'ComfyUI_Output')
-    const jobConfig = JSON.parse(job.config as string) as BatchConfig
+    const jobConfig = parseRequiredJson<BatchConfig>(
+      job.config as string,
+      'Batch job config',
+      isBatchConfig,
+      'Batch job config has an invalid shape'
+    )
 
     let completedCount = (job.completed_tasks as number) || 0
     let failedCount = (job.failed_tasks as number) || 0
@@ -208,7 +287,12 @@ class QueueManager {
     const hasSnapshot = !!job.module_data_snapshot
     let moduleDataSnapshot: ModuleDataSnapshot | null = null
     if (hasSnapshot) {
-      moduleDataSnapshot = JSON.parse(job.module_data_snapshot as string) as ModuleDataSnapshot
+      moduleDataSnapshot = parseRequiredJson<ModuleDataSnapshot>(
+        job.module_data_snapshot as string,
+        'Batch module snapshot',
+        isModuleDataSnapshot,
+        'Batch module snapshot must be an array'
+      )
     }
 
     if (hasSnapshot && moduleDataSnapshot) {
@@ -249,13 +333,7 @@ class QueueManager {
           const taskStartTime = Date.now()
 
           try {
-            await this.processTask(
-              taskRecord,
-              apiJson,
-              jobId,
-              jobConfig as unknown as Record<string, unknown>,
-              outputRoot
-            )
+            await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
             completedCount++
             this.pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
@@ -269,13 +347,7 @@ class QueueManager {
               })
               const retryStartTime = Date.now()
               try {
-                await this.processTask(
-                  taskRecord,
-                  apiJson,
-                  jobId,
-                  jobConfig as unknown as Record<string, unknown>,
-                  outputRoot
-                )
+                await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
                 completedCount++
                 this.pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
@@ -338,13 +410,7 @@ class QueueManager {
           const taskStartTime = Date.now()
 
           try {
-            await this.processTask(
-              task,
-              apiJson,
-              jobId,
-              jobConfig as unknown as Record<string, unknown>,
-              outputRoot
-            )
+            await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
             completedCount++
             this.pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
@@ -364,13 +430,7 @@ class QueueManager {
               })
               const retryStartTime = Date.now()
               try {
-                await this.processTask(
-                  task,
-                  apiJson,
-                  jobId,
-                  jobConfig as unknown as Record<string, unknown>,
-                  outputRoot
-                )
+                await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
                 completedCount++
                 this.pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
@@ -449,17 +509,27 @@ class QueueManager {
     task: Record<string, unknown>,
     baseApiJson: Record<string, unknown>,
     jobId: string,
-    jobConfig: Record<string, unknown>,
+    jobConfig: BatchConfig,
     outputRoot: string
   ): Promise<void> {
     const taskId = task.id as string
-    const promptData = JSON.parse(task.prompt_data as string)
-    const metadata = JSON.parse(task.metadata as string)
+    const promptData = parseRequiredJson<TaskPromptData>(
+      task.prompt_data as string,
+      'Batch task prompt data',
+      isTaskPromptData,
+      'Batch task prompt data has an invalid shape'
+    )
+    const metadata = parseRequiredJson<TaskMetadata>(
+      task.metadata as string,
+      'Batch task metadata',
+      isTaskMetadata,
+      'Batch task metadata has an invalid shape'
+    )
 
     batchTaskRepo.updateStatus(taskId, 'running')
 
     // Clone the workflow and inject prompt data
-    const workflowJson = JSON.parse(JSON.stringify(baseApiJson))
+    const workflowJson = structuredClone(baseApiJson)
     this.injectPromptData(workflowJson, promptData)
 
     // Submit to ComfyUI
@@ -492,8 +562,9 @@ class QueueManager {
             )
 
             const fileName = this.resolveFileName(
-              (jobConfig.fileNamePattern as string) || '{character}_{outfit}_{emotion}_{index}',
+              jobConfig.fileNamePattern || '{character}_{outfit}_{emotion}_{index}',
               metadata,
+              promptData.seed,
               img.filename
             )
             const savePath = this.getUniquePath(join(outputDir, fileName))
@@ -789,13 +860,12 @@ class QueueManager {
 
   private resolveAndCreateOutputDir(
     outputRoot: string,
-    jobConfig: Record<string, unknown>,
-    metadata: Record<string, string>
+    jobConfig: BatchConfig,
+    metadata: TaskMetadata
   ): string {
-    const pattern =
-      (jobConfig.outputFolderPattern as string) || '{job}/{character}/{outfit}/{emotion}'
+    const pattern = jobConfig.outputFolderPattern || '{job}/{character}/{outfit}/{emotion}'
     const vars: Record<string, string> = {
-      job: (jobConfig.name as string) || 'unnamed',
+      job: jobConfig.name || 'unnamed',
       character: metadata.characterName || 'default',
       outfit: metadata.outfitName || 'default',
       emotion: metadata.emotionName || 'default',
@@ -815,17 +885,18 @@ class QueueManager {
 
   private resolveFileName(
     pattern: string,
-    metadata: Record<string, unknown>,
+    metadata: TaskMetadata,
+    seed: number,
     originalName: string
   ): string {
     const ext = originalName.includes('.') ? '.' + originalName.split('.').pop() : '.png'
     const vars: Record<string, string> = {
-      character: (metadata.characterName as string) || 'char',
-      outfit: (metadata.outfitName as string) || 'outfit',
-      emotion: (metadata.emotionName as string) || 'emotion',
-      style: (metadata.styleName as string) || 'style',
-      index: String(((metadata.imageIndex as number) || 0) + 1).padStart(4, '0'),
-      seed: String(metadata.seed || ''),
+      character: metadata.characterName || 'char',
+      outfit: metadata.outfitName || 'outfit',
+      emotion: metadata.emotionName || 'emotion',
+      style: metadata.styleName || 'style',
+      index: String((metadata.imageIndex || 0) + 1).padStart(4, '0'),
+      seed: String(seed || ''),
       date: new Date().toISOString().split('T')[0]
     }
 

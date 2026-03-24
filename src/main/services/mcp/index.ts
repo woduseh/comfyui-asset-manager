@@ -9,7 +9,8 @@ import {
   DEFAULT_MCP_PORT,
   MAX_MCP_SESSIONS,
   MCP_SESSION_TIMEOUT_MS,
-  MCP_CLEANUP_INTERVAL_MS
+  MCP_CLEANUP_INTERVAL_MS,
+  MCP_ALLOWED_ORIGIN_HOSTS
 } from '../../constants'
 import log from '../../logger'
 
@@ -20,6 +21,65 @@ interface McpSession {
   transport: StreamableHTTPServerTransport
   server: McpServer
   lastActivity: number
+}
+
+const MCP_ALLOWED_ORIGIN_HOST_SET = new Set<string>(MCP_ALLOWED_ORIGIN_HOSTS)
+
+function appendVaryHeader(res: http.ServerResponse, value: string): void {
+  const current = res.getHeader('Vary')
+  const values =
+    typeof current === 'string'
+      ? current
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+      : Array.isArray(current)
+        ? current.map((entry) => String(entry).trim()).filter(Boolean)
+        : []
+
+  if (!values.includes(value)) {
+    values.push(value)
+  }
+
+  res.setHeader('Vary', values.join(', '))
+}
+
+function getAllowedLoopbackOrigin(
+  originHeader: string | string[] | undefined
+): string | null | undefined {
+  if (originHeader === undefined) {
+    return undefined
+  }
+
+  if (Array.isArray(originHeader)) {
+    return null
+  }
+
+  try {
+    const origin = new URL(originHeader)
+    if (!['http:', 'https:'].includes(origin.protocol)) {
+      return null
+    }
+
+    if (!MCP_ALLOWED_ORIGIN_HOST_SET.has(origin.hostname)) {
+      return null
+    }
+
+    return origin.origin
+  } catch {
+    return null
+  }
+}
+
+function setMcpCorsHeaders(res: http.ServerResponse, allowedOrigin?: string): void {
+  if (allowedOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+    appendVaryHeader(res, 'Origin')
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id')
+  res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
 }
 
 class McpServerManager {
@@ -103,21 +163,24 @@ class McpServerManager {
     }
 
     this.httpServer = http.createServer(async (req, res) => {
-      // CORS headers
-      res.setHeader('Access-Control-Allow-Origin', '*')
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id')
-      res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-
-      if (req.method === 'OPTIONS') {
-        res.writeHead(204)
-        res.end()
-        return
-      }
-
       const url = new URL(req.url || '/', `http://localhost:${this._port}`)
 
       if (url.pathname === '/mcp') {
+        const allowedOrigin = getAllowedLoopbackOrigin(req.headers.origin)
+        if (allowedOrigin === null) {
+          res.writeHead(403, { 'Content-Type': 'text/plain' })
+          res.end('Forbidden origin')
+          return
+        }
+
+        setMcpCorsHeaders(res, allowedOrigin)
+
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204)
+          res.end()
+          return
+        }
+
         try {
           await this.handleMcpRequest(req, res)
         } catch (error) {

@@ -6,13 +6,16 @@ export interface IpcChannels {
   'comfyui:disconnect': void
   'comfyui:status': void
   'comfyui:system-stats': void
+  'comfyui:models': void
 
   // Workflows
   'workflow:import': { filePath: string }
-  'workflow:list': void
+  'workflow:list': { category?: string }
   'workflow:get': { id: string }
   'workflow:delete': { id: string }
   'workflow:update': { id: string; data: Partial<WorkflowRecord> }
+  'workflow:variables': { workflowId: string }
+  'workflow:update-variable-role': { variableId: string; role: string }
 
   // Modules
   'module:list': { type?: string }
@@ -20,29 +23,28 @@ export interface IpcChannels {
   'module:create': Omit<PromptModuleRecord, 'id' | 'created_at' | 'updated_at'>
   'module:update': { id: string; data: Partial<PromptModuleRecord> }
   'module:delete': { id: string }
+  'module:export': { moduleId: string }
+  'module:import-data': { jsonData: string }
 
   // Module Items
   'module-item:list': { moduleId: string }
   'module-item:create': Omit<ModuleItemRecord, 'id'>
   'module-item:update': { id: string; data: Partial<ModuleItemRecord> }
   'module-item:delete': { id: string }
+  'module-item:reorder': { itemIds: string[] }
 
-  // Characters
-  'character:list': void
-  'character:get': { id: string }
-  'character:create': Omit<CharacterRecord, 'id' | 'created_at'>
-  'character:update': { id: string; data: Partial<CharacterRecord> }
-  'character:delete': { id: string }
-
-  // Batch
   'batch:create': BatchJobConfig
   'batch:list': { status?: string }
   'batch:get': { id: string }
   'batch:start': { id: string }
-  'batch:pause': { id: string }
-  'batch:resume': { id: string }
-  'batch:cancel': { id: string }
+  'batch:pause': void
+  'batch:resume': void
+  'batch:cancel': void
   'batch:delete': { id: string }
+  'batch:reorder': { jobIds: string[] }
+  'batch:rerun': { id: string }
+  'batch:delete-tasks': { jobId: string }
+  'queue:status': void
 
   // Gallery
   'gallery:list': GalleryQuery
@@ -51,6 +53,11 @@ export interface IpcChannels {
   'gallery:favorite': { id: string; favorite: boolean }
   'gallery:delete': { ids: string[] }
   'gallery:export': { ids: string[]; targetDir: string }
+  'gallery:copy-clipboard': { filePath: string }
+  'gallery:show-in-explorer': { filePath: string }
+
+  // Prompts
+  'prompt:preview': { moduleIds: string[]; variables?: Record<string, string> }
 
   // Settings
   'settings:get': { key: string }
@@ -71,6 +78,9 @@ export interface IpcChannels {
   'mcp:start': { port?: number }
   'mcp:stop': void
   'mcp:status': void
+  'mcp:config-status': void
+  'mcp:setup-cli': { targetDir?: string }
+  'mcp:remove-cli': { targetDir?: string }
 }
 
 // Database record types
@@ -137,16 +147,6 @@ export interface ModuleItemRecord {
   thumbnail: Buffer | null
   enabled: number
   prompt_variants: string // JSON: Record<string, PromptVariant>
-}
-
-export interface CharacterRecord {
-  id: string
-  name: string
-  base_prompt: string
-  negative_prompt: string
-  thumbnail: Buffer | null
-  metadata: string
-  created_at: string
 }
 
 export interface BatchJobRecord {
@@ -220,15 +220,6 @@ export interface GeneratedImageRecord {
   created_at: string
 }
 
-export interface PresetRecord {
-  id: string
-  name: string
-  description: string | null
-  type: 'batch' | 'module' | 'pipeline' | 'full'
-  config: string
-  created_at: string
-}
-
 export interface SettingRecord {
   key: string
   value: string
@@ -260,6 +251,9 @@ export interface MatrixSelection {
   selectedItemIds: string[]
 }
 
+export type GallerySortBy = 'created_at' | 'rating' | 'file_size'
+export type GallerySortOrder = 'asc' | 'desc'
+
 export interface GalleryQuery {
   page: number
   pageSize: number
@@ -272,8 +266,8 @@ export interface GalleryQuery {
   isFavorite?: boolean
   tags?: string[]
   jobId?: string
-  sortBy?: 'created_at' | 'rating' | 'file_size'
-  sortOrder?: 'asc' | 'desc'
+  sortBy?: GallerySortBy
+  sortOrder?: GallerySortOrder
 }
 
 export interface ComfyUIStatus {

@@ -16,7 +16,7 @@ npm run typecheck:node   # Typecheck main process + preload only
 npm run typecheck:web    # Typecheck renderer (Vue) only
 ```
 
-Tests: 146 tests across 5 files in `tests/main/services/` (Vitest, sql.js in-memory DB for repository tests, vi.mock for HTTP mocks).
+Tests: 19 test files, 344 tests across main services, IPC validators, and renderer pure-helper suites (Vitest, sql.js in-memory DB for repository tests, vi.mock for HTTP mocks).
 
 ## Architecture
 
@@ -58,6 +58,12 @@ Singleton `comfyuiManager` in `src/main/services/comfyui/manager.ts` coordinates
 - **REST client** (`client.ts`): Uses `ofetch`. Endpoints: `/prompt`, `/queue`, `/history/{id}`, `/system_stats`, `/object_info`, `/view`, `/upload/image`.
 - **WebSocket** (`websocket.ts`): Uses `ws` package (Node.js, not browser). Auto-reconnects with exponential backoff (3s→30s). Emits typed events: `progress`, `executionComplete`, `executionError`, `preview`.
 - **Workflow parser** (`workflow-parser.ts`): Extracts variables from ComfyUI API JSON. `VARIABLE_NODE_TYPES` in `types.ts` defines known node fields.
+
+### MCP Startup Behavior
+
+- MCP stays loopback-only and enforces browser origin checks on `/mcp`
+- App launch auto-start happens only when `mcp_enabled` was explicitly enabled in Settings
+- Opening a terminal tab does **not** auto-start MCP or persist `mcp_enabled`
 
 ### Batch Execution Pipeline
 

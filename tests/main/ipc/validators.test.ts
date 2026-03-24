@@ -6,7 +6,8 @@ import {
   validateRating,
   validateSettingsKey,
   validateStringArray,
-  validatePromptVariants
+  validatePromptVariants,
+  validateGalleryQuery
 } from '../../../src/main/ipc/validators'
 
 describe('validateString', () => {
@@ -187,5 +188,58 @@ describe('validatePromptVariants', () => {
 
   it('returns empty for invalid JSON', () => {
     expect(validatePromptVariants('not-json{')).toEqual({})
+  })
+})
+
+describe('validateGalleryQuery', () => {
+  it('accepts a valid gallery query', () => {
+    expect(
+      validateGalleryQuery({
+        page: 1,
+        pageSize: 50,
+        searchText: 'alice',
+        minRating: 3,
+        isFavorite: true,
+        sortBy: 'rating',
+        sortOrder: 'desc'
+      })
+    ).toEqual({
+      page: 1,
+      pageSize: 50,
+      searchText: 'alice',
+      minRating: 3,
+      isFavorite: true,
+      sortBy: 'rating',
+      sortOrder: 'desc'
+    })
+  })
+
+  it('rejects invalid sort fields', () => {
+    expect(() =>
+      validateGalleryQuery({
+        page: 1,
+        pageSize: 50,
+        sortBy: 'created_at; DROP TABLE generated_images --'
+      })
+    ).toThrow('Invalid gallery sort field')
+  })
+
+  it('rejects invalid sort order', () => {
+    expect(() =>
+      validateGalleryQuery({
+        page: 1,
+        pageSize: 50,
+        sortOrder: 'descending'
+      })
+    ).toThrow('Invalid gallery sort order')
+  })
+
+  it('rejects non-positive pagination values', () => {
+    expect(() => validateGalleryQuery({ page: 0, pageSize: 50 })).toThrow(
+      'Gallery page must be a positive integer'
+    )
+    expect(() => validateGalleryQuery({ page: 1, pageSize: 0 })).toThrow(
+      'Gallery page size must be a positive integer'
+    )
   })
 })

@@ -890,6 +890,17 @@ export class BatchTaskRepository {
 }
 
 export class GeneratedImageRepository {
+  private static readonly SORT_COLUMNS: Record<string, string> = {
+    created_at: 'created_at',
+    rating: 'rating',
+    file_size: 'file_size'
+  }
+
+  private static readonly SORT_DIRECTIONS: Record<string, string> = {
+    asc: 'ASC',
+    desc: 'DESC'
+  }
+
   list(query: {
     page: number
     pageSize: number
@@ -949,8 +960,12 @@ export class GeneratedImageRepository {
     countStmt.free()
 
     // Fetch page
-    const sortBy = query.sortBy || 'created_at'
-    const sortOrder = query.sortOrder || 'desc'
+    const sortBy =
+      (query.sortBy && GeneratedImageRepository.SORT_COLUMNS[query.sortBy]) ||
+      GeneratedImageRepository.SORT_COLUMNS.created_at
+    const sortOrder =
+      (query.sortOrder && GeneratedImageRepository.SORT_DIRECTIONS[query.sortOrder]) ||
+      GeneratedImageRepository.SORT_DIRECTIONS.desc
     const offset = (query.page - 1) * query.pageSize
     const dataQuery = `SELECT * FROM generated_images ${whereClause} ORDER BY ${sortBy} ${sortOrder} LIMIT ? OFFSET ?`
     const dataParams = [...params, query.pageSize, offset]

@@ -116,7 +116,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 12개 파일, 305개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 19개 파일, 344개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -179,7 +179,7 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - `src/renderer/src/components/terminal/` — 터미널 UI 컴포넌트
   - `TerminalInstance.vue`: xterm.js 래퍼
   - `TerminalPanel.vue`: 하단 패널 (드래그 리사이즈)
-- **MCP 자동 시작**: 터미널 탭 생성 시 MCP 서버가 미실행이면 자동 시작 + `mcp_enabled` 설정 영속화
+- **MCP 명시적 시작**: 터미널 탭 생성은 MCP 서버 상태나 `mcp_enabled` 설정을 바꾸지 않음. Settings에서 명시적으로 켠 경우에만 즉시 시작 + 다음 앱 실행 시 auto-start
 
 ### 배치 실행 최적화 (v0.8.1~)
 
@@ -228,10 +228,10 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 - Electron 렌더러: `sandbox: true`, `webSecurity: true`, `bypassCSP: false` — 절대 변경 금지
 - Preload 번들링: `externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })` — sandbox 모드에서 preload가 정상 로드되려면 `@electron-toolkit/preload`를 반드시 인라인 번들링
-- 파일 경로 접근: `local-asset://` 프로토콜에서 `..` 경로 순회 차단. `path.normalize()` 적용
+- 파일 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
 - IPC 핸들러: 데이터 변경(`CREATE`, `UPDATE`, `DELETE`, `SET`) 핸들러에 `validators.ts` 검증 필수
 - Repository `update()`: `ALLOWED_UPDATE_FIELDS` 화이트리스트 외 필드 거부. 새 컬럼 추가 시 화이트리스트도 갱신
-- `JSON.parse()` 결과는 반드시 구조 검증 후 사용 (`validatePromptVariants` 참고)
+- JSON 파싱: main은 `src/main/utils/safe-json.ts`, renderer는 `src/renderer/src/utils/safe-json.ts`를 사용해 구조 검증과 오류 메시지를 함께 처리. 검증 없는 `JSON.parse()` 직접 사용 금지
 
 ### 에러 처리
 
@@ -259,6 +259,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.2** — 감사 후속 하드닝: `local-asset` 출력 디렉터리 화이트리스트, 갤러리 쿼리 검증/ORDER BY 화이트리스트, MCP loopback origin 제한 + Settings opt-in 시작, safe-json helper 도입, shipped navigation 정리. 테스트 344개
 **0.15.1** — 갤러리 파일명 검색: 필터 바에 검색 입력창 추가, 300ms 디바운스, file_path LIKE 매칭. 테스트 305개
 **0.15.0** — MCP 내보내기/비교/동기화 도구: export_module_items_to_file(JSON/CSV/MD 파일 내보내기), diff_module_with_file(이름 기반 매칭+태그 단위 diff), sync_module_from_file(upsert 동기화, delete_missing, dry_run). 파일 직렬화 유틸리티, 비교 엔진. list_modules에 item_count 포함. 테스트 302개
 **0.14.0** — MCP 대량 생성/가져오기/복제/통계: bulk_create_module_items(최대 200개 트랜잭션 생성), import_module_items_from_file(JSON/CSV/MD 파일 파싱→등록, dry_run), duplicate_module(모듈+아이템 원자적 복제), get_module_stats(모듈 요약 통계). 파일 파서 유틸리티. 테스트 281개

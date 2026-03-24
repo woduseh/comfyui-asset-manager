@@ -4,6 +4,7 @@ import { basename } from 'path'
 import { IPC_CHANNELS } from './channels'
 import log from '../logger'
 import {
+  validateGalleryQuery,
   validatePromptVariants,
   validateSettingsKey,
   validateString,
@@ -40,6 +41,7 @@ import {
   writeMcpJsonConfig,
   removeMcpJsonConfig
 } from '../services/mcp/config-generator'
+import { isJsonObject, safeJsonParse } from '../utils/safe-json'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -49,6 +51,57 @@ const characterRepo = new CharacterRepository()
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
+
+interface ModuleImportPayload {
+  module: {
+    name: string
+    type: string
+    description?: string
+    parent_id?: string | null
+  }
+  items: Array<{
+    name: string
+    prompt: string
+    negative?: string
+    weight?: number
+    sort_order?: number
+    metadata?: string
+  }>
+}
+
+function isModuleImportPayload(value: unknown): value is ModuleImportPayload {
+  if (!isJsonObject(value)) {
+    return false
+  }
+
+  const { module, items } = value
+  if (
+    !isJsonObject(module) ||
+    typeof module.name !== 'string' ||
+    typeof module.type !== 'string' ||
+    (module.description !== undefined && typeof module.description !== 'string') ||
+    (module.parent_id !== undefined &&
+      module.parent_id !== null &&
+      typeof module.parent_id !== 'string')
+  ) {
+    return false
+  }
+
+  if (!Array.isArray(items)) {
+    return false
+  }
+
+  return items.every(
+    (item) =>
+      isJsonObject(item) &&
+      typeof item.name === 'string' &&
+      typeof item.prompt === 'string' &&
+      (item.negative === undefined || typeof item.negative === 'string') &&
+      (item.weight === undefined || typeof item.weight === 'number') &&
+      (item.sort_order === undefined || typeof item.sort_order === 'number') &&
+      (item.metadata === undefined || typeof item.metadata === 'string')
+  )
+}
 
 export function registerIpcHandlers(): void {
   // === ComfyUI Connection ===
@@ -95,7 +148,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.WORKFLOW_IMPORT, (_event, { filePath }: { filePath: string }) => {
     try {
       const content = readFileSync(filePath, 'utf-8')
-      const json = JSON.parse(content)
+      const workflowJson = safeJsonParse<Record<string, unknown>>(content, {
+        context: 'Workflow file',
+        validate: isJsonObject,
+        invalidShapeMessage: 'Workflow file must contain a JSON object'
+      })
+      if (!workflowJson.ok) {
+        throw new Error(workflowJson.error)
+      }
+
+      const json = workflowJson.value
       const fileName = basename(filePath, '.json')
 
       // Detect if this is UI format or API format
@@ -527,7 +589,7 @@ export function registerIpcHandlers(): void {
 
   // Gallery
   ipcMain.handle(IPC_CHANNELS.GALLERY_LIST, (_event, query) => {
-    return imageRepo.list(query)
+    return imageRepo.list(validateGalleryQuery(query))
   })
 
   ipcMain.handle(
@@ -619,8 +681,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('module:import-data', (_event, { jsonData }: { jsonData: string }) => {
     try {
-      const data = JSON.parse(jsonData)
-      if (!data.module || !data.items) throw new Error('Invalid module export format')
+      const dataResult = safeJsonParse<ModuleImportPayload>(jsonData, {
+        context: 'Module import data',
+        validate: isModuleImportPayload,
+        invalidShapeMessage: 'Invalid module export format'
+      })
+      if (!dataResult.ok) {
+        throw new Error(dataResult.error)
+      }
+
+      const data = dataResult.value
       const modId = moduleRepo.create({
         name: data.module.name + ' (imported)',
         type: data.module.type,

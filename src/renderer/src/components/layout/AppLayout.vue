@@ -24,10 +24,13 @@ import {
   TerminalOutline,
   DiamondOutline
 } from '@vicons/ionicons5'
+import type { Component as VueComponent } from 'vue'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
+import { NAV_ITEMS } from '@renderer/navigation'
+import type { RouteName } from '@renderer/navigation'
 
 const router = useRouter()
 const route = useRoute()
@@ -37,25 +40,33 @@ const queueStore = useQueueStore()
 const terminalStore = useTerminalStore()
 const sidebarCollapsed = ref(false)
 
-function renderIcon(icon: Component) {
-  return () => h(NIcon, null, { default: () => h(icon) })
+function renderIcon(icon: VueComponent) {
+  return () => h(NIcon, null, { default: () => h(icon as Component) })
 }
 
-const mainMenuOptions = computed<MenuOption[]>(() => [
-  {
-    label: t('nav.workflows'),
-    key: 'workflows',
-    icon: renderIcon(GitNetworkOutline)
-  },
-  {
-    label: t('nav.modules'),
-    key: 'modules',
-    icon: renderIcon(CubeOutline)
-  },
-  {
-    label: () =>
+const ROUTE_ICONS: Record<RouteName, VueComponent> = {
+  workflows: GitNetworkOutline,
+  modules: CubeOutline,
+  jobs: FlashOutline,
+  gallery: ImagesOutline,
+  terminal: TerminalOutline,
+  settings: SettingsOutline
+}
+
+/** NAV_ITEMS without settings — settings lives in the bottom menu slot. */
+const MAIN_ROUTES: RouteName[] = ['workflows', 'modules', 'jobs', 'gallery', 'terminal']
+const SETTINGS_ROUTES: RouteName[] = ['settings']
+
+function buildMenuOption(name: RouteName): MenuOption {
+  const item = NAV_ITEMS.find((n) => n.name === name)!
+  const base: MenuOption = {
+    key: name,
+    icon: renderIcon(ROUTE_ICONS[name])
+  }
+  if (name === 'jobs') {
+    base.label = () =>
       h('span', {}, [
-        t('nav.jobs'),
+        t(item.labelKey),
         queueStore.isProcessing
           ? h(NBadge, {
               value: queueStore.totalProgress + '%',
@@ -63,29 +74,16 @@ const mainMenuOptions = computed<MenuOption[]>(() => [
               style: 'margin-left: 8px'
             })
           : null
-      ]),
-    key: 'jobs',
-    icon: renderIcon(FlashOutline)
-  },
-  {
-    label: t('nav.gallery'),
-    key: 'gallery',
-    icon: renderIcon(ImagesOutline)
-  },
-  {
-    label: t('nav.terminal'),
-    key: 'terminal',
-    icon: renderIcon(TerminalOutline)
+      ])
+  } else {
+    base.label = t(item.labelKey)
   }
-])
+  return base
+}
 
-const settingsMenuOptions = computed<MenuOption[]>(() => [
-  {
-    label: t('nav.settings'),
-    key: 'settings',
-    icon: renderIcon(SettingsOutline)
-  }
-])
+const mainMenuOptions = computed<MenuOption[]>(() => MAIN_ROUTES.map(buildMenuOption))
+
+const settingsMenuOptions = computed<MenuOption[]>(() => SETTINGS_ROUTES.map(buildMenuOption))
 
 const activeKey = computed(() => {
   return (route.name as string) || 'workflows'

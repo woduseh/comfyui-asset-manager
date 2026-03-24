@@ -19,6 +19,7 @@ import {
 import type { DataTableColumns } from 'naive-ui'
 import { h } from 'vue'
 import { useWorkflowStore, type WorkflowItem } from '@renderer/stores/workflow.store'
+import { safeJsonParse } from '@renderer/utils/safe-json'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -61,12 +62,13 @@ const columns: DataTableColumns<WorkflowItem> = [
     key: 'variables',
     width: 80,
     render(row) {
-      try {
-        const vars = JSON.parse(row.variables || '[]')
-        return h(NTag, { size: 'small', round: true }, { default: () => `${vars.length}` })
-      } catch {
-        return h(NTag, { size: 'small', round: true }, { default: () => '0' })
-      }
+      const vars = safeJsonParse<unknown[]>(row.variables || '[]', {
+        context: 'Workflow variables',
+        validate: Array.isArray,
+        invalidShapeMessage: 'Workflow variables must be an array'
+      })
+      const count = vars.ok ? vars.value.length : 0
+      return h(NTag, { size: 'small', round: true }, { default: () => `${count}` })
     }
   },
   {

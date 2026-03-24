@@ -25,6 +25,7 @@ export const DEFAULT_MCP_PORT = 39464
 export const MAX_MCP_SESSIONS = 10
 export const MCP_SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutes
 export const MCP_CLEANUP_INTERVAL_MS = 60_000
+export const MCP_ALLOWED_ORIGIN_HOSTS = ['localhost', '127.0.0.1'] as const
 
 // === Database ===
 export const DB_SAVE_DEBOUNCE_MS = 1000

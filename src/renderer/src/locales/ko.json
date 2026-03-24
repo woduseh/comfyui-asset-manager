@@ -55,14 +55,23 @@
     "mcp": {
       "title": "MCP 서버",
       "enabled": "MCP 서버 활성화",
+      "description": "터미널 탭을 열어도 MCP 서버는 자동으로 시작되지 않습니다. 이 스위치를 켜면 지금 서버를 시작하고, 다음 앱 실행 때도 자동 시작을 유지합니다.",
       "port": "포트",
       "status": "상태",
       "running": "실행 중",
       "stopped": "중지됨",
       "url": "서버 URL",
+      "msg": {
+        "startFailed": "MCP 서버 시작 실패: {error}",
+        "stopFailed": "MCP 서버 중지 실패: {error}",
+        "enablePersistFailed": "MCP 설정 저장 실패로 시작 상태를 되돌렸습니다: {error}",
+        "disablePersistFailed": "MCP 설정 저장 실패로 중지 상태를 되돌렸습니다: {error}",
+        "rollbackFailed": "되돌리기 실패: {error}",
+        "unknownError": "알 수 없는 오류"
+      },
       "cliSetup": {
         "title": "CLI 자동 연결",
-        "description": "내장 터미널에서 LLM CLI를 실행하면 MCP 도구에 자동으로 연결됩니다.",
+        "description": "먼저 여기서 서버를 시작한 뒤, 내장 터미널에서 LLM CLI를 실행하면 MCP 도구에 연결할 수 있습니다.",
         "envTitle": "환경 변수 (자동 주입)",
         "envDescription": "터미널에서 새 셸이 열릴 때 자동으로 설정됩니다.",
         "setupClaudeCode": "CLI 설정 생성",

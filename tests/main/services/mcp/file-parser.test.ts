@@ -101,6 +101,15 @@ describe('File Parser', () => {
       expect(result.items[0].name).toBe('Alice')
       expect(result.errors).toHaveLength(2)
     })
+
+    it('reports invalid JSON in prompt_variants columns', () => {
+      const content = 'name,prompt,prompt_variants\nAlice,1girl,{not-json}'
+      const result = parseModuleItemsContent(content, 'csv')
+
+      expect(result.items).toHaveLength(1)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].error).toContain('prompt_variants')
+    })
   })
 
   describe('Markdown format', () => {

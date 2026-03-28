@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import log from '../../logger'
+import { safeJsonParse } from '../../utils/safe-json'
 
 const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`
@@ -18,6 +19,16 @@ interface GeminiSettings {
   [key: string]: unknown
 }
 
+export function parseJsonConfigText<T = unknown>(raw: string, context: string): T | null {
+  const parsed = safeJsonParse<T>(raw, { context })
+  if (!parsed.ok) {
+    log.warn(`[MCP] ${parsed.error}`)
+    return null
+  }
+
+  return parsed.value
+}
+
 /**
  * Writes or merges our MCP server entry into a `.mcp.json` file
  * (Claude Code and other standard MCP clients).
@@ -31,8 +42,11 @@ function writeDotMcpJson(url: string, targetDir?: string): string {
   if (existsSync(filePath)) {
     try {
       const raw = readFileSync(filePath, 'utf-8')
-      config = JSON.parse(raw)
-      if (!config.mcpServers) config.mcpServers = {}
+      const parsed = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
+      if (parsed) {
+        config = parsed
+        if (!config.mcpServers) config.mcpServers = {}
+      }
     } catch {
       config = { mcpServers: {} }
     }
@@ -63,7 +77,11 @@ function writeGeminiConfig(url: string): string | null {
     if (existsSync(filePath)) {
       try {
         const raw = readFileSync(filePath, 'utf-8')
-        settings = JSON.parse(raw)
+        const parsed = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
+        if (!parsed) {
+          return null
+        }
+        settings = parsed
       } catch {
         // Don't overwrite corrupted settings
         return null
@@ -138,7 +156,11 @@ function writeCopilotCliConfig(url: string): string | null {
     if (existsSync(filePath)) {
       try {
         const raw = readFileSync(filePath, 'utf-8')
-        config = JSON.parse(raw)
+        const parsed = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
+        if (!parsed) {
+          return null
+        }
+        config = parsed
         if (!config.mcpServers) config.mcpServers = {}
       } catch {
         // Don't overwrite corrupted config
@@ -194,7 +216,10 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
   if (existsSync(mcpJsonPath)) {
     try {
       const raw = readFileSync(mcpJsonPath, 'utf-8')
-      const config: McpJsonConfig = JSON.parse(raw)
+      const config = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
+      if (!config) {
+        return removed
+      }
       if (config.mcpServers && config.mcpServers[MCP_SERVER_NAME]) {
         delete config.mcpServers[MCP_SERVER_NAME]
         writeFileSync(mcpJsonPath, JSON.stringify(config, null, 2), 'utf-8')
@@ -210,7 +235,10 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
   if (existsSync(geminiPath)) {
     try {
       const raw = readFileSync(geminiPath, 'utf-8')
-      const settings: GeminiSettings = JSON.parse(raw)
+      const settings = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
+      if (!settings) {
+        return removed
+      }
       if (settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME]) {
         delete settings.mcpServers[MCP_SERVER_NAME]
         writeFileSync(geminiPath, JSON.stringify(settings, null, 2), 'utf-8')
@@ -245,7 +273,10 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
   if (existsSync(copilotConfigPath)) {
     try {
       const raw = readFileSync(copilotConfigPath, 'utf-8')
-      const config: McpJsonConfig = JSON.parse(raw)
+      const config = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
+      if (!config) {
+        return removed
+      }
       if (config.mcpServers && config.mcpServers[MCP_SERVER_NAME]) {
         delete config.mcpServers[MCP_SERVER_NAME]
         writeFileSync(copilotConfigPath, JSON.stringify(config, null, 2), 'utf-8')
@@ -278,8 +309,8 @@ export function getMcpConfigStatus(): {
   if (existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, 'utf-8')
-      const config: McpJsonConfig = JSON.parse(raw)
-      claudeCode = !!(config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
+      const config = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
+      claudeCode = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
     } catch {
       /* ignore */
     }
@@ -289,8 +320,8 @@ export function getMcpConfigStatus(): {
   if (existsSync(copilotConfigPath)) {
     try {
       const raw = readFileSync(copilotConfigPath, 'utf-8')
-      const config: McpJsonConfig = JSON.parse(raw)
-      copilotCli = !!(config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
+      const config = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
+      copilotCli = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
     } catch {
       /* ignore */
     }
@@ -300,8 +331,8 @@ export function getMcpConfigStatus(): {
   if (existsSync(geminiPath)) {
     try {
       const raw = readFileSync(geminiPath, 'utf-8')
-      const settings: GeminiSettings = JSON.parse(raw)
-      geminiCli = !!(settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME])
+      const settings = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
+      geminiCli = !!(settings && settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME])
     } catch {
       /* ignore */
     }

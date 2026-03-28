@@ -39,4 +39,15 @@ describe('settings.store', () => {
     await expect(store.setSetting('mcp_enabled', 'false')).rejects.toThrow('settings unavailable')
     expect(store.settings.mcp_enabled).toBe('true')
   })
+
+  it('captures load failures while keeping defaults', async () => {
+    invoke.mockRejectedValue(new Error('settings unavailable'))
+    const store = useSettingsStore()
+
+    await store.loadSettings()
+
+    expect(store.loaded).toBe(true)
+    expect(store.loadError).toBe('settings unavailable')
+    expect(store.settings.language).toBe('ko')
+  })
 })

@@ -7,8 +7,10 @@ import {
   validateSettingsKey,
   validateStringArray,
   validatePromptVariants,
-  validateGalleryQuery
+  validateGalleryQuery,
+  validateAbsolutePath
 } from '../../../src/main/ipc/validators'
+import { resolve } from 'path'
 
 describe('validateString', () => {
   it('returns valid string', () => {
@@ -241,5 +243,21 @@ describe('validateGalleryQuery', () => {
     expect(() => validateGalleryQuery({ page: 1, pageSize: 0 })).toThrow(
       'Gallery page size must be a positive integer'
     )
+  })
+})
+
+describe('validateAbsolutePath', () => {
+  it('accepts an absolute path', () => {
+    const filePath = resolve('tmp', 'workflow.json')
+    expect(validateAbsolutePath(filePath)).toBe(filePath)
+  })
+
+  it('rejects a relative path', () => {
+    expect(() => validateAbsolutePath('workflow.json')).toThrow('Expected absolute path')
+  })
+
+  it('rejects disallowed extensions', () => {
+    const filePath = resolve('tmp', 'workflow.txt')
+    expect(() => validateAbsolutePath(filePath, ['.json'])).toThrow('Invalid file extension')
   })
 })

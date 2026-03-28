@@ -1,3 +1,5 @@
+import { extname, isAbsolute } from 'path'
+
 // IPC input validation utilities
 // Protects against malicious or malformed input from the renderer process
 
@@ -56,6 +58,23 @@ export function validateStringArray(val: unknown, maxLen = 1000): string[] {
   if (!Array.isArray(val)) throw new Error('Expected array')
   if (val.length > maxLen) throw new Error(`Array exceeds max length (${maxLen})`)
   return val.map((item) => validateId(item))
+}
+
+export function validateAbsolutePath(val: unknown, allowedExtensions?: readonly string[]): string {
+  const filePath = validateString(val, 4096)
+  if (!isAbsolute(filePath)) {
+    throw new Error('Expected absolute path')
+  }
+
+  if (allowedExtensions && allowedExtensions.length > 0) {
+    const extension = extname(filePath).toLowerCase()
+    const normalizedAllowed = allowedExtensions.map((item) => item.toLowerCase())
+    if (!normalizedAllowed.includes(extension)) {
+      throw new Error('Invalid file extension')
+    }
+  }
+
+  return filePath
 }
 
 export type GallerySortBy = 'created_at' | 'rating' | 'file_size'

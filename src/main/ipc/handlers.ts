@@ -11,7 +11,8 @@ import {
   validateId,
   validateRating,
   validateStringArray,
-  validatePositiveInt
+  validatePositiveInt,
+  validateAbsolutePath
 } from './validators'
 import {
   SettingsRepository,
@@ -42,6 +43,7 @@ import {
   removeMcpJsonConfig
 } from '../services/mcp/config-generator'
 import { isJsonObject, safeJsonParse } from '../utils/safe-json'
+import { resolveDirectAssetPathFromSettings } from '../services/assets/local-asset'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
@@ -147,7 +149,12 @@ export function registerIpcHandlers(): void {
   // === Workflow Import ===
   ipcMain.handle(IPC_CHANNELS.WORKFLOW_IMPORT, (_event, { filePath }: { filePath: string }) => {
     try {
-      const content = readFileSync(filePath, 'utf-8')
+      const validatedPath = validateAbsolutePath(filePath, ['.json'])
+      if (!existsSync(validatedPath)) {
+        throw new Error('Workflow file not found')
+      }
+
+      const content = readFileSync(validatedPath, 'utf-8')
       const workflowJson = safeJsonParse<Record<string, unknown>>(content, {
         context: 'Workflow file',
         validate: isJsonObject,
@@ -158,7 +165,7 @@ export function registerIpcHandlers(): void {
       }
 
       const json = workflowJson.value
-      const fileName = basename(filePath, '.json')
+      const fileName = basename(validatedPath, '.json')
 
       // Detect if this is UI format or API format
       let apiJson: string
@@ -181,7 +188,7 @@ export function registerIpcHandlers(): void {
       // Save to database
       const workflowId = workflowRepo.create({
         name: parsed.name,
-        description: `Imported from ${basename(filePath)}`,
+        description: `Imported from ${basename(validatedPath)}`,
         category: parsed.suggestedCategory,
         api_json: apiJson,
         ui_json: uiJson || undefined,
@@ -620,8 +627,18 @@ export function registerIpcHandlers(): void {
     IPC_CHANNELS.GALLERY_COPY_CLIPBOARD,
     (_event, { filePath }: { filePath: string }) => {
       try {
-        if (!existsSync(filePath)) return { success: false, error: 'File not found' }
-        const img = nativeImage.createFromPath(filePath)
+        const validatedPath = validateAbsolutePath(filePath)
+        const allowedPath = resolveDirectAssetPathFromSettings(validatedPath, {
+          settings: settingsRepo,
+          resolverDeps: {
+            isTrackedAssetPath: (candidatePaths) => imageRepo.hasTrackedAssetPath(candidatePaths)
+          }
+        })
+
+        if (!allowedPath) return { success: false, error: 'Forbidden path' }
+        if (!existsSync(allowedPath)) return { success: false, error: 'File not found' }
+
+        const img = nativeImage.createFromPath(allowedPath)
         if (img.isEmpty()) return { success: false, error: 'Failed to load image' }
         clipboard.writeImage(img)
         return { success: true }
@@ -634,8 +651,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GALLERY_SHOW_IN_EXPLORER,
     (_event, { filePath }: { filePath: string }) => {
-      if (!existsSync(filePath)) return false
-      shell.showItemInFolder(filePath)
+      const validatedPath = validateAbsolutePath(filePath)
+      const allowedPath = resolveDirectAssetPathFromSettings(validatedPath, {
+        settings: settingsRepo,
+        resolverDeps: {
+          isTrackedAssetPath: (candidatePaths) => imageRepo.hasTrackedAssetPath(candidatePaths)
+        }
+      })
+
+      if (!allowedPath || !existsSync(allowedPath)) return false
+      shell.showItemInFolder(allowedPath)
       return true
     }
   )

@@ -7,6 +7,7 @@ import {
   WS_MAX_RECONNECT_INTERVAL_MS,
   WS_BACKOFF_MULTIPLIER
 } from '../../constants'
+import { safeJsonParse } from '../../utils/safe-json'
 
 export interface ComfyUIWebSocketEvents {
   connected: () => void
@@ -92,12 +93,15 @@ export class ComfyUIWebSocket extends EventEmitter {
           return
         }
 
-        try {
-          const message: ComfyUIWSMessage = JSON.parse(data.toString())
-          this.handleMessage(message)
-        } catch {
-          // Ignore parse errors
+        const parsed = safeJsonParse<ComfyUIWSMessage>(data.toString(), {
+          context: 'WebSocket message'
+        })
+        if (!parsed.ok) {
+          this.emit('error', new Error(parsed.error))
+          return
         }
+
+        this.handleMessage(parsed.value)
       })
 
       this.ws.on('close', () => {

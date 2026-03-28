@@ -3,6 +3,7 @@ import { join, resolve } from 'path'
 import {
   handleLocalAssetRequest,
   handleLocalAssetRequestFromSettings,
+  resolveDirectAssetPath,
   resolveLocalAssetPath,
   type LocalAssetResolverDeps
 } from '../../../../src/main/services/assets/local-asset'
@@ -154,5 +155,32 @@ describe('resolveLocalAssetPath', () => {
       expect(response.status).toBe(200)
       expect(await response.text()).toBe(legacyFile)
     })
+  })
+})
+
+describe('resolveDirectAssetPath', () => {
+  const outputDirectory = resolve('tmp', 'generated')
+  const directFile = join(outputDirectory, 'image.png')
+  const externalFile = resolve('tmp', 'external', 'secret.png')
+
+  it('allows an absolute file path inside the configured output directory', () => {
+    expect(resolveDirectAssetPath(directFile, outputDirectory)).toBe(directFile)
+  })
+
+  it('rejects relative direct paths', () => {
+    expect(
+      resolveDirectAssetPath(join('tmp', 'generated', 'image.png'), outputDirectory)
+    ).toBeNull()
+  })
+
+  it('allows a tracked gallery asset outside the current output directory', () => {
+    const deps: Partial<LocalAssetResolverDeps> = {
+      realpathSync: (filePath: string) => filePath,
+      platform: process.platform,
+      isTrackedAssetPath: (candidatePaths: readonly string[]) =>
+        candidatePaths.includes(externalFile)
+    }
+
+    expect(resolveDirectAssetPath(externalFile, outputDirectory, deps)).toBe(externalFile)
   })
 })

@@ -1,5 +1,6 @@
 import * as pty from 'node-pty'
 import { BrowserWindow } from 'electron'
+import { homedir } from 'os'
 import { IPC_CHANNELS } from '../../ipc/channels'
 import { mcpServerManager } from '../mcp'
 
@@ -29,7 +30,7 @@ class PtyManager {
       name: 'xterm-256color',
       cols,
       rows,
-      cwd: process.env.HOME || process.env.USERPROFILE || '.',
+      cwd: resolveTerminalWorkingDirectory(),
       env
     })
 
@@ -85,6 +86,13 @@ class PtyManager {
       }
     }
   }
+}
+
+export function resolveTerminalWorkingDirectory(
+  env: NodeJS.ProcessEnv = process.env,
+  defaultHome = homedir()
+): string {
+  return env.HOME || env.USERPROFILE || defaultHome
 }
 
 export const ptyManager = new PtyManager()

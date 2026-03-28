@@ -2,9 +2,30 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.4] - 2026-03-28
+
+감사 결과를 반영한 하드닝 릴리스. 권한 높은 파일 경로 IPC, 크로스플랫폼 기본 경로, JSON 파싱 실패 가시성, 저장소 줄바꿈 정책을 배포 기준으로 정리했습니다.
+
+### Added
+
+- **직접 파일 경로 허용 helper 테스트**: `local-asset`, output root, terminal cwd, renderer store, MCP config parser, ComfyUI WebSocket 회귀 테스트 추가
+- **저장소 줄바꿈 정책**: `.gitattributes` 추가로 추적 텍스트 파일 LF 정규화, 바이너리 자산 제외
+
+### Changed
+
+- **경로 해석 공통화**: 갤러리 클립보드/탐색기 열기 IPC와 워크플로우 import가 기존 `local-asset` 허용 규칙과 같은 출력 루트/DB 추적 자산 기준을 재사용
+- **크로스플랫폼 기본 경로 정렬**: output root와 내장 터미널 cwd가 Windows 전용 환경 변수에만 의존하지 않고 홈 디렉터리 기반 fallback을 사용
+- **에러 가시성 강화**: renderer connection/settings store가 실패 상태를 observable state로 노출하고, MCP config / ComfyUI WebSocket JSON 파싱 실패를 로그 또는 이벤트로 표면화
+- **테스트 규모 확대**: 24개 파일, 374개 테스트 케이스
+
+### Fixed
+
+- **권한 높은 파일 경로 IPC 경계 강화**: 임의 절대 경로를 그대로 처리하던 워크플로우 import, 갤러리 클립보드 복사, 탐색기 열기 동작을 허용 경로 검증 뒤에만 실행
+- **Unix 계열 기본 경로 회귀 방지**: `USERPROFILE` 부재 시 상대 경로처럼 무너지던 출력 디렉터리/터미널 시작 경로 fallback 수정
+
 ## [0.15.3] - 2026-03-24
 
-`0.15.2` 갤러리 회귀 수정. 출력 경로 설정 키 드리프트와 `local-asset` 허용 범위가 어긋나며 갤러리 이미지가 엑스박스로 보이던 문제를 바로잡았습니다.
+`0.15.3` 갤러리 회귀 수정. 출력 경로 설정 키 드리프트와 `local-asset` 허용 범위가 어긋나며 갤러리 이미지가 엑스박스로 보이던 문제를 바로잡았습니다.
 
 ### Fixed
 

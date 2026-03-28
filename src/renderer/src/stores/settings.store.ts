@@ -31,15 +31,18 @@ const defaultSettings: AppSettings = {
 export const useSettingsStore = defineStore('settings', () => {
   const settings = ref<AppSettings>({ ...defaultSettings })
   const loaded = ref(false)
+  const loadError = ref<string | null>(null)
 
   async function loadSettings(): Promise<void> {
+    loadError.value = null
     try {
       const all = await window.electron.ipcRenderer.invoke('settings:getAll')
       if (all) {
         settings.value = { ...defaultSettings, ...all }
       }
       loaded.value = true
-    } catch {
+    } catch (error) {
+      loadError.value = error instanceof Error ? error.message : String(error)
       loaded.value = true
     }
   }
@@ -66,6 +69,7 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     settings,
     loaded,
+    loadError,
     loadSettings,
     setSetting,
     getSetting

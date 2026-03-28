@@ -3,6 +3,7 @@ import { ComfyUIClient } from './client'
 import { ComfyUIWebSocket } from './websocket'
 import { IPC_CHANNELS } from '../../ipc/channels'
 import { PREVIEW_THROTTLE_MS } from '../../constants'
+import log from '../../logger'
 
 /**
  * Singleton manager that coordinates the ComfyUI REST client and WebSocket connection.
@@ -86,6 +87,12 @@ class ComfyUIManager {
       this._lastPreviewTime = now
       const base64 = data.toString('base64')
       this.sendToRenderer(IPC_CHANNELS.COMFYUI_PREVIEW, base64)
+    })
+
+    this.ws.on('error', (error) => {
+      this._isConnected = false
+      log.warn('[ComfyUIWebSocket] Error:', error)
+      this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, false)
     })
   }
 

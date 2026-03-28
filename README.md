@@ -208,6 +208,8 @@ npm run test:coverage  # 커버리지 리포트
 npm run lint           # ESLint
 ```
 
+- Git은 `.gitattributes` 기준으로 추적 텍스트 파일을 LF로 정규화합니다. 대규모 줄바꿈 diff가 보이면 먼저 정책 파일과 체크아웃 설정을 확인하세요.
+
 ### 프로젝트 구조
 
 ```
@@ -234,13 +236,14 @@ src/
 
 - Electron 샌드박스 (`sandbox: true`, `webSecurity: true`, `bypassCSP: false`)
 - `local-asset://`는 현재 출력 디렉터리 내부 파일과 DB에 등록된 갤러리 이미지 경로만 허용, 경로 순회·realpath escape 차단
+- 워크플로우 가져오기와 갤러리 파일 액션(클립보드/탐색기)은 절대 경로 검증 후 같은 허용 규칙을 재사용
 - 갤러리 조회 IPC 검증 + SQL `ORDER BY` 화이트리스트로 정렬 입력 하드닝
 - MCP HTTP 표면은 loopback origin만 허용하며, Settings opt-in일 때만 자동 시작
 - 구조화 로깅 (`electron-log`, 5MB 로테이션)
 
 ### 테스트 현황
 
-- 현재 기준 **19개 테스트 파일, 357개 테스트 케이스**
+- 현재 기준 **24개 테스트 파일, 374개 테스트 케이스**
 
 ## 라이선스
 

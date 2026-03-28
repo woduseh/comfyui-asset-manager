@@ -8,6 +8,7 @@ export const useConnectionStore = defineStore('connection', () => {
     host: 'localhost',
     port: 8188
   })
+  const lastError = ref<string | null>(null)
 
   const connectionState = ref<'disconnected' | 'connecting' | 'connected' | 'reconnecting'>(
     'disconnected'
@@ -18,6 +19,7 @@ export const useConnectionStore = defineStore('connection', () => {
 
   async function connect(host?: string, port?: number): Promise<boolean> {
     connectionState.value = 'connecting'
+    lastError.value = null
     try {
       const h = host || status.value.host
       const p = port || status.value.port
@@ -34,8 +36,9 @@ export const useConnectionStore = defineStore('connection', () => {
       }
       connectionState.value = 'disconnected'
       return false
-    } catch {
+    } catch (error) {
       connectionState.value = 'disconnected'
+      lastError.value = error instanceof Error ? error.message : String(error)
       return false
     }
   }
@@ -67,6 +70,7 @@ export const useConnectionStore = defineStore('connection', () => {
     connectionState,
     isConnected,
     isConnecting,
+    lastError,
     connect,
     disconnect,
     fetchSystemStats,

@@ -72,27 +72,15 @@ function extractEncodedPath(requestUrl: string): string | null {
   return null
 }
 
-export function resolveLocalAssetPath(
-  requestUrl: string,
+function resolveAllowedAssetPath(
+  filePath: string,
   outputDirectory: string | null | undefined,
   deps: Partial<LocalAssetResolverDeps> = {}
 ): string | null {
-  const encodedPath = extractEncodedPath(requestUrl)
-  if (!encodedPath) {
-    return null
-  }
-
-  let decodedPath: string
-  try {
-    decodedPath = decodeURIComponent(encodedPath)
-  } catch {
-    return null
-  }
-
   const realpathResolver = deps.realpathSync ?? realpathSync.native
   const platform = deps.platform ?? process.platform
-  const normalizedRequestedPath = normalizeResolvedPath(decodedPath)
-  const resolvedTargetPath = tryResolveRealPath(decodedPath, realpathResolver)
+  const normalizedRequestedPath = normalizeResolvedPath(filePath)
+  const resolvedTargetPath = tryResolveRealPath(filePath, realpathResolver)
 
   if (outputDirectory?.trim()) {
     const resolvedOutputDirectory = tryResolveRealPath(outputDirectory, realpathResolver)
@@ -113,6 +101,38 @@ export function resolveLocalAssetPath(
   return null
 }
 
+export function resolveLocalAssetPath(
+  requestUrl: string,
+  outputDirectory: string | null | undefined,
+  deps: Partial<LocalAssetResolverDeps> = {}
+): string | null {
+  const encodedPath = extractEncodedPath(requestUrl)
+  if (!encodedPath) {
+    return null
+  }
+
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(encodedPath)
+  } catch {
+    return null
+  }
+
+  return resolveAllowedAssetPath(decodedPath, outputDirectory, deps)
+}
+
+export function resolveDirectAssetPath(
+  filePath: string,
+  outputDirectory: string | null | undefined,
+  deps: Partial<LocalAssetResolverDeps> = {}
+): string | null {
+  if (!isAbsolute(filePath)) {
+    return null
+  }
+
+  return resolveAllowedAssetPath(filePath, outputDirectory, deps)
+}
+
 export function handleLocalAssetRequest(
   requestUrl: string,
   deps: LocalAssetRequestHandlerDeps
@@ -124,6 +144,17 @@ export function handleLocalAssetRequest(
   }
 
   return deps.fetchAsset(filePath)
+}
+
+export function resolveDirectAssetPathFromSettings(
+  filePath: string,
+  deps: Pick<LocalAssetSettingsRequestHandlerDeps, 'settings' | 'fallbackRoot' | 'resolverDeps'>
+): string | null {
+  return resolveDirectAssetPath(
+    filePath,
+    resolveConfiguredOutputRoot(deps.settings, deps.fallbackRoot),
+    deps.resolverDeps
+  )
 }
 
 export function handleLocalAssetRequestFromSettings(

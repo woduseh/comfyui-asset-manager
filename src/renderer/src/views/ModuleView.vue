@@ -22,6 +22,7 @@ import {
 } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
+import { buildModulePromptPreviewLabels } from '@renderer/utils/view-labels'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -45,7 +46,7 @@ const editingVariants = ref<Array<{ name: string; prompt: string; negative: stri
 // Prompt preview
 const promptPreview = ref<{ positive: string; negative: string } | null>(null)
 
-const moduleTypeOptions = [
+const moduleTypeOptions = computed(() => [
   { label: t('module.type.character'), value: 'character' },
   { label: t('module.type.outfit'), value: 'outfit' },
   { label: t('module.type.emotion'), value: 'emotion' },
@@ -55,7 +56,9 @@ const moduleTypeOptions = [
   { label: t('module.type.negative'), value: 'negative' },
   { label: t('module.type.lora'), value: 'lora' },
   { label: t('module.type.custom'), value: 'custom' }
-]
+])
+
+const promptPreviewLabels = computed(() => buildModulePromptPreviewLabels(t))
 
 const typeColors: Record<string, 'success' | 'info' | 'warning' | 'error' | 'default'> = {
   character: 'success',
@@ -492,7 +495,7 @@ onMounted(() => {
                 word-break: break-all;
               "
             >
-              <strong>Positive:</strong> {{ promptPreview.positive }}
+              <strong>{{ promptPreviewLabels.positive }}:</strong> {{ promptPreview.positive }}
             </div>
             <div
               v-if="promptPreview.negative"
@@ -504,7 +507,7 @@ onMounted(() => {
                 word-break: break-all;
               "
             >
-              <strong>Negative:</strong> {{ promptPreview.negative }}
+              <strong>{{ promptPreviewLabels.negative }}:</strong> {{ promptPreview.negative }}
             </div>
           </template>
         </NCard>

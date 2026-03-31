@@ -2,6 +2,31 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.5] - 2026-03-31
+
+작은 규모의 안전성·UX 하드닝 릴리스. 잘못된 숫자 설정 fallback, 파괴적 작업 확인, 런타임 locale 반응성, 시작 시 연결 실패 가시성을 한 묶음으로 정리했습니다.
+
+### Added
+
+- **안전한 숫자 파싱 helper**: main/renderer 양쪽에 `parseIntegerOrFallback()` 추가로 포트·재시도·자동 저장 간격 같은 설정 값을 공통 규칙으로 해석
+- **공용 UI helper**: `src/renderer/src/utils/view-labels.ts` 추가로 워크플로우/배치/모듈 라벨과 generation-only 안내 문구를 순수 함수로 공유
+- **공용 확인 버튼**: `ConfirmActionButton` 추가로 작업 취소/삭제, 워크플로우 삭제 같은 파괴적 액션을 일관된 확인 UX로 재사용
+- **회귀 테스트 확장**: renderer confirm button, connection store unreachable 상태, number helper, view-label helper 테스트 추가
+
+### Changed
+
+- **파괴적 액션 UX 정리**: 워크플로우 삭제, 배치 작업 삭제, 실행 중 배치 취소를 모두 확인 후 실행하도록 변경
+- **배치 위자드 안내 강화**: 생성 카테고리 워크플로우만 선택 가능한 이유와 숨겨진 비생성 워크플로우 수를 즉시 표시
+- **i18n 반응성 정리**: Workflow/Jobs/Module 뷰의 옵션·라벨 맵을 locale-reactive helper로 치환해 실행 중 언어 변경 시 즉시 반영
+- **연결 실패 가시성 강화**: 시작 시 자동 연결이나 헤더 수동 연결이 실패하면 renderer observable state + 토스트로 바로 노출
+- **런타임 가드 보강**: PTY 생성 수를 10개로 제한하고, 모듈 아이템/배치 작업 reorder를 트랜잭션으로 감싸 정렬 중간 실패를 방지
+- **테스트 규모 확대**: 28개 파일, 392개 테스트 케이스
+
+### Fixed
+
+- **재시도 설정 fallback**: 잘못된 `batch.maxRetries` 값으로 `_maxRetries`가 `NaN`이 되던 문제 수정
+- **포트/숫자 설정 fallback**: MCP 포트, ComfyUI 포트, batch 숫자 설정이 잘못된 문자열일 때도 안전한 기본값으로 복구
+
 ## [0.15.4] - 2026-03-28
 
 감사 결과를 반영한 하드닝 릴리스. 권한 높은 파일 경로 IPC, 크로스플랫폼 기본 경로, JSON 파싱 실패 가시성, 저장소 줄바꿈 정책을 배포 기준으로 정리했습니다.

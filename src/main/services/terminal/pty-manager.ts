@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron'
 import { homedir } from 'os'
 import { IPC_CHANNELS } from '../../ipc/channels'
 import { mcpServerManager } from '../mcp'
+import { MAX_TERMINAL_INSTANCES } from '../../constants'
 
 interface TerminalInstance {
   pty: pty.IPty
@@ -14,6 +15,10 @@ class PtyManager {
   private nextId = 1
 
   create(cols: number, rows: number): string {
+    if (this.terminals.size >= MAX_TERMINAL_INSTANCES) {
+      throw new Error('Maximum terminal limit reached')
+    }
+
     const id = `terminal-${this.nextId++}`
 
     const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash'

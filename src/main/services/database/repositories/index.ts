@@ -444,10 +444,17 @@ export class ModuleItemRepository {
 
   reorder(itemIds: string[]): void {
     const db = getDatabase()
-    for (let i = 0; i < itemIds.length; i++) {
-      db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
+    db.run('BEGIN TRANSACTION')
+    try {
+      for (let i = 0; i < itemIds.length; i++) {
+        db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
+      }
+      db.run('COMMIT')
+      saveDatabase()
+    } catch (error) {
+      db.run('ROLLBACK')
+      throw error
     }
-    saveDatabase()
   }
 
   bulkUpdate(updates: Array<{ id: string; data: Partial<Record<string, unknown>> }>): {
@@ -707,10 +714,17 @@ export class BatchJobRepository {
 
   reorder(jobIds: string[]): void {
     const db = getDatabase()
-    for (let i = 0; i < jobIds.length; i++) {
-      db.run('UPDATE batch_jobs SET sort_order = ? WHERE id = ?', [i, jobIds[i]])
+    db.run('BEGIN TRANSACTION')
+    try {
+      for (let i = 0; i < jobIds.length; i++) {
+        db.run('UPDATE batch_jobs SET sort_order = ? WHERE id = ?', [i, jobIds[i]])
+      }
+      db.run('COMMIT')
+      saveDatabase()
+    } catch (error) {
+      db.run('ROLLBACK')
+      throw error
     }
-    saveDatabase()
   }
 }
 

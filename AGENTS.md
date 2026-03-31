@@ -68,6 +68,7 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 - Naive UI 컴포넌트는 개별 import (tree-shaking)
 - Pinia 스토어는 Composition API 패턴 (`defineStore(name, setupFn)`)
 - 스토어에서 main process와 통신 시 `window.electron.ipcRenderer.invoke()` 사용
+- 파괴적 renderer 액션(삭제, 취소 등)은 bare 버튼을 직접 두기보다 `src/renderer/src/components/common/ConfirmActionButton.ts` 같은 재사용 확인 컴포넌트 우선
 
 ### IPC 입력 검증
 
@@ -116,7 +117,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 24개 파일, 374개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 28개 파일, 392개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -247,6 +248,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 - 2개 이상 뷰에서 공유하는 로직 → `src/renderer/src/composables/`로 추출
 - 2개 이상 서비스에서 공유하는 함수 → `src/main/ipc/validators.ts` 또는 별도 유틸로 추출
 - 숫자 리터럴 인라인 사용 금지 → `src/main/constants.ts` 또는 `src/renderer/src/constants.ts`에 명명 상수 정의
+- 여러 뷰에서 재사용하는 locale-reactive option/label map은 `src/renderer/src/utils/view-labels.ts` 같은 순수 helper로 추출해 테스트 가능하게 유지
 
 ### i18n
 
@@ -262,6 +264,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.5** — 숫자 설정 fallback helper, workflow/job destructive action 확인 UX, generation-only workflow 안내, startup/manual connection 실패 토스트, reorder 트랜잭션, terminal instance limit. 테스트 392개
 **0.15.4** — 감사 반영 하드닝: 권한 높은 파일 경로 IPC를 `local-asset` 허용 규칙으로 정렬, output root/terminal cwd의 크로스플랫폼 fallback 수정, renderer store 및 MCP/WebSocket JSON 실패 가시성 강화, `.gitattributes` LF 정책 추가. 테스트 374개
 **0.15.3** — 갤러리 이미지 회귀 수정: `queue-manager`와 `local-asset` 프로토콜이 같은 출력 루트 해석 규칙을 사용하고, `local-asset`은 현재 출력 디렉터리 + DB 등록 gallery 자산 경로만 허용하도록 조정. 테스트 357개
 **0.15.2** — 감사 후속 하드닝: `local-asset` 출력 디렉터리 화이트리스트, 갤러리 쿼리 검증/ORDER BY 화이트리스트, MCP loopback origin 제한 + Settings opt-in 시작, safe-json helper 도입, shipped navigation 정리. 테스트 344개

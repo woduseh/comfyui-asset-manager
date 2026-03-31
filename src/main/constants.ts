@@ -31,6 +31,9 @@ export const MCP_ALLOWED_ORIGIN_HOSTS = ['localhost', '127.0.0.1'] as const
 export const DB_SAVE_DEBOUNCE_MS = 1000
 export const DB_SAVE_DEBOUNCE_BATCH_MS = 10_000 // Longer debounce during batch processing
 
+// === Terminal ===
+export const MAX_TERMINAL_INSTANCES = 10
+
 // === Tags ===
 export const DANBOORU_REQUEST_TIMEOUT_MS = 5000
 export const DANBOORU_PROBE_TIMEOUT_MS = 2000

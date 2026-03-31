@@ -30,4 +30,14 @@ describe('connection.store', () => {
     expect(store.connectionState).toBe('disconnected')
     expect(store.lastError).toBe('connect failed')
   })
+
+  it('captures unreachable responses as observable state', async () => {
+    invoke.mockResolvedValue(false)
+    const store = useConnectionStore()
+
+    await expect(store.connect('localhost', 8188)).resolves.toBe(false)
+
+    expect(store.connectionState).toBe('disconnected')
+    expect(store.lastError).toBe('Unable to reach ComfyUI server')
+  })
 })

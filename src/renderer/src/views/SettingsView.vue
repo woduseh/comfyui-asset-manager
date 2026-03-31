@@ -21,6 +21,7 @@ import { CopyOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
+import { parseIntegerOrFallback } from '@renderer/utils/number'
 
 const { t, locale } = useI18n()
 const message = useMessage()
@@ -199,10 +200,10 @@ async function handleRemoveCli(): Promise<void> {
 onMounted(async () => {
   await settingsStore.loadSettings()
   host.value = settingsStore.settings.comfyui_host
-  port.value = parseInt(settingsStore.settings.comfyui_port) || 8188
+  port.value = parseIntegerOrFallback(settingsStore.settings.comfyui_port, 8188)
   outputDir.value = settingsStore.settings.output_directory
   mcpEnabled.value = settingsStore.settings.mcp_enabled === 'true'
-  mcpPort.value = parseInt(settingsStore.settings.mcp_port) || 39464
+  mcpPort.value = parseIntegerOrFallback(settingsStore.settings.mcp_port, 39464)
   await terminalStore.fetchMcpStatus()
 })
 </script>
@@ -288,7 +289,7 @@ onMounted(async () => {
       <NForm label-placement="left" label-width="200">
         <NFormItem :label="t('settings.batch.maxRetries')">
           <NInputNumber
-            :value="parseInt(settingsStore.settings.max_retries)"
+            :value="parseIntegerOrFallback(settingsStore.settings.max_retries, 3)"
             :min="0"
             :max="10"
             @update:value="(v: number | null) => handleSettingChange('max_retries', String(v ?? 3))"
@@ -296,7 +297,7 @@ onMounted(async () => {
         </NFormItem>
         <NFormItem :label="t('settings.batch.autoSaveInterval')">
           <NInputNumber
-            :value="parseInt(settingsStore.settings.auto_save_interval)"
+            :value="parseIntegerOrFallback(settingsStore.settings.auto_save_interval, 5000)"
             :min="1000"
             :max="60000"
             :step="1000"

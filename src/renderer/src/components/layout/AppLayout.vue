@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, type Component } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -11,7 +11,8 @@ import {
   NButton,
   NSpace,
   NTag,
-  NBadge
+  NBadge,
+  useMessage
 } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { h } from 'vue'
@@ -31,10 +32,12 @@ import { useTerminalStore } from '@renderer/stores/terminal.store'
 import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
 import { NAV_ITEMS } from '@renderer/navigation'
 import type { RouteName } from '@renderer/navigation'
+import { parseIntegerOrFallback } from '@renderer/utils/number'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
+const message = useMessage()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 const terminalStore = useTerminalStore()
@@ -89,6 +92,15 @@ const activeKey = computed(() => {
   return (route.name as string) || 'workflows'
 })
 
+watch(
+  () => connectionStore.lastError,
+  (error, previousError) => {
+    if (error && error !== previousError) {
+      message.error(t('connection.msg.connectFailed', { error }))
+    }
+  }
+)
+
 function handleMenuUpdate(key: string): void {
   router.push({ name: key })
 }
@@ -98,8 +110,14 @@ async function handleToggleConnection(): Promise<void> {
     await connectionStore.disconnect()
   } else {
     const settings = await window.electron.ipcRenderer.invoke('settings:getAll')
-    const host = settings?.comfyui_host || 'localhost'
-    const port = parseInt(settings?.comfyui_port) || 8188
+    const host =
+      typeof settings?.comfyui_host === 'string' && settings.comfyui_host
+        ? settings.comfyui_host
+        : 'localhost'
+    const port = parseIntegerOrFallback(
+      typeof settings?.comfyui_port === 'string' ? settings.comfyui_port : null,
+      8188
+    )
     await connectionStore.connect(host, port)
   }
 }

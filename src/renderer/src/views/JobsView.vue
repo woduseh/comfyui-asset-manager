@@ -28,6 +28,7 @@ import {
   useMessage
 } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
+import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
@@ -41,6 +42,12 @@ import {
   restoreVariableOverrides
 } from '@renderer/composables/useBatchWizard'
 import { JOBS_REFRESH_INTERVAL_MS } from '@renderer/constants'
+import {
+  buildBatchSeedModeOptions,
+  buildBatchStatusLabels,
+  buildWorkflowVarTypeLabels,
+  getGenerationWorkflowHint
+} from '@renderer/utils/view-labels'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -159,25 +166,9 @@ const batchResources = ref<{
 const outputPattern = ref('{job}/{character}/{outfit}/{emotion}')
 const filePattern = ref('{character}_{outfit}_{emotion}_{index}')
 
-const varTypeLabels: Record<string, string> = {
-  text: t('workflow.varType.text'),
-  number: t('workflow.varType.number'),
-  boolean: t('workflow.varType.boolean'),
-  seed: t('workflow.varType.seed'),
-  image: t('workflow.varType.image'),
-  model: t('workflow.varType.model'),
-  lora: t('workflow.varType.lora')
-}
+const varTypeLabels = computed(() => buildWorkflowVarTypeLabels(t))
 
-const statusLabels: Record<string, string> = {
-  draft: t('jobs.statusLabel.draft'),
-  queued: t('jobs.statusLabel.queued'),
-  running: t('jobs.statusLabel.running'),
-  paused: t('jobs.statusLabel.paused'),
-  completed: t('jobs.statusLabel.completed'),
-  failed: t('jobs.statusLabel.failed'),
-  cancelled: t('jobs.statusLabel.cancelled')
-}
+const statusLabels = computed(() => buildBatchStatusLabels(t))
 
 const statusColors: Record<string, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
   draft: 'default',
@@ -196,11 +187,9 @@ const workflowOptions = computed(() => {
     .map((w) => ({ label: w.name, value: w.id }))
 })
 
-const seedModeOptions = [
-  { label: t('batch.seedMode.random'), value: 'random' },
-  { label: t('batch.seedMode.fixed'), value: 'fixed' },
-  { label: t('batch.seedMode.incremental'), value: 'incremental' }
-]
+const generationWorkflowHint = computed(() => getGenerationWorkflowHint(workflowStore.workflows, t))
+
+const seedModeOptions = computed(() => buildBatchSeedModeOptions(t))
 
 const taskPreview = computed(() => {
   const selections = moduleSelections.value.filter((s) => s.selectedItemIds.length > 0)
@@ -618,9 +607,14 @@ onUnmounted(() => {
               t('batch.actions.resume')
             }}</NButton>
           </template>
-          <NButton size="small" type="error" quaternary @click="handleCancel">{{
-            t('batch.actions.cancel')
-          }}</NButton>
+          <ConfirmActionButton
+            size="small"
+            type="error"
+            quaternary
+            :label="t('batch.actions.cancel')"
+            :confirm-text="t('batch.confirmCancel')"
+            @confirm="handleCancel"
+          />
         </NSpace>
       </NSpace>
       <NProgress
@@ -723,9 +717,14 @@ onUnmounted(() => {
           <NButton size="tiny" quaternary type="info" @click="handleCloneJob(job)">{{
             t('batch.actions.clone')
           }}</NButton>
-          <NButton size="tiny" quaternary type="error" @click="handleDeleteJob(job.id as string)">{{
-            t('batch.actions.delete')
-          }}</NButton>
+          <ConfirmActionButton
+            size="tiny"
+            quaternary
+            type="error"
+            :label="t('batch.actions.delete')"
+            :confirm-text="t('batch.confirmDelete')"
+            @confirm="handleDeleteJob(job.id as string)"
+          />
         </NSpace>
       </NCard>
     </VueDraggable>
@@ -767,6 +766,15 @@ onUnmounted(() => {
                     :options="workflowOptions"
                     :placeholder="t('batch.wizard.workflowPlaceholder')"
                   />
+                  <NAlert
+                    v-if="generationWorkflowHint"
+                    type="info"
+                    :show-icon="false"
+                    :bordered="false"
+                    style="margin-top: 8px"
+                  >
+                    {{ generationWorkflowHint }}
+                  </NAlert>
                 </NFormItem>
               </NGridItem>
             </NGrid>

@@ -20,7 +20,10 @@
     "connecting": "연결 중...",
     "reconnecting": "재연결 중...",
     "connect": "연결",
-    "disconnect": "연결 해제"
+    "disconnect": "연결 해제",
+    "msg": {
+      "connectFailed": "연결 실패: {error}"
+    }
   },
   "settings": {
     "title": "설정",
@@ -100,6 +103,7 @@
       "updated": "워크플로우가 수정되었습니다",
       "updateFailed": "수정 실패: {error}"
     },
+    "confirmDelete": "이 워크플로우를 삭제하시겠습니까?",
     "role": {
       "promptPositive": "긍정 프롬프트",
       "promptNegative": "부정 프롬프트",
@@ -174,6 +178,8 @@
     "confirmDelete": "삭제하시겠습니까?",
     "addItemsHint": "아이템을 추가하세요",
     "promptPreview": "프롬프트 미리보기",
+    "promptPreviewPositive": "긍정",
+    "promptPreviewNegative": "부정",
     "editModule": "모듈 수정",
     "item": {
       "namePlaceholder": "아이템 이름",
@@ -219,6 +225,8 @@
       "variantPlaceholder": "프롬프트 변형 (비워두면 기본 프롬프트 사용)",
       "variant": "프롬프트 변형"
     },
+    "confirmDelete": "이 배치 작업을 삭제하시겠습니까?",
+    "confirmCancel": "현재 실행 중인 배치 작업을 취소하시겠습니까?",
     "msg": {
       "deleted": "삭제되었습니다",
       "nameRequired": "배치 작업 이름을 입력해주세요",
@@ -326,6 +334,8 @@
       "countLabel": "조합당 생성 수",
       "seedModeLabel": "시드 모드",
       "seedValueLabel": "시드 값",
+      "generationOnlyHint": "배치 작업에서는 생성 카테고리 워크플로우만 사용할 수 있습니다. 다른 {count}개 워크플로우는 숨겨졌습니다.",
+      "noGenerationWorkflowsHint": "배치 작업에 사용할 생성용 워크플로우가 없습니다. 워크플로우 관리에서 카테고리를 '생성'으로 설정해주세요.",
       "prev": "← 이전",
       "next": "다음 →"
     },

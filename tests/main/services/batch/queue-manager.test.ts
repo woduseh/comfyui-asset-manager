@@ -5,7 +5,8 @@ let mockDb: SqlJsDatabase
 
 vi.mock('../../../../src/main/services/database/index', () => ({
   getDatabase: () => mockDb,
-  saveDatabase: vi.fn()
+  saveDatabase: vi.fn(),
+  setBatchMode: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -43,6 +44,7 @@ vi.mock('../../../../src/main/services/batch/task-generator', () => ({
 }))
 
 import {
+  SettingsRepository,
   BatchJobRepository,
   BatchTaskRepository
 } from '../../../../src/main/services/database/repositories/index'
@@ -105,11 +107,13 @@ function createTables(db: SqlJsDatabase): void {
 describe('QueueManager Recovery', () => {
   let jobRepo: BatchJobRepository
   let taskRepo: BatchTaskRepository
+  let settingsRepo: SettingsRepository
 
   beforeEach(async () => {
     const SQL = await initSqlJs()
     mockDb = new SQL.Database()
     createTables(mockDb)
+    settingsRepo = new SettingsRepository()
     jobRepo = new BatchJobRepository()
     taskRepo = new BatchTaskRepository()
   })
@@ -235,6 +239,24 @@ describe('QueueManager Recovery', () => {
       const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
       await queueManager.resume()
       expect(jobRepo.get(jobId)?.status).toBe('draft')
+    })
+  })
+
+  describe('retry settings', () => {
+    it('falls back to the default retry count when the stored setting is invalid', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+
+      settingsRepo.set('batch.maxRetries', 'not-a-number')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      ;(queueManager as { processJob: (jobId: string) => Promise<void> }).processJob = vi
+        .fn()
+        .mockResolvedValue(undefined)
+
+      const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
+      await queueManager.startJob(jobId)
+
+      expect((queueManager as { _maxRetries: number })._maxRetries).toBe(3)
     })
   })
 

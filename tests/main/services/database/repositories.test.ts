@@ -318,6 +318,28 @@ describe('Database Repositories', () => {
       expect(items.map((i) => i.name)).toEqual(['First', 'Second', 'Third'])
     })
 
+    it('wraps reorder updates in a transaction', () => {
+      const firstId = itemRepo.create({
+        module_id: moduleId,
+        name: 'First',
+        prompt: 'a',
+        sort_order: 0
+      })
+      const secondId = itemRepo.create({
+        module_id: moduleId,
+        name: 'Second',
+        prompt: 'b',
+        sort_order: 1
+      })
+      const runSpy = vi.spyOn(mockDb, 'run')
+
+      itemRepo.reorder([secondId, firstId])
+
+      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
+      expect(runSpy).toHaveBeenCalledWith('COMMIT')
+      expect(itemRepo.list(moduleId).map((item) => item.id)).toEqual([secondId, firstId])
+    })
+
     it('gets a single item by id', () => {
       const id = itemRepo.create({ module_id: moduleId, name: 'Test', prompt: 'p' })
       const item = itemRepo.get(id)
@@ -564,6 +586,18 @@ describe('Database Repositories', () => {
       const id = repo.create({ name: 'J', config: '{}' })
       repo.delete(id)
       expect(repo.get(id)).toBeNull()
+    })
+
+    it('wraps job reorder updates in a transaction', () => {
+      const firstId = repo.create({ name: 'First', config: '{}' })
+      const secondId = repo.create({ name: 'Second', config: '{}' })
+      const runSpy = vi.spyOn(mockDb, 'run')
+
+      repo.reorder([secondId, firstId])
+
+      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
+      expect(runSpy).toHaveBeenCalledWith('COMMIT')
+      expect(repo.list().map((job) => job.id)).toEqual([secondId, firstId])
     })
   })
 

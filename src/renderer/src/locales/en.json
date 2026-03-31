@@ -20,7 +20,10 @@
     "connecting": "Connecting...",
     "reconnecting": "Reconnecting...",
     "connect": "Connect",
-    "disconnect": "Disconnect"
+    "disconnect": "Disconnect",
+    "msg": {
+      "connectFailed": "Connection failed: {error}"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -100,6 +103,7 @@
       "updated": "Workflow updated",
       "updateFailed": "Update failed: {error}"
     },
+    "confirmDelete": "Delete this workflow?",
     "role": {
       "promptPositive": "Positive Prompt",
       "promptNegative": "Negative Prompt",
@@ -174,6 +178,8 @@
     "confirmDelete": "Delete this?",
     "addItemsHint": "Add items",
     "promptPreview": "Prompt Preview",
+    "promptPreviewPositive": "Positive",
+    "promptPreviewNegative": "Negative",
     "editModule": "Edit Module",
     "item": {
       "namePlaceholder": "Item name",
@@ -219,6 +225,8 @@
       "variantPlaceholder": "Prompt variant (leave empty for default prompt)",
       "variant": "Prompt Variant"
     },
+    "confirmDelete": "Delete this batch job?",
+    "confirmCancel": "Cancel the running batch job?",
     "msg": {
       "deleted": "Deleted",
       "nameRequired": "Please enter a batch job name",
@@ -326,6 +334,8 @@
       "countLabel": "Count per Combination",
       "seedModeLabel": "Seed Mode",
       "seedValueLabel": "Seed Value",
+      "generationOnlyHint": "Only generation workflows can be used for batch jobs. {count} other workflow(s) are hidden.",
+      "noGenerationWorkflowsHint": "No generation workflows are available for batch jobs. Set a workflow category to Generation in Workflow Management.",
       "prev": "← Previous",
       "next": "Next →"
     },

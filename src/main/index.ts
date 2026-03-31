@@ -24,6 +24,7 @@ import {
   WINDOW_MIN_WIDTH,
   WINDOW_MIN_HEIGHT
 } from './constants'
+import { parseIntegerOrFallback } from './utils/number'
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -102,7 +103,7 @@ app.whenReady().then(async () => {
   try {
     const mcpEnabled = settingsRepo.get('mcp_enabled')
     if (mcpEnabled === 'true') {
-      const mcpPort = parseInt(settingsRepo.get('mcp_port') || String(DEFAULT_MCP_PORT))
+      const mcpPort = parseIntegerOrFallback(settingsRepo.get('mcp_port'), DEFAULT_MCP_PORT)
       mcpServerManager.start(mcpPort).catch((err: Error) => {
         log.error('[MCP] Auto-start failed:', err.message)
       })

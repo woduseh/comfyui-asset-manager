@@ -35,6 +35,7 @@ export const useConnectionStore = defineStore('connection', () => {
         return true
       }
       connectionState.value = 'disconnected'
+      lastError.value = 'Unable to reach ComfyUI server'
       return false
     } catch (error) {
       connectionState.value = 'disconnected'

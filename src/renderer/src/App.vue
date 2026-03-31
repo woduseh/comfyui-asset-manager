@@ -8,6 +8,7 @@ import { useSettingsStore } from './stores/settings.store'
 import { useConnectionStore } from './stores/connection.store'
 import { useQueueStore } from './stores/queue.store'
 import type { QueueProgress } from './types/ipc'
+import { parseIntegerOrFallback } from './utils/number'
 
 const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
@@ -53,8 +54,9 @@ onMounted(async () => {
 
   // Auto-connect on startup if previously connected
   const host = settingsStore.settings.comfyui_host || 'localhost'
-  const port = parseInt(settingsStore.settings.comfyui_port) || 8188
-  connectionStore.connect(host, port).catch(() => {})
+  const port = parseIntegerOrFallback(settingsStore.settings.comfyui_port, 8188)
+  // connect() surfaces failures through store state and never rejects.
+  await connectionStore.connect(host, port)
 })
 
 onUnmounted(() => {

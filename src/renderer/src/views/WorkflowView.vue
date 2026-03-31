@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard,
@@ -17,9 +17,15 @@ import {
   useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
-import { h } from 'vue'
 import { useWorkflowStore, type WorkflowItem } from '@renderer/stores/workflow.store'
+import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
 import { safeJsonParse } from '@renderer/utils/safe-json'
+import {
+  buildWorkflowCategoryOptions,
+  buildWorkflowRoleLabels,
+  buildWorkflowRoleOptions,
+  buildWorkflowVarTypeLabels
+} from '@renderer/utils/view-labels'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -31,7 +37,7 @@ const detailVariables = ref<Record<string, unknown>[]>([])
 const editName = ref('')
 const editDescription = ref('')
 
-const columns: DataTableColumns<WorkflowItem> = [
+const columns = computed<DataTableColumns<WorkflowItem>>(() => [
   { title: t('common.name'), key: 'name', ellipsis: { tooltip: true } },
   {
     title: t('common.type'),
@@ -93,24 +99,20 @@ const columns: DataTableColumns<WorkflowItem> = [
                 default: () => t('common.detail')
               }
             ),
-            h(
-              NButton,
-              {
-                size: 'small',
-                quaternary: true,
-                type: 'error',
-                onClick: () => handleDelete(row.id)
-              },
-              {
-                default: () => t('common.delete')
-              }
-            )
+            h(ConfirmActionButton, {
+              size: 'small',
+              quaternary: true,
+              type: 'error',
+              label: t('common.delete'),
+              confirmText: t('workflow.confirmDelete'),
+              onConfirm: () => handleDelete(row.id)
+            })
           ]
         }
       )
     }
   }
-]
+])
 
 async function handleImport(): Promise<void> {
   const filePath = await window.electron.ipcRenderer.invoke('dialog:open-file', {
@@ -172,20 +174,9 @@ async function handleSaveWorkflow(): Promise<void> {
   }
 }
 
-const categoryOptions = [
-  { label: t('workflow.category.generation'), value: 'generation' },
-  { label: t('workflow.category.upscale'), value: 'upscale' },
-  { label: t('workflow.category.detailer'), value: 'detailer' },
-  { label: t('workflow.category.custom'), value: 'custom' }
-]
+const categoryOptions = computed(() => buildWorkflowCategoryOptions(t))
 
-const roleOptions = [
-  { label: t('workflow.role.promptPositive'), value: 'prompt_positive' },
-  { label: t('workflow.role.promptNegative'), value: 'prompt_negative' },
-  { label: t('workflow.role.seed'), value: 'seed' },
-  { label: t('workflow.role.fixed'), value: 'fixed' },
-  { label: t('workflow.role.custom'), value: 'custom' }
-]
+const roleOptions = computed(() => buildWorkflowRoleOptions(t))
 
 const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
   prompt_positive: 'success',
@@ -195,23 +186,9 @@ const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'def
   custom: 'default'
 }
 
-const roleLabels: Record<string, string> = {
-  prompt_positive: t('workflow.roleShort.promptPositive'),
-  prompt_negative: t('workflow.roleShort.promptNegative'),
-  seed: t('workflow.roleShort.seed'),
-  fixed: t('workflow.roleShort.fixed'),
-  custom: t('workflow.roleShort.custom')
-}
+const roleLabels = computed(() => buildWorkflowRoleLabels(t))
 
-const varTypeLabels: Record<string, string> = {
-  text: t('workflow.varType.text'),
-  number: t('workflow.varType.number'),
-  boolean: t('workflow.varType.boolean'),
-  seed: t('workflow.varType.seed'),
-  image: t('workflow.varType.image'),
-  model: t('workflow.varType.model'),
-  lora: 'LoRA'
-}
+const varTypeLabels = computed(() => buildWorkflowVarTypeLabels(t))
 
 type TagType = 'info' | 'warning' | 'success' | 'default'
 const varTypeTagColors: Record<string, TagType> = {

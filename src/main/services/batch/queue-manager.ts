@@ -32,6 +32,7 @@ import {
 import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
 import type { BatchConfig, ModuleDataSnapshot, GeneratedTask } from '../batch/task-generator'
 import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
+import { parseIntegerOrFallback } from '../../utils/number'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
@@ -171,7 +172,7 @@ class QueueManager {
 
     // Load retry setting
     const retryStr = settingsRepo.get('batch.maxRetries')
-    this._maxRetries = retryStr ? parseInt(retryStr) : 3
+    this._maxRetries = parseIntegerOrFallback(retryStr, 3)
 
     batchJobRepo.updateStatus(jobId, 'running')
 

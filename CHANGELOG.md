@@ -2,6 +2,19 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.6] - 2026-03-31
+
+locale-reactive completion patch. `v0.15.5`에서 helper 패턴으로 전환된 i18n 반응성을 Gallery/Settings까지 마저 정리하고, README 테스트 통계 드리프트를 맞췄습니다.
+
+### Changed
+
+- **갤러리 필터 locale 반응성 정리**: Gallery 정렬/평점 옵션을 helper + `computed()`로 전환해 실행 중 언어 변경 시 즉시 반영
+- **설정 테마 locale 반응성 정리**: Settings 테마 옵션을 helper + `computed()`로 전환해 실행 중 언어 변경 시 즉시 반영
+
+### Fixed
+
+- **README 테스트 통계 드리프트 수정**: stale 했던 `24개 / 374개` 표기를 현재 기준 `28개 / 394개`로 동기화
+
 ## [0.15.5] - 2026-03-31
 
 작은 규모의 안전성·UX 하드닝 릴리스. 잘못된 숫자 설정 fallback, 파괴적 작업 확인, 런타임 locale 반응성, 시작 시 연결 실패 가시성을 한 묶음으로 정리했습니다.

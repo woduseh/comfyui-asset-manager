@@ -22,6 +22,7 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import { parseIntegerOrFallback } from '@renderer/utils/number'
+import { buildSettingsThemeOptions } from '@renderer/utils/view-labels'
 
 const { t, locale } = useI18n()
 const message = useMessage()
@@ -47,10 +48,7 @@ const languageOptions = [
   { label: 'English', value: 'en' }
 ]
 
-const themeOptions = [
-  { label: t('settings.general.dark'), value: 'dark' },
-  { label: t('settings.general.light'), value: 'light' }
-]
+const themeOptions = computed(() => buildSettingsThemeOptions(t))
 
 async function handleConnect(): Promise<void> {
   const success = await connectionStore.connect(host.value, port.value)

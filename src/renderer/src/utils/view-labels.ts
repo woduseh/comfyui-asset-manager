@@ -69,6 +69,28 @@ export function buildBatchStatusLabels(t: Translate): Record<string, string> {
   }
 }
 
+export function buildGallerySortOptions(t: Translate): Array<{ label: string; value: string }> {
+  return [
+    { label: t('gallery.sortOptions.createdDesc'), value: 'created_at:desc' },
+    { label: t('gallery.sortOptions.createdAsc'), value: 'created_at:asc' },
+    { label: t('gallery.sortOptions.ratingDesc'), value: 'rating:desc' },
+    { label: t('gallery.sortOptions.ratingAsc'), value: 'rating:asc' }
+  ]
+}
+
+export function buildGalleryRatingOptions(
+  t: Translate
+): Array<{ label: string; value: number | null }> {
+  return [
+    { label: t('gallery.all'), value: null },
+    { label: '⭐ 1+', value: 1 },
+    { label: '⭐⭐ 2+', value: 2 },
+    { label: '⭐⭐⭐ 3+', value: 3 },
+    { label: '⭐⭐⭐⭐ 4+', value: 4 },
+    { label: '⭐⭐⭐⭐⭐ 5', value: 5 }
+  ]
+}
+
 export function buildModulePromptPreviewLabels(t: Translate): {
   positive: string
   negative: string
@@ -77,6 +99,13 @@ export function buildModulePromptPreviewLabels(t: Translate): {
     positive: t('module.promptPreviewPositive'),
     negative: t('module.promptPreviewNegative')
   }
+}
+
+export function buildSettingsThemeOptions(t: Translate): Array<{ label: string; value: string }> {
+  return [
+    { label: t('settings.general.dark'), value: 'dark' },
+    { label: t('settings.general.light'), value: 'light' }
+  ]
 }
 
 export function getGenerationWorkflowHint(workflows: WorkflowLike[], t: Translate): string | null {

@@ -28,6 +28,7 @@ import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.sto
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
 import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
+import { buildGalleryRatingOptions, buildGallerySortOptions } from '@renderer/utils/view-labels'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -87,21 +88,14 @@ function parseGenerationParams(json: string | null): Record<string, unknown> | n
   return parsed.ok ? parsed.value : null
 }
 
-const sortOptions = [
-  { label: t('gallery.sortOptions.createdDesc'), value: 'created_at:desc' },
-  { label: t('gallery.sortOptions.createdAsc'), value: 'created_at:asc' },
-  { label: t('gallery.sortOptions.ratingDesc'), value: 'rating:desc' },
-  { label: t('gallery.sortOptions.ratingAsc'), value: 'rating:asc' }
-]
+const sortOptions = computed(() => buildGallerySortOptions(t))
 
-const ratingOptions: SelectMixedOption[] = [
-  { label: t('gallery.all'), value: null as unknown as string },
-  { label: '⭐ 1+', value: 1 },
-  { label: '⭐⭐ 2+', value: 2 },
-  { label: '⭐⭐⭐ 3+', value: 3 },
-  { label: '⭐⭐⭐⭐ 4+', value: 4 },
-  { label: '⭐⭐⭐⭐⭐ 5', value: 5 }
-]
+const ratingOptions = computed<SelectMixedOption[]>(() =>
+  buildGalleryRatingOptions(t).map((option) => ({
+    ...option,
+    value: option.value === null ? (null as unknown as string) : option.value
+  }))
+)
 
 const totalPages = computed(() => Math.ceil(galleryStore.total / galleryStore.pageSize))
 

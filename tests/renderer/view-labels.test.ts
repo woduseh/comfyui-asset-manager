@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   buildBatchSeedModeOptions,
   buildBatchStatusLabels,
+  buildGalleryRatingOptions,
+  buildGallerySortOptions,
   buildModulePromptPreviewLabels,
+  buildSettingsThemeOptions,
   buildWorkflowCategoryOptions,
   buildWorkflowRoleLabels,
   buildWorkflowRoleOptions,
@@ -71,6 +74,31 @@ describe('view-label helpers', () => {
       positive: 'module.promptPreviewPositive',
       negative: 'module.promptPreviewNegative'
     })
+  })
+
+  it('builds gallery filter labels through the translator', () => {
+    expect(buildGallerySortOptions(t)).toEqual([
+      { label: 'gallery.sortOptions.createdDesc', value: 'created_at:desc' },
+      { label: 'gallery.sortOptions.createdAsc', value: 'created_at:asc' },
+      { label: 'gallery.sortOptions.ratingDesc', value: 'rating:desc' },
+      { label: 'gallery.sortOptions.ratingAsc', value: 'rating:asc' }
+    ])
+
+    expect(buildGalleryRatingOptions(t)).toEqual([
+      { label: 'gallery.all', value: null },
+      { label: '⭐ 1+', value: 1 },
+      { label: '⭐⭐ 2+', value: 2 },
+      { label: '⭐⭐⭐ 3+', value: 3 },
+      { label: '⭐⭐⭐⭐ 4+', value: 4 },
+      { label: '⭐⭐⭐⭐⭐ 5', value: 5 }
+    ])
+  })
+
+  it('builds settings theme labels through the translator', () => {
+    expect(buildSettingsThemeOptions(t)).toEqual([
+      { label: 'settings.general.dark', value: 'dark' },
+      { label: 'settings.general.light', value: 'light' }
+    ])
   })
 
   it('returns a generation-only hint when non-generation workflows are hidden', () => {

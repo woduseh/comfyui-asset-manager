@@ -56,8 +56,9 @@ export const useConnectionStore = defineStore('connection', () => {
       if (stats) {
         status.value.systemStats = stats
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      void error
+      // System stats are opportunistic; keep the last known values on transient failures.
     }
   }
 

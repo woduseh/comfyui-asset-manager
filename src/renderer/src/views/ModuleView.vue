@@ -101,7 +101,8 @@ async function updatePreview(): Promise<void> {
     promptPreview.value = await window.electron.ipcRenderer.invoke('prompt:preview', {
       moduleIds: [selectedModuleId.value]
     })
-  } catch {
+  } catch (error) {
+    void error
     promptPreview.value = null
   }
 }
@@ -286,7 +287,8 @@ async function handleImportModule(): Promise<void> {
       await moduleStore.loadModules()
       message.success(t('module.msg.importSuccess', { name: result.name }))
     }
-  } catch {
+  } catch (error) {
+    void error
     message.error(t('module.msg.importFailed'))
   }
 }

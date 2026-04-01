@@ -1014,8 +1014,9 @@ export function registerMcpTools(server: McpServer): void {
         if (variantsStr && variantsStr !== '{}') {
           try {
             parsed.prompt_variants = JSON.parse(variantsStr)
-          } catch {
-            // skip invalid variants
+          } catch (error) {
+            void error
+            // Skip invalid persisted variants so export can continue with the base item fields.
           }
         }
         return parsed
@@ -1093,7 +1094,8 @@ export function registerMcpTools(server: McpServer): void {
           if (str && str !== '{}') {
             try {
               return JSON.parse(str)
-            } catch {
+            } catch (error) {
+              void error
               return undefined
             }
           }
@@ -1192,7 +1194,8 @@ export function registerMcpTools(server: McpServer): void {
           if (str && str !== '{}') {
             try {
               return JSON.parse(str)
-            } catch {
+            } catch (error) {
+              void error
               return undefined
             }
           }

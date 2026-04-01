@@ -308,7 +308,8 @@ class TagService {
         })
         if (localResults.length >= limit) break
       }
-    } catch {
+    } catch (error) {
+      log.debug('[Tags] Online search failed, returning local results only:', error)
       // Online search failed, return local results only
     }
 

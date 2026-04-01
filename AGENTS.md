@@ -117,7 +117,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 28개 파일, 394개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 29개 파일, 397개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -129,6 +129,7 @@ npm run format           # Prettier
 - **Pre-commit 훅**: `husky` + `lint-staged` — 커밋 시 자동 ESLint(`*.ts,*.vue`) + Prettier(`*.ts,*.vue,*.json,*.md`) 실행
 - **실행**: `npx husky init` 후 `.husky/pre-commit` 파일이 `npx lint-staged` 실행
 - **줄바꿈 정책**: `.gitattributes`로 추적 텍스트 파일 LF 정규화. 대규모 CRLF churn은 기능 변경과 분리
+- **릴리즈 무결성**: GitHub Release workflow는 Windows 배포물과 함께 `checksums-sha256.txt`를 생성·첨부해 검증 가능한 초안을 남김
 
 ## 현재 구조
 
@@ -264,6 +265,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.7** — main 프로세스 crash handler 추가, touched catch 블록의 의도/진단 로그 정리, release workflow SHA256 checksum 첨부, Vitest coverage include 확장. 테스트 397개
 **0.15.6** — Gallery 정렬/평점 필터와 Settings 테마 옵션을 locale-reactive helper + computed로 정렬해 실행 중 언어 변경 시 즉시 반영. README 테스트 통계도 28개 파일 / 394개 케이스로 동기화.
 **0.15.5** — 숫자 설정 fallback helper, workflow/job destructive action 확인 UX, generation-only workflow 안내, startup/manual connection 실패 토스트, reorder 트랜잭션, terminal instance limit. 테스트 392개
 **0.15.4** — 감사 반영 하드닝: 권한 높은 파일 경로 IPC를 `local-asset` 허용 규칙으로 정렬, output root/terminal cwd의 크로스플랫폼 fallback 수정, renderer store 및 MCP/WebSocket JSON 실패 가시성 강화, `.gitattributes` LF 정책 추가. 테스트 374개

@@ -246,7 +246,8 @@ async function loadWorkflowVariables(workflowId: string): Promise<void> {
 
   try {
     batchResources.value = await window.electron.ipcRenderer.invoke('comfyui:models')
-  } catch {
+  } catch (error) {
+    void error
     batchResources.value = null
   }
 
@@ -290,8 +291,9 @@ async function loadBatchJobs(): Promise<void> {
 async function loadQueueStatus(): Promise<void> {
   try {
     queueStatus.value = await window.electron.ipcRenderer.invoke('queue:status')
-  } catch {
-    /* ignore */
+  } catch (error) {
+    void error
+    /* Queue status polling is best-effort; leave the last snapshot intact on failure. */
   }
 }
 

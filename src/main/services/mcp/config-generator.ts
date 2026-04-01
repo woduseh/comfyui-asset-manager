@@ -7,6 +7,10 @@ import { safeJsonParse } from '../../utils/safe-json'
 const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`
 
+function logConfigDebug(context: string, error: unknown): void {
+  log.debug(`[MCP] ${context}:`, error)
+}
+
 interface McpJsonConfig {
   mcpServers: Record<
     string,
@@ -47,7 +51,11 @@ function writeDotMcpJson(url: string, targetDir?: string): string {
         config = parsed
         if (!config.mcpServers) config.mcpServers = {}
       }
-    } catch {
+    } catch (error) {
+      logConfigDebug(
+        'Failed to read existing .mcp.json config, falling back to a new config',
+        error
+      )
       config = { mcpServers: {} }
     }
   }
@@ -82,7 +90,8 @@ function writeGeminiConfig(url: string): string | null {
           return null
         }
         settings = parsed
-      } catch {
+      } catch (error) {
+        logConfigDebug('Failed to read existing Gemini settings, leaving them untouched', error)
         // Don't overwrite corrupted settings
         return null
       }
@@ -93,7 +102,8 @@ function writeGeminiConfig(url: string): string | null {
 
     writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8')
     return filePath
-  } catch {
+  } catch (error) {
+    logConfigDebug('Failed to write Gemini CLI config', error)
     return null
   }
 }
@@ -133,7 +143,8 @@ function writeCodexConfig(url: string): string | null {
 
     writeFileSync(filePath, content, 'utf-8')
     return filePath
-  } catch {
+  } catch (error) {
+    logConfigDebug('Failed to write Codex CLI config', error)
     return null
   }
 }
@@ -162,7 +173,8 @@ function writeCopilotCliConfig(url: string): string | null {
         }
         config = parsed
         if (!config.mcpServers) config.mcpServers = {}
-      } catch {
+      } catch (error) {
+        logConfigDebug('Failed to read existing Copilot CLI config, leaving it untouched', error)
         // Don't overwrite corrupted config
         return null
       }
@@ -172,7 +184,8 @@ function writeCopilotCliConfig(url: string): string | null {
 
     writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8')
     return filePath
-  } catch {
+  } catch (error) {
+    logConfigDebug('Failed to write Copilot CLI config', error)
     return null
   }
 }
@@ -225,8 +238,8 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(mcpJsonPath, JSON.stringify(config, null, 2), 'utf-8')
         removed = true
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to remove MCP entry from .mcp.json', error)
     }
   }
 
@@ -244,8 +257,8 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(geminiPath, JSON.stringify(settings, null, 2), 'utf-8')
         removed = true
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to remove MCP entry from Gemini settings', error)
     }
   }
 
@@ -263,8 +276,8 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(codexPath, content ? content + '\n' : '', 'utf-8')
         removed = true
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to remove MCP entry from Codex config', error)
     }
   }
 
@@ -282,8 +295,8 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
         writeFileSync(copilotConfigPath, JSON.stringify(config, null, 2), 'utf-8')
         removed = true
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to remove MCP entry from Copilot CLI config', error)
     }
   }
 
@@ -311,8 +324,8 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(configPath, 'utf-8')
       const config = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
       claudeCode = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to inspect .mcp.json MCP status', error)
     }
   }
 
@@ -322,8 +335,8 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(copilotConfigPath, 'utf-8')
       const config = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
       copilotCli = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to inspect Copilot CLI MCP status', error)
     }
   }
 
@@ -333,8 +346,8 @@ export function getMcpConfigStatus(): {
       const raw = readFileSync(geminiPath, 'utf-8')
       const settings = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
       geminiCli = !!(settings && settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME])
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to inspect Gemini CLI MCP status', error)
     }
   }
 
@@ -343,8 +356,8 @@ export function getMcpConfigStatus(): {
     try {
       const content = readFileSync(codexPath, 'utf-8')
       codexCli = content.includes(TOML_SECTION_HEADER)
-    } catch {
-      /* ignore */
+    } catch (error) {
+      logConfigDebug('Failed to inspect Codex CLI MCP status', error)
     }
   }
 

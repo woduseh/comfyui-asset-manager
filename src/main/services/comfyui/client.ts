@@ -1,5 +1,6 @@
 import { ofetch } from 'ofetch'
 import { COMFYUI_PING_TIMEOUT_MS } from '../../constants'
+import log from '../../logger'
 import type {
   ComfyUIPromptRequest,
   ComfyUIPromptResponse,
@@ -29,7 +30,8 @@ export class ComfyUIClient {
     try {
       await ofetch(`${this.baseUrl}/system_stats`, { timeout: COMFYUI_PING_TIMEOUT_MS })
       return true
-    } catch {
+    } catch (error) {
+      log.debug('[ComfyUI] Ping failed:', error)
       return false
     }
   }
@@ -49,7 +51,8 @@ export class ComfyUIClient {
     try {
       const info = await ofetch(`${this.baseUrl}/object_info/${nodeType}`)
       return info
-    } catch {
+    } catch (error) {
+      log.debug(`[ComfyUI] Failed to load node info for "${nodeType}":`, error)
       return null
     }
   }

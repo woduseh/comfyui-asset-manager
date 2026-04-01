@@ -177,7 +177,9 @@ export function validatePromptVariants(
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
-  } catch {
+  } catch (error) {
+    void error
+    // Malformed legacy prompt_variants payloads are treated as empty so edits can still proceed.
     return {}
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}

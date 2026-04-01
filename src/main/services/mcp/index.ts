@@ -66,7 +66,9 @@ function getAllowedLoopbackOrigin(
     }
 
     return origin.origin
-  } catch {
+  } catch (error) {
+    void error
+    // Malformed Origin headers are rejected the same way as disallowed origins.
     return null
   }
 }

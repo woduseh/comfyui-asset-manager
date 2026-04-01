@@ -39,7 +39,9 @@ function tryResolveRealPath(
 ): string {
   try {
     return normalizeResolvedPath(realpathResolver(filePath))
-  } catch {
+  } catch (error) {
+    void error
+    // Missing files or realpath failures should still be compared against allowlisted paths.
     return normalizeResolvedPath(filePath)
   }
 }
@@ -114,7 +116,9 @@ export function resolveLocalAssetPath(
   let decodedPath: string
   try {
     decodedPath = decodeURIComponent(encodedPath)
-  } catch {
+  } catch (error) {
+    void error
+    // Malformed percent-encoding indicates an invalid request URL and should be rejected.
     return null
   }
 

@@ -45,7 +45,8 @@ export async function checkOnlineAvailability(): Promise<boolean> {
     onlineCheckedAt = now
     log.info('[Tags] Danbooru API is reachable')
     return true
-  } catch {
+  } catch (error) {
+    log.debug('[Tags] Danbooru availability probe failed:', error)
     onlineAvailable = false
     onlineCheckedAt = now
     log.info('[Tags] Danbooru API is unreachable, skipping online lookups')

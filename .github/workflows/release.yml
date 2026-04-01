@@ -94,12 +94,26 @@ jobs:
           # Write to file for multiline support
           echo "$NOTES" > release-notes.md
 
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          ls -la
+          mapfile -t exe_files < <(find . -maxdepth 1 -type f -name '*.exe' | sort)
+          if [ "${#exe_files[@]}" -eq 0 ]; then
+            echo "No .exe files found in dist/" >&2
+            exit 1
+          fi
+          sha256sum "${exe_files[@]}" > checksums-sha256.txt
+          cat checksums-sha256.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           name: ${{ github.ref_name }}
           body_path: release-notes.md
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/checksums-sha256.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

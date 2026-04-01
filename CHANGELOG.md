@@ -2,6 +2,22 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.7] - 2026-04-01
+
+resilience and release-integrity patch. main 프로세스 크래시 핸들러를 조기에 설치하고, 이번에 손댄 예외 무시 지점을 모두 의도 주석 또는 debug 로그로 정리했습니다. 릴리즈 초안에는 Windows 배포물과 함께 SHA256 체크섬도 첨부됩니다.
+
+### Added
+
+- **main crash handler**: `src/main/crash-handler.ts` 추가로 `uncaughtException`은 로그 후 종료, `unhandledRejection`은 로그만 남기도록 분리
+- **crash-handler 테스트**: `tests/main/crash-handler.test.ts` 추가로 예외/리젝션/비-`Error` throw 값을 모두 고정
+- **릴리즈 checksum 첨부**: GitHub Actions release workflow가 `checksums-sha256.txt`를 생성·첨부해 다운로드 무결성 검증 지원
+
+### Changed
+
+- **catch hygiene 정리**: touched main/renderer 파일의 빈 `catch {}`를 `log.debug(...)` 또는 명시적 사유 주석으로 치환해 조용한 실패를 줄임
+- **coverage include 정렬**: `vitest.config.ts`가 `src/main/utils/*.ts`와 `src/main/crash-handler.ts`를 함께 집계하도록 확장
+- **테스트 규모 확대**: 29개 파일, 397개 테스트 케이스
+
 ## [0.15.6] - 2026-03-31
 
 locale-reactive completion patch. `v0.15.5`에서 helper 패턴으로 전환된 i18n 반응성을 Gallery/Settings까지 마저 정리하고, README 테스트 통계 드리프트를 맞췄습니다.

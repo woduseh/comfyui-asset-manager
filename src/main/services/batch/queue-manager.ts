@@ -600,8 +600,9 @@ class QueueManager {
     // Clean up ComfyUI history to free server memory
     try {
       await comfyuiManager.restClient.deleteFromHistory([promptId])
-    } catch {
+    } catch (error) {
       // Non-critical: history cleanup failure shouldn't block task completion
+      log.debug('[QueueManager] Failed to clear ComfyUI history after task completion:', error)
     }
   }
 

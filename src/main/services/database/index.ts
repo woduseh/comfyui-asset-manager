@@ -122,8 +122,9 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add role column for existing databases
   try {
     database.run(`ALTER TABLE workflow_variables ADD COLUMN role TEXT NOT NULL DEFAULT 'custom'`)
-  } catch {
-    /* Column already exists */
+  } catch (error) {
+    void error
+    /* Existing databases may already have this column from an earlier app version. */
   }
 
   database.run(`
@@ -158,8 +159,9 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add prompt_variants column for existing databases
   try {
     database.run(`ALTER TABLE module_items ADD COLUMN prompt_variants TEXT DEFAULT '{}'`)
-  } catch {
-    /* Column already exists */
+  } catch (error) {
+    void error
+    /* Existing databases may already have this column from an earlier app version. */
   }
 
   database.run(`
@@ -195,15 +197,17 @@ function createTables(database: SqlJsDatabase): void {
   // Migration: add module_data_snapshot column for lazy task expansion
   try {
     database.run(`ALTER TABLE batch_jobs ADD COLUMN module_data_snapshot TEXT`)
-  } catch {
-    /* Column already exists */
+  } catch (error) {
+    void error
+    /* Existing databases may already have this column from an earlier app version. */
   }
 
   // Migration: add sort_order column for batch_jobs
   try {
     database.run(`ALTER TABLE batch_jobs ADD COLUMN sort_order INTEGER DEFAULT 0`)
-  } catch {
-    /* Column already exists */
+  } catch (error) {
+    void error
+    /* Existing databases may already have this column from an earlier app version. */
   }
 
   database.run(`

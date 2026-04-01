@@ -131,7 +131,8 @@ export function registerIpcHandlers(): void {
     if (!comfyuiManager.isConnected) return null
     try {
       return await comfyuiManager.restClient.getSystemStats()
-    } catch {
+    } catch (error) {
+      log.debug('[IPC] Failed to fetch ComfyUI system stats:', error)
       return null
     }
   })
@@ -141,7 +142,8 @@ export function registerIpcHandlers(): void {
     if (!comfyuiManager.isConnected) return null
     try {
       return await comfyuiManager.restClient.getAvailableModels()
-    } catch {
+    } catch (error) {
+      log.debug('[IPC] Failed to fetch ComfyUI models:', error)
       return null
     }
   })

@@ -24,7 +24,10 @@ import {
   WINDOW_MIN_WIDTH,
   WINDOW_MIN_HEIGHT
 } from './constants'
+import { installCrashHandlers } from './crash-handler'
 import { parseIntegerOrFallback } from './utils/number'
+
+installCrashHandlers(process, log, (code) => app.exit(code))
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([

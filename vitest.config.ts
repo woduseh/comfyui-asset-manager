@@ -8,7 +8,12 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      include: ['src/main/services/**/*.ts', 'src/main/ipc/validators.ts'],
+      include: [
+        'src/main/services/**/*.ts',
+        'src/main/ipc/validators.ts',
+        'src/main/utils/*.ts',
+        'src/main/crash-handler.ts'
+      ],
       exclude: [
         // websocket.ts: depends on 'ws' native WebSocket — requires live server for meaningful tests
         'src/main/services/comfyui/websocket.ts',

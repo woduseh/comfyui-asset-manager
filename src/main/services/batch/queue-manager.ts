@@ -26,87 +26,30 @@ import {
   TASK_EXECUTION_TIMEOUT_MS,
   COMPLETION_POLL_INTERVAL_MS,
   MAX_DUPLICATE_FILE_SUFFIX,
-  MAX_DURATION_SAMPLES,
   CLEAR_PROMPT_DATA_CHUNK_INTERVAL
 } from '../../constants'
 import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
-import type { BatchConfig, ModuleDataSnapshot, GeneratedTask } from '../batch/task-generator'
-import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
+import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
+import { isJsonObject } from '../../utils/safe-json'
 import { parseIntegerOrFallback } from '../../utils/number'
+import {
+  computeEta,
+  isBatchConfig,
+  isModuleDataSnapshot,
+  isTaskMetadata,
+  isTaskPromptData,
+  parseRequiredJson,
+  pushDuration,
+  resolveFileName,
+  type TaskMetadata,
+  type TaskPromptData
+} from './queue-utils'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
 const workflowRepo = new WorkflowRepository()
 const settingsRepo = new SettingsRepository()
-
-type TaskPromptData = GeneratedTask['promptData']
-type TaskMetadata = GeneratedTask['metadata']
-
-function isBatchConfig(value: unknown): value is BatchConfig {
-  return (
-    isJsonObject(value) &&
-    typeof value.name === 'string' &&
-    typeof value.workflowId === 'string' &&
-    Array.isArray(value.moduleSelections) &&
-    typeof value.countPerCombination === 'number' &&
-    (value.seedMode === 'random' ||
-      value.seedMode === 'fixed' ||
-      value.seedMode === 'incremental') &&
-    typeof value.outputFolderPattern === 'string' &&
-    typeof value.fileNamePattern === 'string'
-  )
-}
-
-function isModuleDataSnapshot(value: unknown): value is ModuleDataSnapshot {
-  return Array.isArray(value)
-}
-
-function isTaskPromptData(value: unknown): value is TaskPromptData {
-  return (
-    isJsonObject(value) &&
-    typeof value.positive === 'string' &&
-    typeof value.negative === 'string' &&
-    typeof value.seed === 'number' &&
-    (value.extraVariables === undefined || isJsonObject(value.extraVariables)) &&
-    (value.slotMappings === undefined || Array.isArray(value.slotMappings)) &&
-    (value.slotPrompts === undefined || isJsonObject(value.slotPrompts)) &&
-    (value.variableOverrides === undefined || Array.isArray(value.variableOverrides))
-  )
-}
-
-function isTaskMetadata(value: unknown): value is TaskMetadata {
-  return (
-    isJsonObject(value) &&
-    (value.characterName === undefined || typeof value.characterName === 'string') &&
-    (value.outfitName === undefined || typeof value.outfitName === 'string') &&
-    (value.emotionName === undefined || typeof value.emotionName === 'string') &&
-    (value.styleName === undefined || typeof value.styleName === 'string') &&
-    (value.artistName === undefined || typeof value.artistName === 'string') &&
-    typeof value.combinationIndex === 'number' &&
-    typeof value.imageIndex === 'number' &&
-    typeof value.totalInCombination === 'number'
-  )
-}
-
-function parseRequiredJson<T>(
-  input: string | null | undefined,
-  context: string,
-  validate: (value: unknown) => value is T,
-  invalidShapeMessage: string
-): T {
-  const parsed = safeJsonParse<T>(input, {
-    context,
-    validate,
-    invalidShapeMessage
-  })
-
-  if (!parsed.ok) {
-    throw new Error(parsed.error)
-  }
-
-  return parsed.value
-}
 
 export interface QueueManagerEvents {
   progress: (data: { jobId: string; taskId: string; value: number; max: number }) => void
@@ -335,7 +278,7 @@ class QueueManager {
           try {
             await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
             completedCount++
-            this.pushDuration(taskDurations, Date.now() - taskStartTime)
+            pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
             this.sendTaskCompletedEvent(jobId, taskId, completedCount, totalTasks, taskDurations)
@@ -349,7 +292,7 @@ class QueueManager {
               try {
                 await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
                 completedCount++
-                this.pushDuration(taskDurations, Date.now() - retryStartTime)
+                pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
                 failedCount++
                 batchTaskRepo.updateStatus(taskId, 'failed', {
@@ -364,13 +307,8 @@ class QueueManager {
             }
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
-            const avgDuration =
-              taskDurations.length > 0
-                ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-                : 0
             const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs =
-              taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+            const etaMs = computeEta(taskDurations, remainingTasks)
 
             this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
               jobId,
@@ -412,7 +350,7 @@ class QueueManager {
           try {
             await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
             completedCount++
-            this.pushDuration(taskDurations, Date.now() - taskStartTime)
+            pushDuration(taskDurations, Date.now() - taskStartTime)
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
             this.sendTaskCompletedEvent(
@@ -432,7 +370,7 @@ class QueueManager {
               try {
                 await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
                 completedCount++
-                this.pushDuration(taskDurations, Date.now() - retryStartTime)
+                pushDuration(taskDurations, Date.now() - retryStartTime)
               } catch (retryError) {
                 failedCount++
                 batchTaskRepo.updateStatus(task.id as string, 'failed', {
@@ -447,13 +385,8 @@ class QueueManager {
             }
             batchJobRepo.updateProgress(jobId, completedCount, failedCount)
 
-            const avgDuration =
-              taskDurations.length > 0
-                ? taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-                : 0
             const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs =
-              taskDurations.length > 0 ? Math.round(avgDuration * remainingTasks) : undefined
+            const etaMs = computeEta(taskDurations, remainingTasks)
 
             this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
               jobId,
@@ -477,13 +410,6 @@ class QueueManager {
     }
   }
 
-  private pushDuration(durations: number[], value: number): void {
-    durations.push(value)
-    if (durations.length > MAX_DURATION_SAMPLES) {
-      durations.shift()
-    }
-  }
-
   private sendTaskCompletedEvent(
     jobId: string,
     taskId: string,
@@ -493,7 +419,7 @@ class QueueManager {
   ): void {
     const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
     const remainingTasks = totalTasks - completedCount
-    const etaMs = Math.round(avgDuration * remainingTasks)
+    const etaMs = computeEta(taskDurations, remainingTasks) ?? 0
 
     this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
       jobId,
@@ -561,7 +487,7 @@ class QueueManager {
               img.type
             )
 
-            const fileName = this.resolveFileName(
+            const fileName = resolveFileName(
               jobConfig.fileNamePattern || '{character}_{outfit}_{emotion}_{index}',
               metadata,
               promptData.seed,
@@ -882,34 +808,6 @@ class QueueManager {
     }
 
     return fullPath
-  }
-
-  private resolveFileName(
-    pattern: string,
-    metadata: TaskMetadata,
-    seed: number,
-    originalName: string
-  ): string {
-    const ext = originalName.includes('.') ? '.' + originalName.split('.').pop() : '.png'
-    const vars: Record<string, string> = {
-      character: metadata.characterName || 'char',
-      outfit: metadata.outfitName || 'outfit',
-      emotion: metadata.emotionName || 'emotion',
-      style: metadata.styleName || 'style',
-      index: String((metadata.imageIndex || 0) + 1).padStart(4, '0'),
-      seed: String(seed || ''),
-      date: new Date().toISOString().split('T')[0]
-    }
-
-    let fileName = pattern
-    for (const [key, value] of Object.entries(vars)) {
-      fileName = fileName.replace(
-        new RegExp(`\\{${key}\\}`, 'g'),
-        value.replace(/[<>:"/\\|?*]/g, '_')
-      )
-    }
-
-    return fileName + ext
   }
 
   /** If filePath already exists, append _001, _002, ... until unique */

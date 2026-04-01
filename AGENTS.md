@@ -117,7 +117,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 29개 파일, 397개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 30개 파일, 410개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -265,6 +265,7 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.15.8** — queue-manager의 순수 helper/type guard를 `queue-utils.ts`로 추출하고, `queue-utils`/`config-generator` 단위 테스트를 bounded scope로 확장. 테스트 410개
 **0.15.7** — main 프로세스 crash handler 추가, touched catch 블록의 의도/진단 로그 정리, release workflow SHA256 checksum 첨부, Vitest coverage include 확장. 테스트 397개
 **0.15.6** — Gallery 정렬/평점 필터와 Settings 테마 옵션을 locale-reactive helper + computed로 정렬해 실행 중 언어 변경 시 즉시 반영. README 테스트 통계도 28개 파일 / 394개 케이스로 동기화.
 **0.15.5** — 숫자 설정 fallback helper, workflow/job destructive action 확인 UX, generation-only workflow 안내, startup/manual connection 실패 토스트, reorder 트랜잭션, terminal instance limit. 테스트 392개

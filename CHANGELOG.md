@@ -2,6 +2,21 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.15.8] - 2026-04-01
+
+bounded testability patch. `queue-manager.ts`에서 순수 helper와 type guard를 `queue-utils.ts`로 분리해 직접 단위 테스트할 수 있게 만들고, MCP config-generator의 JSON/merge/remove 경계를 실제 temp directory 기반 테스트로 확장했습니다.
+
+### Added
+
+- **queue-utils 단위 테스트**: `tests/main/services/batch/queue-utils.test.ts` 추가로 config/type guard/JSON parse/ETA/filename helper를 직접 검증
+- **config-generator 테스트 확장**: `tests/main/services/mcp/config-generator.test.ts`가 whitespace 입력, `.mcp.json` 생성/merge/remove, corrupted JSON 경계를 temp directory 기반으로 검증
+
+### Changed
+
+- **queue-utils 추출**: `src/main/services/batch/queue-utils.ts` 추가로 `queue-manager.ts` 내부 순수 helper(`parseRequiredJson`, type guard, duration/ETA, filename resolver)를 분리
+- **queue-manager 결합도 감소**: runtime 로직은 유지하면서 helper 호출을 새 유틸로 옮겨 batch 흐름 테스트 범위를 더 세밀하게 분리
+- **테스트 규모 확대**: 30개 파일, 410개 테스트 케이스
+
 ## [0.15.7] - 2026-04-01
 
 resilience and release-integrity patch. main 프로세스 크래시 핸들러를 조기에 설치하고, 이번에 손댄 예외 무시 지점을 모두 의도 주석 또는 debug 로그로 정리했습니다. 릴리즈 초안에는 Windows 배포물과 함께 SHA256 체크섬도 첨부됩니다.

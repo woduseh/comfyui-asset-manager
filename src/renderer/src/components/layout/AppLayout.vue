@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, type Component } from 'vue'
+import { computed, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -23,7 +23,8 @@ import {
   ImagesOutline,
   SettingsOutline,
   TerminalOutline,
-  DiamondOutline
+  DiamondOutline,
+  ServerOutline
 } from '@vicons/ionicons5'
 import type { Component as VueComponent } from 'vue'
 import { useConnectionStore } from '@renderer/stores/connection.store'
@@ -33,6 +34,7 @@ import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
 import { NAV_ITEMS } from '@renderer/navigation'
 import type { RouteName } from '@renderer/navigation'
 import { parseIntegerOrFallback } from '@renderer/utils/number'
+import { getServiceStatusType } from '@renderer/utils/status-presentation'
 
 const router = useRouter()
 const route = useRoute()
@@ -90,6 +92,20 @@ const settingsMenuOptions = computed<MenuOption[]>(() => SETTINGS_ROUTES.map(bui
 
 const activeKey = computed(() => {
   return (route.name as string) || 'workflows'
+})
+
+const connectionLabel = computed(() => {
+  if (connectionStore.connectionState === 'connecting') return t('connection.connecting')
+  if (connectionStore.connectionState === 'reconnecting') return t('connection.reconnecting')
+  return connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected')
+})
+
+onMounted(async () => {
+  try {
+    await terminalStore.fetchMcpStatus()
+  } catch {
+    message.warning(t('systemStatus.mcpLoadFailed'))
+  }
 })
 
 watch(
@@ -154,16 +170,7 @@ async function handleToggleConnection(): Promise<void> {
     </NLayoutSider>
 
     <NLayout>
-      <NLayoutHeader
-        bordered
-        style="
-          height: 48px;
-          padding: 0 20px;
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-        "
-      >
+      <NLayoutHeader bordered class="app-header">
         <NSpace align="center" :size="12">
           <NButton
             size="tiny"
@@ -176,13 +183,31 @@ async function handleToggleConnection(): Promise<void> {
               <NIcon :component="TerminalOutline" />
             </template>
           </NButton>
-          <NTag :type="connectionStore.isConnected ? 'success' : 'error'" size="small" round>
+          <NTag
+            :type="getServiceStatusType(connectionStore.isConnected, connectionStore.isConnecting)"
+            size="small"
+            round
+            class="service-status"
+          >
             <template #icon>
               <div class="status-dot" :class="{ connected: connectionStore.isConnected }" />
             </template>
-            {{
-              connectionStore.isConnected ? t('connection.connected') : t('connection.disconnected')
-            }}
+            <strong>ComfyUI</strong>
+            <span>{{ connectionLabel }}</span>
+          </NTag>
+          <NTag
+            :type="getServiceStatusType(terminalStore.mcpStatus.isRunning)"
+            size="small"
+            round
+            class="service-status"
+          >
+            <template #icon><NIcon :component="ServerOutline" /></template>
+            <strong>MCP</strong>
+            <span>{{
+              terminalStore.mcpStatus.isRunning
+                ? t('settings.mcp.running')
+                : t('settings.mcp.stopped')
+            }}</span>
           </NTag>
           <NButton
             size="tiny"
@@ -256,6 +281,30 @@ async function handleToggleConnection(): Promise<void> {
 
 .status-dot.connected {
   background: #22c55e;
+}
+
+.app-header {
+  height: 48px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.service-status :deep(.n-tag__content) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.service-status strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.service-status span {
+  color: var(--app-text-muted);
+  font-size: 11px;
 }
 
 /* Sidebar smooth styling */

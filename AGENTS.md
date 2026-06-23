@@ -69,6 +69,9 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 - Pinia 스토어는 Composition API 패턴 (`defineStore(name, setupFn)`)
 - 스토어에서 main process와 통신 시 `window.electron.ipcRenderer.invoke()` 사용
 - 파괴적 renderer 액션(삭제, 취소 등)은 bare 버튼을 직접 두기보다 `src/renderer/src/components/common/ConfirmActionButton.ts` 같은 재사용 확인 컴포넌트 우선
+- 일반 페이지는 `PageShell` + `PageHeader`를 사용해 최대 폭(기본 1440px, 설정형 960px)과 헤더 간격을 통일
+- 카드/행의 보조 액션이 2개 이상이면 `OverflowActionMenu`로 이동하고, 파괴적 항목은 `confirmText`를 지정해 재확인
+- 상태색(success/warning/error)은 연결·실행 결과에만 사용하고 모듈 유형 같은 카테고리는 기본 중립 태그 사용
 
 ### IPC 입력 검증
 
@@ -117,7 +120,7 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 30개 파일, 410개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 34개 파일, 422개 테스트 케이스.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
@@ -155,11 +158,12 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
   - `tools.ts`: 30개 도구 + 1개 프롬프트 정의 (모듈 CRUD/복제/통계, 아이템 CRUD + 일괄 생성/업데이트/파일 가져오기/내보내기/비교/동기화, 워크플로우, 배치, 태그 검증/검색/인기/치환)
   - `file-parser.ts`: 파일 파서 (JSON/CSV/Markdown → 모듈 아이템 변환)
   - `../tags/utils.ts`: 태그 유틸리티 (replaceTagInPrompt, extractTagsFromPrompt)
-  - `config-generator.ts`: 멀티 CLI 설정 자동 생성 (`~/.copilot/mcp-config.json`, `.mcp.json`, Gemini, Codex)
+  - `config-generator.ts`: 사용자가 Settings에서 명시적으로 요청할 때만 `.mcp.json`, Gemini, Copilot CLI 설정 생성/제거
 - 기존 Repository 클래스를 직접 호출하므로 IPC를 거치지 않음
 - `@modelcontextprotocol/sdk` 패키지 사용
 - 보안: localhost만 바인딩 (기본 포트: 39464)
 - **세션 관리**: 최대 10개 동시 세션, 30분 타임아웃 자동 정리, LRU 퇴출
+- **외부 설정 무부작용**: MCP 서버 start/stop은 CLI 설정 파일을 수정하지 않음. Codex는 공식 `codex mcp add/remove` 명령으로만 등록하며 앱은 `~/.codex/config.toml`을 읽기만 함
 - **프롬프트 변형 지원**: `create_module_item`/`update_module_item`에서 `prompt_variants`, `create_batch_job`에서 `slot_mappings` + `promptVariant` 파라미터 지원
 
 ### Danbooru 태그 서비스 (v0.10.0~)
@@ -220,8 +224,9 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 ### 전역 스타일 가이드 (v0.6.0~)
 
 - border-radius: 12px (통일)
-- 부드러운 트랜지션 및 호버 효과
+- 호버 상승 효과는 클릭 가능한 `.interactive-card`에만 적용
 - 소프트 스크롤바 스타일
+- 제목/설명/메타 텍스트는 공용 `.card-title`/`.card-description`/`.meta-text` 계층 사용
 
 ## 코드 품질 원칙
 
@@ -265,6 +270,8 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**0.16.1** — MCP start/stop의 외부 CLI 설정 쓰기·삭제를 제거하고, Codex 연결을 공식 `codex mcp add` 일회성 등록 방식으로 전환. 테스트 422개
+**0.16.0** — 1440px 페이지 셸, 모듈 목록+상세, 워크플로우 역할별 드로어, 카드 오버플로 액션, ComfyUI/MCP 전역 상태 분리, 갤러리 로딩·오류·빈 상태 개선. 테스트 419개
 **0.15.8** — queue-manager의 순수 helper/type guard를 `queue-utils.ts`로 추출하고, `queue-utils`/`config-generator` 단위 테스트를 bounded scope로 확장. 테스트 410개
 **0.15.7** — main 프로세스 crash handler 추가, touched catch 블록의 의도/진단 로그 정리, release workflow SHA256 checksum 첨부, Vitest coverage include 확장. 테스트 397개
 **0.15.6** — Gallery 정렬/평점 필터와 Settings 테마 옵션을 locale-reactive helper + computed로 정렬해 실행 중 언어 변경 시 즉시 반영. README 테스트 통계도 28개 파일 / 394개 케이스로 동기화.

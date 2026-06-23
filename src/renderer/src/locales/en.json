@@ -25,8 +25,12 @@
       "connectFailed": "Connection failed: {error}"
     }
   },
+  "systemStatus": {
+    "mcpLoadFailed": "Could not load the MCP server status"
+  },
   "settings": {
     "title": "Settings",
+    "pageDescription": "Configure server connections, output paths, app behavior, and the MCP server.",
     "server": {
       "title": "ComfyUI Server",
       "host": "Host",
@@ -73,22 +77,34 @@
         "unknownError": "Unknown error"
       },
       "cliSetup": {
-        "title": "CLI Auto-Connection",
-        "description": "Start the server here first, then LLM CLIs launched in the embedded terminal can connect to MCP tools.",
+        "title": "Connect MCP Clients",
+        "description": "Starting or stopping the MCP server never changes external CLI configuration. Register Codex once with its official command; configs for other supported CLIs are generated only when you click the button below.",
         "envTitle": "Environment Variables (Auto-injected)",
         "envDescription": "Automatically set when a new shell opens in the terminal.",
-        "setupClaudeCode": "Setup CLI Configs",
+        "codexTitle": "Connect Codex",
+        "codexDescription": "Register the server once through the MCP CLI provided by Codex. The app never edits ~/.codex/config.toml directly.",
+        "codexRegistered": "Registered",
+        "codexNotRegistered": "Not registered",
+        "copyCodexCommand": "Copy registration command",
+        "copyCodexRemoveCommand": "Copy existing registration removal command",
+        "codexCommandCopied": "Copied the Codex MCP registration command",
+        "codexRemoveCommandCopied": "Copied the Codex MCP removal command",
+        "codexHint": "After running the command, restart Codex and verify the connection with /mcp or codex mcp list.",
+        "managedTitle": "Claude Code · Gemini CLI · Copilot CLI",
+        "setupClaudeCode": "Generate supported CLI configs",
         "updateConfig": "Update Config",
         "configured": "Configured",
-        "remove": "Remove",
+        "remove": "Remove generated configs",
         "configPath": "Config file path"
       }
     }
   },
   "workflow": {
     "title": "Workflow Management",
+    "pageDescription": "Manage ComfyUI API workflows and prompt variable roles.",
     "import": "Import Workflow",
     "empty": "No workflows registered",
+    "emptyDescription": "Import a JSON workflow saved in ComfyUI API format.",
     "category": {
       "generation": "Generation",
       "upscale": "Upscale",
@@ -128,14 +144,23 @@
       "lora": "LoRA"
     },
     "variableList": "Variables ({count})",
+    "groupCount": "{count} variables",
+    "autoSaveHint": "Type and variable role changes save immediately. Use Save below for name and description changes.",
+    "discardChangesTitle": "Close unsaved changes",
+    "discardChangesDescription": "Discard the name and description changes and close?",
     "roleLabel": "Role:",
     "defaultValue": "Default: {value}",
     "defaultValueNone": "(none)"
   },
   "module": {
     "title": "Prompt Modules",
+    "pageDescription": "Manage reusable prompt modules, items, and slot-specific variants.",
     "create": "New Module",
     "empty": "No modules registered",
+    "emptyDescription": "Create your first module or import module data from the clipboard.",
+    "backToModules": "Back to modules",
+    "itemEnabled": "Enabled",
+    "itemDisabled": "Disabled",
     "type": {
       "character": "Character",
       "outfit": "Outfit",
@@ -357,7 +382,13 @@
   },
   "gallery": {
     "title": "Gallery",
+    "pageDescription": "Search, rate, and inspect generated images.",
     "empty": "No generated images",
+    "imageCount": "{count} images",
+    "thumbnailLoadFailed": "Could not load image",
+    "noFilterResults": "No images match these filters",
+    "noFilterResultsDescription": "Try adjusting the search, rating, or favorite filters.",
+    "goToJobs": "Create a job",
     "filter": "Filter",
     "sort": "Sort",
     "rating": "Rating",
@@ -416,6 +447,9 @@
     "create": "Create",
     "confirm": "Confirm",
     "close": "Close",
+    "discard": "Discard Changes",
+    "retry": "Retry",
+    "moreActions": "More actions",
     "search": "Search",
     "name": "Name",
     "description": "Description",
@@ -431,9 +465,11 @@
   },
   "terminal": {
     "title": "Terminal",
+    "pageDescription": "Manage the embedded shell and MCP server in one place.",
     "togglePanel": "Toggle Terminal Panel",
     "newTab": "New Terminal",
     "mcp": {
+      "serverLabel": "MCP Server",
       "running": "Running",
       "stopped": "Stopped",
       "start": "Start MCP",
@@ -443,8 +479,10 @@
   },
   "jobs": {
     "title": "Job Management",
+    "pageDescription": "Manage batch generation settings and execution status.",
     "newBatch": "+ New Batch Job",
     "emptyHint": "No batch jobs. Create a new batch job to get started.",
+    "emptyDescription": "Combine a workflow and modules to configure your first generation job.",
     "remainingTime": "Remaining: {time}",
     "imageCount": "{count} images",
     "taskCount": "{completed}/{total} images",

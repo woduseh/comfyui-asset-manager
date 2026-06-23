@@ -3,7 +3,6 @@ import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard,
-  NEmpty,
   NGrid,
   NGridItem,
   NImage,
@@ -21,17 +20,24 @@ import {
   useMessage,
   NTooltip,
   NCollapse,
-  NCollapseItem
+  NCollapseItem,
+  NSkeleton
 } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
 import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
 import { buildGalleryRatingOptions, buildGallerySortOptions } from '@renderer/utils/view-labels'
+import PageShell from '@renderer/components/common/PageShell.vue'
+import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
+import GalleryThumbnail from '@renderer/components/gallery/GalleryThumbnail.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const message = useMessage()
+const router = useRouter()
 const galleryStore = useGalleryStore()
 const queueStore = useQueueStore()
 
@@ -98,6 +104,16 @@ const ratingOptions = computed<SelectMixedOption[]>(() =>
 )
 
 const totalPages = computed(() => Math.ceil(galleryStore.total / galleryStore.pageSize))
+const hasActiveFilters = computed(
+  () => !!(searchText.value || filterRating.value || filterFavorite.value)
+)
+const formattedTotal = computed(() =>
+  new Intl.NumberFormat(locale.value === 'ko' ? 'ko-KR' : 'en-US').format(galleryStore.total)
+)
+
+function goToJobs(): void {
+  void router.push({ name: 'jobs' })
+}
 
 // Apply filters
 function applyFilters(): void {
@@ -284,26 +300,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="gallery-view">
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2 style="margin: 0">
-        {{ t('gallery.title') }}
-        <NTag v-if="galleryStore.total > 0" size="small" round style="margin-left: 8px">{{
-          galleryStore.total
-        }}</NTag>
-      </h2>
-    </div>
+  <PageShell class="gallery-view">
+    <PageHeader :title="t('gallery.title')" :description="t('gallery.pageDescription')">
+      <template v-if="galleryStore.total > 0" #meta>
+        <NTag size="small" round>
+          {{ t('gallery.imageCount', { count: formattedTotal }) }}
+        </NTag>
+      </template>
+    </PageHeader>
 
     <!-- Filter bar -->
     <NCard size="small" style="margin-bottom: 16px">
-      <NSpace align="center" :wrap="false" :size="12">
+      <NSpace align="center" :wrap="true" :size="12" class="gallery-filter-bar">
         <NInput
           v-model:value="searchText"
           size="small"
@@ -370,7 +378,25 @@ onUnmounted(() => {
 
     <!-- Image grid -->
     <NCard style="margin-top: 0">
-      <template v-if="galleryStore.images.length > 0">
+      <NGrid
+        v-if="galleryStore.loading && galleryStore.images.length === 0"
+        :cols="5"
+        :x-gap="12"
+        :y-gap="12"
+        responsive="screen"
+        :cols-s="2"
+        :cols-m="3"
+        :cols-l="4"
+        :cols-xl="5"
+      >
+        <NGridItem v-for="index in 10" :key="index">
+          <NCard size="small">
+            <NSkeleton height="180px" />
+            <NSkeleton text style="margin-top: 12px" />
+          </NCard>
+        </NGridItem>
+      </NGrid>
+      <template v-else-if="galleryStore.images.length > 0">
         <NGrid
           :cols="5"
           :x-gap="12"
@@ -396,12 +422,11 @@ onUnmounted(() => {
               <template v-if="selectionMode" #header-extra>
                 <NCheckbox :checked="selectedIds.has(image.id)" />
               </template>
-              <NImage
+              <GalleryThumbnail
                 :src="toFileUrl(image.thumbnail_path || image.file_path)"
-                :width="200"
-                object-fit="cover"
-                style="aspect-ratio: 1; border-radius: 8px; width: 100%"
-                preview-disabled
+                :alt="image.character_name || image.file_path"
+                :error-text="t('gallery.thumbnailLoadFailed')"
+                :retry-text="t('common.retry')"
               />
               <NSpace justify="space-between" align="center" style="margin-top: 8px">
                 <NRate
@@ -450,7 +475,20 @@ onUnmounted(() => {
           />
         </NSpace>
       </template>
-      <NEmpty v-else :description="t('gallery.empty')" />
+      <ActionableEmptyState
+        v-else-if="hasActiveFilters"
+        :title="t('gallery.noFilterResults')"
+        :description="t('gallery.noFilterResultsDescription')"
+        :action-label="t('gallery.resetFilters')"
+        @action="clearFilters"
+      />
+      <ActionableEmptyState
+        v-else
+        :title="t('gallery.empty')"
+        :description="t('gallery.emptyHint')"
+        :action-label="t('gallery.goToJobs')"
+        @action="goToJobs"
+      />
     </NCard>
 
     <!-- Detail Modal -->
@@ -666,7 +704,7 @@ onUnmounted(() => {
         </button>
       </div>
     </NModal>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>

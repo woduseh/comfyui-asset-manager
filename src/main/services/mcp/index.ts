@@ -1,7 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { registerMcpTools } from './tools'
-import { writeMcpJsonConfig, removeMcpJsonConfig } from './config-generator'
 import { tagService } from '../tags'
 import http from 'http'
 import { randomUUID } from 'crypto'
@@ -212,12 +211,6 @@ class McpServerManager {
         this._isRunning = true
         this.startCleanupTimer()
         log.info(`[MCP] Server started on ${this.url}`)
-        try {
-          const configPath = writeMcpJsonConfig(this.url)
-          log.info(`[MCP] Config written to ${configPath}`)
-        } catch (err) {
-          log.warn('[MCP] Failed to write config:', err)
-        }
         resolve()
       })
 
@@ -336,11 +329,6 @@ class McpServerManager {
           this._isRunning = false
           this.httpServer = null
           log.info('[MCP] Server stopped')
-          try {
-            removeMcpJsonConfig()
-          } catch (e) {
-            log.warn('[MCP] Failed to remove config file:', e)
-          }
           resolve()
         })
       } else {

@@ -22,6 +22,8 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import { parseIntegerOrFallback } from '@renderer/utils/number'
+import PageShell from '@renderer/components/common/PageShell.vue'
+import PageHeader from '@renderer/components/common/PageHeader.vue'
 import { buildSettingsThemeOptions } from '@renderer/utils/view-labels'
 
 const { t, locale } = useI18n()
@@ -35,13 +37,16 @@ const port = ref(8188)
 const outputDir = ref('')
 const mcpEnabled = ref(false)
 const mcpPort = ref(39464)
-const hasAnyCliConfig = computed(
+const hasAnyManagedCliConfig = computed(
   () =>
     terminalStore.mcpConfigStatus.claudeCode ||
     terminalStore.mcpConfigStatus.copilotCli ||
-    terminalStore.mcpConfigStatus.geminiCli ||
-    terminalStore.mcpConfigStatus.codexCli
+    terminalStore.mcpConfigStatus.geminiCli
 )
+const codexAddCommand = computed(
+  () => `codex mcp add comfyui-asset-manager --url ${terminalStore.mcpStatus.url}`
+)
+const codexRemoveCommand = 'codex mcp remove comfyui-asset-manager'
 
 const languageOptions = [
   { label: '한국어', value: 'ko' },
@@ -195,6 +200,11 @@ async function handleRemoveCli(): Promise<void> {
   await terminalStore.removeMcpFromCli()
 }
 
+async function handleCopyCodexCommand(command: string, messageKey: string): Promise<void> {
+  await navigator.clipboard.writeText(command)
+  message.success(t(messageKey))
+}
+
 onMounted(async () => {
   await settingsStore.loadSettings()
   host.value = settingsStore.settings.comfyui_host
@@ -207,8 +217,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="settings-view">
-    <h2>{{ t('settings.title') }}</h2>
+  <PageShell width="compact" class="settings-view">
+    <PageHeader :title="t('settings.title')" :description="t('settings.pageDescription')" />
 
     <!-- Server Settings -->
     <NCard :title="t('settings.server.title')" style="margin-top: 16px">
@@ -356,7 +366,7 @@ onMounted(async () => {
 
       <NDivider style="margin: 12px 0" />
 
-      <!-- CLI Auto-Connection -->
+      <!-- MCP client connection -->
       <h4 style="margin: 0 0 12px 0">{{ t('settings.mcp.cliSetup.title') }}</h4>
       <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px">
         {{ t('settings.mcp.cliSetup.description') }}
@@ -372,16 +382,64 @@ onMounted(async () => {
           </span>
         </NAlert>
 
-        <!-- CLI Config Status -->
+        <!-- Codex uses its official one-time CLI registration flow. -->
+        <div class="codex-setup">
+          <div class="codex-setup__header">
+            <div>
+              <strong>{{ t('settings.mcp.cliSetup.codexTitle') }}</strong>
+              <p>{{ t('settings.mcp.cliSetup.codexDescription') }}</p>
+            </div>
+            <NTag
+              :type="terminalStore.mcpConfigStatus.codexCli ? 'success' : 'default'"
+              size="small"
+              round
+            >
+              {{
+                terminalStore.mcpConfigStatus.codexCli
+                  ? t('settings.mcp.cliSetup.codexRegistered')
+                  : t('settings.mcp.cliSetup.codexNotRegistered')
+              }}
+            </NTag>
+          </div>
+          <code class="codex-setup__command">{{ codexAddCommand }}</code>
+          <NSpace :size="8" :wrap="true">
+            <NButton
+              size="small"
+              @click="
+                handleCopyCodexCommand(codexAddCommand, 'settings.mcp.cliSetup.codexCommandCopied')
+              "
+            >
+              <template #icon><NIcon :component="CopyOutline" /></template>
+              {{ t('settings.mcp.cliSetup.copyCodexCommand') }}
+            </NButton>
+            <NButton
+              v-if="terminalStore.mcpConfigStatus.codexCli"
+              size="small"
+              quaternary
+              @click="
+                handleCopyCodexCommand(
+                  codexRemoveCommand,
+                  'settings.mcp.cliSetup.codexRemoveCommandCopied'
+                )
+              "
+            >
+              {{ t('settings.mcp.cliSetup.copyCodexRemoveCommand') }}
+            </NButton>
+          </NSpace>
+          <span class="codex-setup__hint">{{ t('settings.mcp.cliSetup.codexHint') }}</span>
+        </div>
+
+        <!-- Explicitly managed non-Codex CLI configs -->
+        <strong class="managed-cli-title">{{ t('settings.mcp.cliSetup.managedTitle') }}</strong>
         <NSpace align="center" :size="8">
           <NButton
             size="small"
-            :type="hasAnyCliConfig ? 'default' : 'primary'"
+            :type="hasAnyManagedCliConfig ? 'default' : 'primary'"
             :disabled="!terminalStore.mcpStatus.isRunning"
             @click="handleSetupCli"
           >
             {{
-              hasAnyCliConfig
+              hasAnyManagedCliConfig
                 ? t('settings.mcp.cliSetup.updateConfig')
                 : t('settings.mcp.cliSetup.setupClaudeCode')
             }}
@@ -398,12 +456,8 @@ onMounted(async () => {
             <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
             Gemini CLI ✓
           </NTag>
-          <NTag v-if="terminalStore.mcpConfigStatus.codexCli" type="success" size="small" round>
-            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            Codex CLI ✓
-          </NTag>
           <NButton
-            v-if="hasAnyCliConfig"
+            v-if="hasAnyManagedCliConfig"
             size="tiny"
             quaternary
             type="error"
@@ -420,5 +474,50 @@ onMounted(async () => {
         </span>
       </NSpace>
     </NCard>
-  </div>
+  </PageShell>
 </template>
+
+<style scoped>
+.codex-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--n-border-color);
+  border-radius: var(--radius-md);
+  background: var(--app-surface-muted);
+}
+
+.codex-setup__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.codex-setup__header p {
+  margin: 4px 0 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-setup__command {
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(128, 128, 128, 0.12);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.codex-setup__hint {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.managed-cli-title {
+  margin-top: 4px;
+  font-size: 13px;
+}
+</style>

@@ -8,18 +8,28 @@ import {
   NSpace,
   NTag,
   NDataTable,
-  NModal,
+  NDrawer,
+  NDrawerContent,
+  NCollapse,
+  NCollapseItem,
   NInput,
   NSelect,
   NForm,
   NFormItem,
-  NScrollbar,
+  useDialog,
   useMessage
 } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
+import { TrashOutline } from '@vicons/ionicons5'
 import { useWorkflowStore, type WorkflowItem } from '@renderer/stores/workflow.store'
-import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
+import PageShell from '@renderer/components/common/PageShell.vue'
+import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
+import OverflowActionMenu, {
+  type OverflowAction
+} from '@renderer/components/common/OverflowActionMenu.vue'
 import { safeJsonParse } from '@renderer/utils/safe-json'
+import { groupWorkflowVariables } from '@renderer/utils/workflow-variable-groups'
 import {
   buildWorkflowCategoryOptions,
   buildWorkflowRoleLabels,
@@ -29,44 +39,53 @@ import {
 
 const { t } = useI18n()
 const message = useMessage()
+const dialog = useDialog()
 const workflowStore = useWorkflowStore()
 
-const showDetailModal = ref(false)
+const showDetailDrawer = ref(false)
 const detailWorkflow = ref<Record<string, unknown> | null>(null)
 const detailVariables = ref<Record<string, unknown>[]>([])
 const editName = ref('')
 const editDescription = ref('')
+const originalName = ref('')
+const originalDescription = ref('')
+
+const hasMetadataChanges = computed(
+  () => editName.value !== originalName.value || editDescription.value !== originalDescription.value
+)
+
+const variableGroups = computed(() => groupWorkflowVariables(detailVariables.value))
+
+function getWorkflowActions(): OverflowAction[] {
+  return [
+    {
+      key: 'delete',
+      label: t('common.delete'),
+      icon: TrashOutline,
+      danger: true,
+      confirmText: t('workflow.confirmDelete')
+    }
+  ]
+}
 
 const columns = computed<DataTableColumns<WorkflowItem>>(() => [
-  { title: t('common.name'), key: 'name', ellipsis: { tooltip: true } },
+  { title: t('common.name'), key: 'name', width: 420, ellipsis: { tooltip: true } },
   {
     title: t('common.type'),
     key: 'category',
-    width: 100,
+    width: 140,
     render(row) {
-      const colors: Record<string, string> = {
-        generation: 'success',
-        upscale: 'info',
-        detailer: 'warning',
-        custom: 'default'
-      }
       return h(
         NTag,
-        {
-          type: (colors[row.category] || 'default') as 'success' | 'info' | 'warning' | 'default',
-          size: 'small',
-          round: true
-        },
-        {
-          default: () => t(`workflow.category.${row.category}`)
-        }
+        { size: 'small', round: true },
+        { default: () => t(`workflow.category.${row.category}`) }
       )
     }
   },
   {
     title: t('workflow.variables'),
     key: 'variables',
-    width: 80,
+    width: 100,
     render(row) {
       const vars = safeJsonParse<unknown[]>(row.variables || '[]', {
         context: 'Workflow variables',
@@ -80,11 +99,11 @@ const columns = computed<DataTableColumns<WorkflowItem>>(() => [
   {
     title: t('common.actions'),
     key: 'actions',
-    width: 160,
+    width: 180,
     render(row) {
       return h(
         NSpace,
-        { size: 'small' },
+        { size: 'small', align: 'center' },
         {
           default: () => [
             h(
@@ -95,17 +114,16 @@ const columns = computed<DataTableColumns<WorkflowItem>>(() => [
                 type: 'info',
                 onClick: () => handleViewDetail(row.id)
               },
-              {
-                default: () => t('common.detail')
-              }
+              { default: () => t('common.detail') }
             ),
-            h(ConfirmActionButton, {
-              size: 'small',
-              quaternary: true,
-              type: 'error',
-              label: t('common.delete'),
-              confirmText: t('workflow.confirmDelete'),
-              onConfirm: () => handleDelete(row.id)
+            h(OverflowActionMenu, {
+              actions: getWorkflowActions(),
+              menuLabel: t('common.moreActions'),
+              confirmPositiveText: t('common.delete'),
+              confirmNegativeText: t('common.cancel'),
+              onSelect: (action: string) => {
+                if (action === 'delete') void handleDelete(row.id)
+              }
             })
           ]
         }
@@ -136,10 +154,12 @@ async function handleViewDetail(id: string): Promise<void> {
   if (detailWorkflow.value) {
     editName.value = (detailWorkflow.value.name as string) || ''
     editDescription.value = (detailWorkflow.value.description as string) || ''
+    originalName.value = editName.value
+    originalDescription.value = editDescription.value
     detailVariables.value = await window.electron.ipcRenderer.invoke('workflow:variables', {
       workflowId: id
     })
-    showDetailModal.value = true
+    showDetailDrawer.value = true
   }
 }
 
@@ -165,8 +185,10 @@ async function handleSaveWorkflow(): Promise<void> {
     })
     detailWorkflow.value.name = editName.value
     detailWorkflow.value.description = editDescription.value
+    originalName.value = editName.value
+    originalDescription.value = editDescription.value
     message.success(t('workflow.msg.updated'))
-    showDetailModal.value = false
+    showDetailDrawer.value = false
   } catch (e) {
     message.error(
       t('workflow.msg.updateFailed', { error: e instanceof Error ? e.message : String(e) })
@@ -174,8 +196,30 @@ async function handleSaveWorkflow(): Promise<void> {
   }
 }
 
-const categoryOptions = computed(() => buildWorkflowCategoryOptions(t))
+function requestCloseDetail(): void {
+  if (!hasMetadataChanges.value) {
+    showDetailDrawer.value = false
+    return
+  }
 
+  dialog.warning({
+    title: t('workflow.discardChangesTitle'),
+    content: t('workflow.discardChangesDescription'),
+    positiveText: t('common.discard'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => {
+      editName.value = originalName.value
+      editDescription.value = originalDescription.value
+      showDetailDrawer.value = false
+    }
+  })
+}
+
+function handleDrawerShowUpdate(show: boolean): void {
+  if (!show) requestCloseDetail()
+}
+
+const categoryOptions = computed(() => buildWorkflowCategoryOptions(t))
 const roleOptions = computed(() => buildWorkflowRoleOptions(t))
 
 const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
@@ -187,7 +231,6 @@ const roleColors: Record<string, 'success' | 'error' | 'warning' | 'info' | 'def
 }
 
 const roleLabels = computed(() => buildWorkflowRoleLabels(t))
-
 const varTypeLabels = computed(() => buildWorkflowVarTypeLabels(t))
 
 type TagType = 'info' | 'warning' | 'success' | 'default'
@@ -196,14 +239,15 @@ const varTypeTagColors: Record<string, TagType> = {
   seed: 'warning',
   model: 'success'
 }
+
 function getVarTypeTagType(varType: string): TagType {
   return varTypeTagColors[varType] || 'default'
 }
 
 async function handleRoleChange(variableId: string, role: string): Promise<void> {
   await window.electron.ipcRenderer.invoke('workflow:update-variable-role', { variableId, role })
-  const v = detailVariables.value.find((v) => v.id === variableId)
-  if (v) v.role = role
+  const variable = detailVariables.value.find((item) => item.id === variableId)
+  if (variable) variable.role = role
 }
 
 onMounted(() => {
@@ -212,22 +256,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2 style="margin: 0">{{ t('workflow.title') }}</h2>
-      <NButton type="primary" @click="handleImport">
-        {{ t('workflow.import') }}
-      </NButton>
-    </div>
+  <PageShell>
+    <PageHeader :title="t('workflow.title')" :description="t('workflow.pageDescription')">
+      <template #actions>
+        <NButton type="primary" @click="handleImport">
+          {{ t('workflow.import') }}
+        </NButton>
+      </template>
+    </PageHeader>
 
-    <NCard>
+    <NCard class="workflow-table-card">
       <NDataTable
         v-if="workflowStore.workflows.length > 0"
         :columns="columns"
@@ -235,19 +273,30 @@ onMounted(() => {
         :loading="workflowStore.loading"
         :row-key="(row: WorkflowItem) => row.id"
       />
-      <NEmpty v-else :description="t('workflow.empty')" />
+      <ActionableEmptyState
+        v-else
+        :title="t('workflow.empty')"
+        :description="t('workflow.emptyDescription')"
+        :action-label="t('workflow.import')"
+        @action="handleImport"
+      />
     </NCard>
 
-    <!-- Workflow Detail Modal -->
-    <NModal
-      v-model:show="showDetailModal"
-      preset="card"
-      style="width: 640px"
-      :title="(detailWorkflow?.name as string) || ''"
-      :bordered="false"
+    <NDrawer
+      :show="showDetailDrawer"
+      width="min(880px, 100vw)"
+      :block-scroll="true"
+      :trap-focus="true"
+      @update:show="handleDrawerShowUpdate"
     >
-      <template v-if="detailWorkflow">
-        <NForm label-placement="left" label-width="80">
+      <NDrawerContent
+        v-if="detailWorkflow"
+        :title="(detailWorkflow.name as string) || ''"
+        closable
+        native-scrollbar
+        @close="requestCloseDetail"
+      >
+        <NForm label-placement="left" label-width="100" class="workflow-metadata-form">
           <NFormItem :label="t('common.name')">
             <NInput v-model:value="editName" />
           </NFormItem>
@@ -258,81 +307,187 @@ onMounted(() => {
             <NSelect
               :value="detailWorkflow.category as string"
               :options="categoryOptions"
-              @update:value="(v: string) => handleCategoryChange(detailWorkflow!.id as string, v)"
+              @update:value="
+                (value: string) => handleCategoryChange(detailWorkflow!.id as string, value)
+              "
             />
           </NFormItem>
         </NForm>
 
-        <div style="margin-top: 16px">
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
-            "
-          >
-            <span style="font-weight: 600">{{
-              t('workflow.variableList', { count: detailVariables.length })
-            }}</span>
+        <p class="workflow-autosave-hint">{{ t('workflow.autoSaveHint') }}</p>
+
+        <section class="workflow-variables">
+          <div class="workflow-variables__header">
+            <strong>{{ t('workflow.variableList', { count: detailVariables.length }) }}</strong>
           </div>
-          <NScrollbar v-if="detailVariables.length > 0" style="max-height: 300px">
-            <div
-              v-for="variable in detailVariables"
-              :key="variable.id as string"
-              style="
-                padding: 10px 12px;
-                border-radius: 8px;
-                background: rgba(128, 128, 128, 0.06);
-                margin-bottom: 6px;
-              "
-            >
-              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
-                <NTag size="small" round :type="getVarTypeTagType(variable.var_type as string)">
-                  {{ varTypeLabels[variable.var_type as string] || variable.var_type }}
-                </NTag>
-                <strong style="font-size: 13px">{{ variable.display_name }}</strong>
-                <span style="opacity: 0.45; font-size: 11px; margin-left: auto">
-                  {{ variable.node_id }}:{{ variable.field_name }}
-                </span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px">
-                <span style="font-size: 12px; opacity: 0.6">{{ t('workflow.roleLabel') }}</span>
-                <NSelect
-                  :value="(variable.role as string) || 'custom'"
-                  :options="roleOptions"
-                  size="small"
-                  style="width: 150px"
-                  @update:value="(v: string) => handleRoleChange(variable.id as string, v)"
-                />
-                <NTag size="small" :type="roleColors[(variable.role as string) || 'custom']" round>
-                  {{ roleLabels[(variable.role as string) || 'custom'] }}
-                </NTag>
-              </div>
-              <div
-                v-if="variable.default_val"
-                style="
-                  margin-top: 4px;
-                  font-size: 11px;
-                  opacity: 0.5;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                  white-space: nowrap;
-                "
+
+          <NCollapse
+            v-if="variableGroups.length > 0"
+            :default-expanded-names="['prompt_positive', 'prompt_negative', 'seed']"
+          >
+            <NCollapseItem v-for="group in variableGroups" :key="group.role" :name="group.role">
+              <template #header>
+                <div class="workflow-group__header">
+                  <NTag :type="roleColors[group.role]" size="small" round>
+                    {{ roleLabels[group.role] }}
+                  </NTag>
+                  <span>{{ t('workflow.groupCount', { count: group.variables.length }) }}</span>
+                </div>
+              </template>
+
+              <article
+                v-for="variable in group.variables"
+                :key="variable.id as string"
+                class="workflow-variable"
               >
-                {{ t('workflow.defaultValue', { value: variable.default_val }) }}
-              </div>
-            </div>
-          </NScrollbar>
-          <NEmpty v-else :description="t('workflow.noVariables')" style="padding: 20px 0" />
-        </div>
-      </template>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showDetailModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" @click="handleSaveWorkflow">{{ t('common.save') }}</NButton>
-        </NSpace>
-      </template>
-    </NModal>
-  </div>
+                <div class="workflow-variable__header">
+                  <div class="workflow-variable__identity">
+                    <NTag size="small" round :type="getVarTypeTagType(variable.var_type as string)">
+                      {{ varTypeLabels[variable.var_type as string] || variable.var_type }}
+                    </NTag>
+                    <strong>{{ variable.display_name }}</strong>
+                  </div>
+                  <span class="workflow-variable__node">
+                    {{ variable.node_id }}:{{ variable.field_name }}
+                  </span>
+                </div>
+
+                <div class="workflow-variable__controls">
+                  <span>{{ t('workflow.roleLabel') }}</span>
+                  <NSelect
+                    :value="(variable.role as string) || 'custom'"
+                    :options="roleOptions"
+                    size="small"
+                    @update:value="
+                      (value: string) => handleRoleChange(variable.id as string, value)
+                    "
+                  />
+                </div>
+
+                <div v-if="variable.default_val" class="workflow-variable__default">
+                  {{ t('workflow.defaultValue', { value: variable.default_val }) }}
+                </div>
+              </article>
+            </NCollapseItem>
+          </NCollapse>
+          <NEmpty v-else :description="t('workflow.noVariables')" />
+        </section>
+
+        <template #footer>
+          <NSpace justify="end">
+            <NButton @click="requestCloseDetail">{{ t('common.close') }}</NButton>
+            <NButton type="primary" :disabled="!hasMetadataChanges" @click="handleSaveWorkflow">
+              {{ t('common.save') }}
+            </NButton>
+          </NSpace>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
+  </PageShell>
 </template>
+
+<style scoped>
+.workflow-table-card {
+  max-width: 1040px;
+}
+
+.workflow-metadata-form {
+  max-width: 760px;
+}
+
+.workflow-autosave-hint {
+  margin: 2px 0 20px 100px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.workflow-variables {
+  margin-top: 8px;
+}
+
+.workflow-variables__header {
+  margin-bottom: 10px;
+}
+
+.workflow-group__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-group__header span:last-child {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.workflow-variable {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--app-surface-muted);
+  margin-bottom: 8px;
+}
+
+.workflow-variable__header,
+.workflow-variable__identity,
+.workflow-variable__controls {
+  display: flex;
+  align-items: center;
+}
+
+.workflow-variable__header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-variable__identity {
+  min-width: 0;
+  gap: 8px;
+}
+
+.workflow-variable__identity strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-variable__node,
+.workflow-variable__default {
+  color: var(--app-text-subtle);
+  font-size: 11px;
+}
+
+.workflow-variable__node {
+  flex-shrink: 0;
+}
+
+.workflow-variable__controls {
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.workflow-variable__controls .n-select {
+  width: 180px;
+}
+
+.workflow-variable__default {
+  overflow: hidden;
+  margin-top: 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .workflow-autosave-hint {
+    margin-left: 0;
+  }
+
+  .workflow-variable__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+</style>

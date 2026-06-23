@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import {
   NCard,
   NButton,
-  NEmpty,
   NSpace,
   NTag,
   NModal,
@@ -27,8 +26,15 @@ import {
   NStatistic,
   useMessage
 } from 'naive-ui'
+import { CopyOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5'
 import { VueDraggable } from 'vue-draggable-plus'
 import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
+import PageShell from '@renderer/components/common/PageShell.vue'
+import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
+import OverflowActionMenu, {
+  type OverflowAction
+} from '@renderer/components/common/OverflowActionMenu.vue'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
@@ -48,6 +54,7 @@ import {
   buildWorkflowVarTypeLabels,
   getGenerationWorkflowHint
 } from '@renderer/utils/view-labels'
+import { getJobStatusType } from '@renderer/utils/status-presentation'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -169,16 +176,6 @@ const filePattern = ref('{character}_{outfit}_{emotion}_{index}')
 const varTypeLabels = computed(() => buildWorkflowVarTypeLabels(t))
 
 const statusLabels = computed(() => buildBatchStatusLabels(t))
-
-const statusColors: Record<string, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
-  draft: 'default',
-  queued: 'info',
-  running: 'warning',
-  paused: 'default',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'default'
-}
 
 // ─── Computed ───
 const workflowOptions = computed(() => {
@@ -539,6 +536,26 @@ function getJobProgress(job: Record<string, unknown>): number {
   return total > 0 ? Math.round((completed / total) * 100) : 0
 }
 
+function getJobActions(): OverflowAction[] {
+  return [
+    { key: 'edit', label: t('batch.actions.edit'), icon: CreateOutline },
+    { key: 'clone', label: t('batch.actions.clone'), icon: CopyOutline },
+    {
+      key: 'delete',
+      label: t('batch.actions.delete'),
+      icon: TrashOutline,
+      danger: true,
+      confirmText: t('batch.confirmDelete')
+    }
+  ]
+}
+
+function handleJobAction(action: string, job: Record<string, unknown>): void {
+  if (action === 'edit') handleEditJob(job)
+  if (action === 'clone') handleCloneJob(job)
+  if (action === 'delete') void handleDeleteJob(job.id as string)
+}
+
 onMounted(() => {
   loadBatchJobs()
   loadQueueStatus()
@@ -570,20 +587,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
-    <div
-      style="
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 16px;
-      "
-    >
-      <h2 style="margin: 0">{{ t('jobs.title') }}</h2>
-      <NButton type="primary" @click="openWizard">
-        {{ t('jobs.newBatch') }}
-      </NButton>
-    </div>
+  <PageShell>
+    <PageHeader :title="t('jobs.title')" :description="t('jobs.pageDescription')">
+      <template #actions>
+        <NButton type="primary" @click="openWizard">
+          {{ t('jobs.newBatch') }}
+        </NButton>
+      </template>
+    </PageHeader>
 
     <!-- Running job status bar -->
     <NCard v-if="runningJob" size="small" style="margin-bottom: 16px; border-radius: 12px">
@@ -634,39 +645,22 @@ onUnmounted(() => {
       v-model="batchJobs"
       :animation="200"
       handle=".job-drag-handle"
-      style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px"
+      class="jobs-grid"
       @end="handleReorderJobs"
     >
-      <NCard
-        v-for="job in batchJobs"
-        :key="job.id as string"
-        size="small"
-        :style="{
-          borderRadius: '12px',
-          borderLeft:
-            job.status === 'running'
-              ? '3px solid #f0a020'
-              : job.status === 'completed'
-                ? '3px solid #63e2b7'
-                : job.status === 'failed'
-                  ? '3px solid #e88080'
-                  : undefined
-        }"
-      >
-        <div style="display: flex; justify-content: space-between; align-items: flex-start">
-          <div style="display: flex; align-items: flex-start">
-            <span
-              class="job-drag-handle"
-              style="cursor: grab; padding: 2px 8px 0 0; opacity: 0.3; font-size: 14px"
-              >⠿</span
-            >
-            <div>
-              <div style="font-weight: 600">{{ job.name }}</div>
+      <NCard v-for="job in batchJobs" :key="job.id as string" size="small" class="job-card">
+        <div class="job-card__header">
+          <div class="job-card__identity">
+            <span class="job-drag-handle">⠿</span>
+            <div class="job-card__copy">
+              <div class="card-title job-card__title" :title="job.name as string">
+                {{ job.name }}
+              </div>
               <NSpace :size="6" style="margin-top: 4px">
-                <NTag :type="statusColors[job.status as string] || 'default'" size="small" round>
+                <NTag :type="getJobStatusType(job.status as string)" size="small" round>
                   {{ statusLabels[job.status as string] || job.status }}
                 </NTag>
-                <span style="font-size: 12px; opacity: 0.5">
+                <span class="meta-text">
                   {{
                     t('jobs.taskCount', {
                       completed: job.completed_tasks ?? 0,
@@ -680,6 +674,13 @@ onUnmounted(() => {
               </NSpace>
             </div>
           </div>
+          <OverflowActionMenu
+            :actions="getJobActions()"
+            :menu-label="t('common.moreActions')"
+            :confirm-positive-text="t('common.delete')"
+            :confirm-negative-text="t('common.cancel')"
+            @select="(action) => handleJobAction(action, job)"
+          />
         </div>
 
         <NProgress
@@ -693,7 +694,7 @@ onUnmounted(() => {
           "
         />
 
-        <NSpace size="small" style="margin-top: 10px">
+        <NSpace size="small" class="job-card__primary-action">
           <NButton
             v-if="job.status === 'draft' || job.status === 'queued'"
             size="tiny"
@@ -702,9 +703,6 @@ onUnmounted(() => {
             @click="handleStartJob(job.id as string)"
             >{{ t('batch.actions.start') }}</NButton
           >
-          <NButton size="tiny" quaternary @click="handleEditJob(job)">{{
-            t('batch.actions.edit')
-          }}</NButton>
           <NButton
             v-if="
               job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
@@ -716,22 +714,16 @@ onUnmounted(() => {
             @click="handleRerunJob(job)"
             >{{ t('batch.actions.rerun') }}</NButton
           >
-          <NButton size="tiny" quaternary type="info" @click="handleCloneJob(job)">{{
-            t('batch.actions.clone')
-          }}</NButton>
-          <ConfirmActionButton
-            size="tiny"
-            quaternary
-            type="error"
-            :label="t('batch.actions.delete')"
-            :confirm-text="t('batch.confirmDelete')"
-            @confirm="handleDeleteJob(job.id as string)"
-          />
         </NSpace>
       </NCard>
     </VueDraggable>
     <NCard v-else>
-      <NEmpty :description="t('jobs.emptyHint')" />
+      <ActionableEmptyState
+        :title="t('jobs.emptyHint')"
+        :description="t('jobs.emptyDescription')"
+        :action-label="t('jobs.newBatch')"
+        @action="openWizard"
+      />
     </NCard>
 
     <!-- ═══ Wizard Modal ═══ -->
@@ -763,20 +755,22 @@ onUnmounted(() => {
               </NGridItem>
               <NGridItem>
                 <NFormItem :label="t('batch.wizard.workflowLabel')" required>
-                  <NSelect
-                    v-model:value="selectedWorkflowId"
-                    :options="workflowOptions"
-                    :placeholder="t('batch.wizard.workflowPlaceholder')"
-                  />
-                  <NAlert
-                    v-if="generationWorkflowHint"
-                    type="info"
-                    :show-icon="false"
-                    :bordered="false"
-                    style="margin-top: 8px"
-                  >
-                    {{ generationWorkflowHint }}
-                  </NAlert>
+                  <div style="width: 100%">
+                    <NSelect
+                      v-model:value="selectedWorkflowId"
+                      :options="workflowOptions"
+                      :placeholder="t('batch.wizard.workflowPlaceholder')"
+                    />
+                    <NAlert
+                      v-if="generationWorkflowHint"
+                      type="info"
+                      :show-icon="false"
+                      :bordered="false"
+                      style="margin-top: 8px"
+                    >
+                      {{ generationWorkflowHint }}
+                    </NAlert>
+                  </div>
                 </NFormItem>
               </NGridItem>
             </NGrid>
@@ -1308,5 +1302,65 @@ onUnmounted(() => {
         </NSpace>
       </template>
     </NModal>
-  </div>
+  </PageShell>
 </template>
+
+<style scoped>
+.jobs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.job-card {
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+
+.job-card__header,
+.job-card__identity {
+  display: flex;
+  align-items: flex-start;
+}
+
+.job-card__header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.job-card__identity,
+.job-card__copy {
+  min-width: 0;
+}
+
+.job-card__identity {
+  flex: 1;
+}
+
+.job-card__copy {
+  flex: 1;
+}
+
+.job-card__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-drag-handle {
+  cursor: grab;
+  padding: 2px 9px 0 0;
+  color: var(--app-text-subtle);
+  font-size: 14px;
+}
+
+.job-card__primary-action {
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .jobs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

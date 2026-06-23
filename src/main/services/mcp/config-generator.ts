@@ -109,47 +109,6 @@ function writeGeminiConfig(url: string): string | null {
 }
 
 /**
- * Writes our MCP server entry into OpenAI Codex config.
- * Codex reads from `~/.codex/config.toml` with `[mcp_servers.<name>]` sections.
- */
-function writeCodexConfig(url: string): string | null {
-  const codexDir = join(homedir(), '.codex')
-  const filePath = join(codexDir, 'config.toml')
-
-  try {
-    if (!existsSync(codexDir)) {
-      return null
-    }
-
-    let content = ''
-    if (existsSync(filePath)) {
-      content = readFileSync(filePath, 'utf-8')
-    }
-
-    const sectionBlock = `${TOML_SECTION_HEADER}\nurl = "${url}"\n`
-
-    // Check if our section already exists
-    const sectionRegex = new RegExp(
-      `\\[mcp_servers\\."${MCP_SERVER_NAME}"\\][\\s\\S]*?(?=\\n\\[|$)`,
-      'm'
-    )
-
-    if (sectionRegex.test(content)) {
-      content = content.replace(sectionRegex, sectionBlock.trimEnd())
-    } else {
-      const trimmed = content.trimEnd()
-      content = trimmed ? `${trimmed}\n\n${sectionBlock}` : sectionBlock
-    }
-
-    writeFileSync(filePath, content, 'utf-8')
-    return filePath
-  } catch (error) {
-    logConfigDebug('Failed to write Codex CLI config', error)
-    return null
-  }
-}
-
-/**
  * Writes our MCP server entry into GitHub Copilot CLI config.
  * Copilot CLI reads from `~/.copilot/mcp-config.json` with `type: "http"`.
  */
@@ -200,12 +159,6 @@ export function writeMcpJsonConfig(url: string, targetDir?: string): string {
   const geminiPath = writeGeminiConfig(url)
   if (geminiPath) {
     log.info(`[MCP] Gemini CLI config written to ${geminiPath}`)
-  }
-
-  // Also configure Codex CLI if installed
-  const codexPath = writeCodexConfig(url)
-  if (codexPath) {
-    log.info(`[MCP] Codex CLI config written to ${codexPath}`)
   }
 
   // Also configure Copilot CLI if installed
@@ -259,25 +212,6 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
       }
     } catch (error) {
       logConfigDebug('Failed to remove MCP entry from Gemini settings', error)
-    }
-  }
-
-  // Remove from Codex config.toml
-  const codexPath = join(homedir(), '.codex', 'config.toml')
-  if (existsSync(codexPath)) {
-    try {
-      let content = readFileSync(codexPath, 'utf-8')
-      const sectionRegex = new RegExp(
-        `\\n?\\[mcp_servers\\."${MCP_SERVER_NAME}"\\][\\s\\S]*?(?=\\n\\[|$)`,
-        'm'
-      )
-      if (sectionRegex.test(content)) {
-        content = content.replace(sectionRegex, '').trim()
-        writeFileSync(codexPath, content ? content + '\n' : '', 'utf-8')
-        removed = true
-      }
-    } catch (error) {
-      logConfigDebug('Failed to remove MCP entry from Codex config', error)
     }
   }
 

@@ -5,10 +5,12 @@ vi.mock('../../../../src/main/services/mcp/tools', () => ({
   registerMcpTools: vi.fn()
 }))
 
-vi.mock('../../../../src/main/services/mcp/config-generator', () => ({
+const configMocks = vi.hoisted(() => ({
   writeMcpJsonConfig: vi.fn(() => 'mock-config-path'),
   removeMcpJsonConfig: vi.fn(() => true)
 }))
+
+vi.mock('../../../../src/main/services/mcp/config-generator', () => configMocks)
 
 vi.mock('../../../../src/main/services/tags', () => ({
   tagService: {
@@ -141,5 +143,17 @@ describe('McpServerManager origin policy', () => {
 
     expect(response.statusCode).toBe(200)
     expect(JSON.parse(response.body)).toMatchObject({ status: 'ok' })
+  })
+
+  it('does not mutate client configuration when the server starts or stops', async () => {
+    configMocks.writeMcpJsonConfig.mockClear()
+    configMocks.removeMcpJsonConfig.mockClear()
+    const port = await getAvailablePort()
+
+    await mcpServerManager.start(port)
+    await mcpServerManager.stop()
+
+    expect(configMocks.writeMcpJsonConfig).not.toHaveBeenCalled()
+    expect(configMocks.removeMcpJsonConfig).not.toHaveBeenCalled()
   })
 })

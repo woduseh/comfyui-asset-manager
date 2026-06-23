@@ -17,12 +17,20 @@ import {
   NGrid,
   NGridItem,
   NDivider,
-  NPopconfirm,
+  NIcon,
+  NTooltip,
   useMessage
 } from 'naive-ui'
+import { ArrowBackOutline, CreateOutline, PencilOutline, TrashOutline } from '@vicons/ionicons5'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { buildModulePromptPreviewLabels } from '@renderer/utils/view-labels'
+import PageShell from '@renderer/components/common/PageShell.vue'
+import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
+import OverflowActionMenu, {
+  type OverflowAction
+} from '@renderer/components/common/OverflowActionMenu.vue'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -59,18 +67,6 @@ const moduleTypeOptions = computed(() => [
 ])
 
 const promptPreviewLabels = computed(() => buildModulePromptPreviewLabels(t))
-
-const typeColors: Record<string, 'success' | 'info' | 'warning' | 'error' | 'default'> = {
-  character: 'success',
-  outfit: 'info',
-  emotion: 'warning',
-  style: 'error',
-  artist: 'default',
-  quality: 'success',
-  negative: 'error',
-  lora: 'info',
-  custom: 'default'
-}
 
 const filterType = ref<string | null>(null)
 const filteredModules = computed(() => {
@@ -163,6 +159,40 @@ async function handleDeleteModule(id: string): Promise<void> {
 
 function selectModule(id: string): void {
   selectedModuleId.value = selectedModuleId.value === id ? null : id
+}
+
+function getModuleActions(): OverflowAction[] {
+  return [
+    { key: 'edit', label: t('common.edit'), icon: CreateOutline },
+    {
+      key: 'delete',
+      label: t('common.delete'),
+      icon: TrashOutline,
+      danger: true,
+      confirmText: t('module.confirmDelete')
+    }
+  ]
+}
+
+function handleModuleAction(action: string, mod: PromptModule): void {
+  if (action === 'edit') openEditModule(mod)
+  if (action === 'delete') void handleDeleteModule(mod.id)
+}
+
+function getItemActions(): OverflowAction[] {
+  return [
+    {
+      key: 'delete',
+      label: t('common.delete'),
+      icon: TrashOutline,
+      danger: true,
+      confirmText: t('module.confirmDelete')
+    }
+  ]
+}
+
+function handleItemAction(action: string, item: ModuleItem): void {
+  if (action === 'delete') void handleDeleteItem(item)
 }
 
 // Item CRUD
@@ -305,18 +335,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="module-view">
-    <div style="display: flex; justify-content: space-between; align-items: center">
-      <h2>{{ t('module.title') }}</h2>
-      <NSpace>
+  <PageShell>
+    <PageHeader :title="t('module.title')" :description="t('module.pageDescription')">
+      <template #actions>
         <NButton size="small" @click="handleImportModule">{{
           t('module.importClipboard')
         }}</NButton>
         <NButton type="primary" @click="showCreateModal = true">
           {{ t('module.create') }}
         </NButton>
-      </NSpace>
-    </div>
+      </template>
+    </PageHeader>
 
     <!-- Filter bar -->
     <div style="margin: 12px 0">
@@ -342,73 +371,77 @@ onMounted(() => {
       </NSpace>
     </div>
 
-    <NGrid :cols="selectedModuleId ? 2 : 1" :x-gap="16" style="margin-top: 16px">
-      <!-- Module list (card grid) -->
-      <NGridItem>
-        <div
-          v-if="filteredModules.length > 0"
-          style="
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 10px;
-          "
-        >
+    <div
+      class="module-workspace"
+      :class="{ 'module-workspace--selected': selectedModuleId && selectedModule }"
+    >
+      <section
+        class="module-browser"
+        :class="{ 'module-browser--compact': selectedModuleId && selectedModule }"
+      >
+        <div v-if="filteredModules.length > 0" class="module-grid">
           <NCard
             v-for="mod in filteredModules"
             :key="mod.id"
             size="small"
             hoverable
-            :style="{
-              cursor: 'pointer',
-              borderRadius: '12px',
-              borderColor: selectedModuleId === mod.id ? '#63e2b7' : undefined,
-              borderWidth: selectedModuleId === mod.id ? '2px' : '1px'
-            }"
+            class="interactive-card module-card"
+            :class="{ 'module-card--selected': selectedModuleId === mod.id }"
             @click="selectModule(mod.id)"
           >
-            <div style="display: flex; justify-content: space-between; align-items: flex-start">
-              <div>
-                <div style="font-weight: 600; font-size: 14px">{{ mod.name }}</div>
-                <div
-                  v-if="mod.description"
-                  style="
-                    font-size: 12px;
-                    opacity: 0.6;
-                    margin-top: 2px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                    max-width: 160px;
-                  "
-                >
+            <div class="module-card__header">
+              <div class="module-card__copy">
+                <NTooltip>
+                  <template #trigger>
+                    <div class="card-title module-card__title">{{ mod.name }}</div>
+                  </template>
+                  {{ mod.name }}
+                </NTooltip>
+                <NTooltip v-if="mod.description">
+                  <template #trigger>
+                    <div class="card-description module-card__description">
+                      {{ mod.description }}
+                    </div>
+                  </template>
                   {{ mod.description }}
-                </div>
+                </NTooltip>
               </div>
-              <NTag :type="typeColors[mod.type] || 'default'" size="small" round>
+              <OverflowActionMenu
+                :actions="getModuleActions()"
+                :menu-label="t('common.moreActions')"
+                :confirm-positive-text="t('common.delete')"
+                :confirm-negative-text="t('common.cancel')"
+                @select="(action) => handleModuleAction(action, mod)"
+              />
+            </div>
+            <div class="module-card__footer">
+              <NTag size="small" round>
                 {{ t(`module.type.${mod.type}`) }}
               </NTag>
             </div>
-            <NSpace size="small" style="margin-top: 8px" @click.stop>
-              <NButton size="tiny" quaternary @click.stop="openEditModule(mod)">
-                {{ t('common.edit') }}
-              </NButton>
-              <NPopconfirm @positive-click="handleDeleteModule(mod.id)">
-                <template #trigger>
-                  <NButton size="tiny" quaternary type="error" @click.stop>
-                    {{ t('common.delete') }}
-                  </NButton>
-                </template>
-                {{ t('module.confirmDelete') }}
-              </NPopconfirm>
-            </NSpace>
           </NCard>
         </div>
-        <NEmpty v-else :description="t('module.empty')" />
-      </NGridItem>
+        <ActionableEmptyState
+          v-else
+          :title="t('module.empty')"
+          :description="t('module.emptyDescription')"
+          :action-label="t('module.create')"
+          @action="showCreateModal = true"
+        />
+      </section>
 
       <!-- Item detail panel -->
-      <NGridItem v-if="selectedModuleId && selectedModule">
-        <NCard :title="selectedModule.name">
+      <section v-if="selectedModuleId && selectedModule" class="module-detail">
+        <NButton
+          class="module-detail__back"
+          size="small"
+          quaternary
+          @click="selectedModuleId = null"
+        >
+          <template #icon><NIcon :component="ArrowBackOutline" /></template>
+          {{ t('module.backToModules') }}
+        </NButton>
+        <NCard :title="selectedModule.name" class="module-detail__card">
           <template #header-extra>
             <NSpace>
               <NButton size="small" @click="handleExport">{{ t('module.export') }}</NButton>
@@ -426,56 +459,49 @@ onMounted(() => {
             :animation="200"
             @end="handleReorderItems"
           >
-            <div
-              v-for="item in moduleStore.currentItems"
-              :key="item.id"
-              style="
-                display: flex;
-                align-items: center;
-                padding: 10px;
-                border-radius: 10px;
-                background: rgba(128, 128, 128, 0.06);
-                margin-bottom: 6px;
-              "
-            >
-              <span
-                class="drag-handle"
-                style="cursor: grab; padding: 0 8px 0 0; opacity: 0.4; font-size: 16px"
-                >⠿</span
-              >
-              <div style="flex: 1; min-width: 0">
-                <div style="display: flex; justify-content: space-between; align-items: center">
-                  <span style="font-weight: 600; font-size: 13px">{{ item.name }}</span>
-                  <NSpace align="center" :size="4">
+            <div v-for="item in moduleStore.currentItems" :key="item.id" class="module-item">
+              <span class="drag-handle module-item__handle">⠿</span>
+              <div class="module-item__content">
+                <div class="module-item__header">
+                  <span class="module-item__name">{{ item.name }}</span>
+                  <div class="module-item__actions">
                     <NTag v-if="item.weight !== 1.0" size="tiny" round>w:{{ item.weight }}</NTag>
-                    <NSwitch
-                      :value="!!item.enabled"
-                      size="small"
-                      @update:value="handleToggleItem(item)"
-                    />
-                    <NButton size="tiny" quaternary @click="openEditItem(item)">
-                      {{ t('common.edit') }}
-                    </NButton>
-                    <NPopconfirm @positive-click="handleDeleteItem(item)">
+                    <span class="module-item__enabled-label">
+                      {{ item.enabled ? t('module.itemEnabled') : t('module.itemDisabled') }}
+                    </span>
+                    <NTooltip>
                       <template #trigger>
-                        <NButton size="tiny" quaternary type="error">
-                          {{ t('common.delete') }}
-                        </NButton>
+                        <NSwitch
+                          :value="!!item.enabled"
+                          size="small"
+                          :aria-label="
+                            item.enabled ? t('module.itemEnabled') : t('module.itemDisabled')
+                          "
+                          @update:value="handleToggleItem(item)"
+                        />
                       </template>
-                      {{ t('module.confirmDelete') }}
-                    </NPopconfirm>
-                  </NSpace>
+                      {{ item.enabled ? t('module.itemEnabled') : t('module.itemDisabled') }}
+                    </NTooltip>
+                    <NButton
+                      size="tiny"
+                      quaternary
+                      circle
+                      :title="t('common.edit')"
+                      :aria-label="t('common.edit')"
+                      @click="openEditItem(item)"
+                    >
+                      <template #icon><NIcon :component="PencilOutline" /></template>
+                    </NButton>
+                    <OverflowActionMenu
+                      :actions="getItemActions()"
+                      :menu-label="t('common.moreActions')"
+                      :confirm-positive-text="t('common.delete')"
+                      :confirm-negative-text="t('common.cancel')"
+                      @select="(action) => handleItemAction(action, item)"
+                    />
+                  </div>
                 </div>
-                <div
-                  style="
-                    font-size: 12px;
-                    opacity: 0.5;
-                    margin-top: 2px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                  "
-                >
+                <div class="module-item__prompt">
                   {{ item.prompt.length > 80 ? item.prompt.substring(0, 80) + '...' : item.prompt }}
                 </div>
               </div>
@@ -513,8 +539,8 @@ onMounted(() => {
             </div>
           </template>
         </NCard>
-      </NGridItem>
-    </NGrid>
+      </section>
+    </div>
 
     <!-- Create Module Modal -->
     <NModal
@@ -665,5 +691,156 @@ onMounted(() => {
         </NSpace>
       </template>
     </NModal>
-  </div>
+  </PageShell>
 </template>
+
+<style scoped>
+.module-workspace {
+  margin-top: 16px;
+}
+
+.module-workspace--selected {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.module-browser--compact .module-grid {
+  grid-template-columns: 1fr;
+}
+
+.module-card {
+  min-width: 0;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.module-card--selected {
+  border-color: var(--n-color-target, #63e2b7);
+  box-shadow: inset 3px 0 0 #63e2b7;
+}
+
+.module-card__header,
+.module-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.module-card__copy,
+.module-item__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.module-card__title,
+.module-card__description {
+  max-width: 100%;
+}
+
+.module-card__description {
+  margin-top: 4px;
+  min-height: 34px;
+}
+
+.module-browser--compact .module-card__description {
+  min-height: 0;
+  -webkit-line-clamp: 1;
+}
+
+.module-card__footer {
+  display: flex;
+  margin-top: 10px;
+}
+
+.module-detail {
+  min-width: 0;
+}
+
+.module-detail__back {
+  display: none;
+  margin-bottom: 8px;
+}
+
+.module-detail__card {
+  border-radius: var(--radius-md);
+}
+
+.module-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--app-surface-muted);
+  margin-bottom: 7px;
+}
+
+.module-item__handle {
+  cursor: grab;
+  padding-right: 10px;
+  color: var(--app-text-subtle);
+  font-size: 16px;
+}
+
+.module-item__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.module-item__enabled-label {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.module-item__prompt {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--app-text-subtle);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .module-workspace--selected {
+    display: block;
+  }
+
+  .module-workspace--selected .module-browser {
+    display: none;
+  }
+
+  .module-detail__back {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 720px) {
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .module-item__enabled-label {
+    display: none;
+  }
+}
+</style>

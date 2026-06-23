@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -119,6 +119,20 @@ describe('writeMcpJsonConfig', () => {
       }
     })
   })
+
+  it('does not modify Codex config.toml', async () => {
+    const homeDir = createTempHome()
+    const codexDir = join(homeDir, '.codex')
+    const codexPath = join(codexDir, 'config.toml')
+    const original = '[mcp_servers.existing]\nurl = "https://example.com/mcp"\n'
+    mkdirSync(codexDir)
+    writeFileSync(codexPath, original, 'utf-8')
+
+    const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+    writeMcpJsonConfig('http://127.0.0.1:39464/mcp', homeDir)
+
+    expect(readFileSync(codexPath, 'utf-8')).toBe(original)
+  })
 })
 
 describe('removeMcpJsonConfig', () => {
@@ -166,5 +180,19 @@ describe('removeMcpJsonConfig', () => {
 
     expect(removeMcpJsonConfig(homeDir)).toBe(false)
     expect(readFileSync(filePath, 'utf-8')).toBe('{')
+  })
+
+  it('does not remove manually managed Codex configuration', async () => {
+    const homeDir = createTempHome()
+    const codexDir = join(homeDir, '.codex')
+    const codexPath = join(codexDir, 'config.toml')
+    const original = '[mcp_servers."comfyui-asset-manager"]\nurl = "http://127.0.0.1:39464/mcp"\n'
+    mkdirSync(codexDir)
+    writeFileSync(codexPath, original, 'utf-8')
+
+    const { removeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+    expect(removeMcpJsonConfig(homeDir)).toBe(false)
+    expect(readFileSync(codexPath, 'utf-8')).toBe(original)
   })
 })

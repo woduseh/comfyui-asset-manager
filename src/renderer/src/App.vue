@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, lightTheme } from 'naive-ui'
 import type { GlobalTheme } from 'naive-ui'
@@ -9,12 +9,16 @@ import { useConnectionStore } from './stores/connection.store'
 import { useQueueStore } from './stores/queue.store'
 import type { QueueProgress } from './types/ipc'
 import { parseIntegerOrFallback } from './utils/number'
+import { darkThemeOverrides, lightThemeOverrides } from './theme-overrides'
 
 const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 const { locale } = useI18n()
 const theme = ref<GlobalTheme | null>(darkTheme)
+const themeOverrides = computed(() =>
+  settingsStore.settings.theme === 'light' ? lightThemeOverrides : darkThemeOverrides
+)
 
 // Named handlers for proper cleanup
 const onConnectionChanged = (_event: unknown, connected: boolean): void => {
@@ -78,7 +82,7 @@ function updateTheme(value: string): void {
 </script>
 
 <template>
-  <NConfigProvider :theme="theme">
+  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <NDialogProvider>
         <AppLayout />

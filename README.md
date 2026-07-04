@@ -224,7 +224,8 @@ npm run lint           # ESLint
 
 - Git은 `.gitattributes` 기준으로 추적 텍스트 파일을 LF로 정규화합니다. 대규모 줄바꿈 diff가 보이면 먼저 정책 파일과 체크아웃 설정을 확인하세요.
 - CI는 lint, typecheck, 커버리지 임계값, Electron Vite 프로덕션 빌드를 모두 검증합니다.
-- GitHub Release 초안은 Windows 배포물과 함께 `checksums-sha256.txt`를 첨부해 다운로드 무결성을 확인할 수 있습니다.
+- GitHub Release 초안은 Windows 2022 러너에서 빌드한 배포물과
+  `checksums-sha256.txt`를 첨부해 다운로드 무결성을 확인할 수 있습니다.
 
 ### 프로젝트 구조
 

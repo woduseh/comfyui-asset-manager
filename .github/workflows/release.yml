@@ -37,7 +37,7 @@ jobs:
 
   build-windows:
     needs: lint-and-test
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
 

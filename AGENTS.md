@@ -142,7 +142,8 @@ npm run format           # Prettier
 - **실행**: `npx husky init` 후 `.husky/pre-commit` 파일이 `npx lint-staged` 실행
 - **줄바꿈 정책**: `.gitattributes`로 추적 텍스트 파일 LF 정규화. 대규모 CRLF churn은 기능 변경과 분리
 - **CI 품질 게이트**: lint + typecheck + coverage thresholds + `electron-vite build`를 순서대로 실행
-- **릴리즈 무결성**: GitHub Release workflow는 Windows 배포물과 함께 `checksums-sha256.txt`를 생성·첨부해 검증 가능한 초안을 남김
+- **릴리즈 무결성**: GitHub Release workflow는 `node-pty` 재빌드가 가능한 Windows 2022
+  러너를 사용하고, 배포물과 `checksums-sha256.txt`를 생성·첨부해 검증 가능한 초안을 남김
 
 ## 현재 구조
 

@@ -22,6 +22,8 @@
   `--bearer-token-env-var COMFYUI_ASSET_MANAGER_MCP_TOKEN` 등록 흐름 안내
 - **설정 IPC 축소**: CLI 설정 생성·제거에서 renderer 지정 경로를 제거하고 사용자 홈만
   대상으로 제한
+- **Windows 릴리스 빌드**: `node-pty` 네이티브 재빌드 호환성을 위해 GitHub Actions
+  러너를 Windows 2022(Visual Studio 2022)로 고정
 
 ### Security
 

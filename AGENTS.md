@@ -22,7 +22,7 @@
 
 ### 버전 올리기
 
-1. `package.json`의 `"version"` 필드를 새 버전으로 변경
+1. `package.json`과 `package-lock.json`의 버전을 함께 변경
 2. `CHANGELOG.md`에 `## [새버전] - YYYY-MM-DD` 섹션 추가
 3. 커밋 메시지: `v{버전}: 간단한 설명` (예: `v0.2.0: Add pipeline system`)
 
@@ -38,20 +38,25 @@
 
 - strict mode 사용
 - 2개 tsconfig: `tsconfig.node.json` (main + preload), `tsconfig.web.json` (renderer)
-- 공유 타입은 `src/renderer/src/types/ipc.ts`에 정의
+- main/renderer 공용 타입과 순수 유틸은 `src/shared/`에 정의
 - Vue 파일에서 `<script setup lang="ts">` 또는 `<script lang="ts">`
 
 ### IPC 패턴
 
 ```typescript
-// 1. 채널 상수 추가 — src/main/ipc/channels.ts
-export const IPC_MY_FEATURE = 'my-feature:action'
+// 1. 채널 + args/result 계약 추가 — src/shared/
+export const IPC_CHANNELS = {
+  MY_FEATURE: 'my-feature:action'
+} as const
+interface IpcInvokeContract {
+  'my-feature:action': IpcCall<MyArgs, MyResult>
+}
 
 // 2. 핸들러 등록 — src/main/ipc/handlers.ts
-ipcMain.handle(IPC_MY_FEATURE, async (_event, args) => { ... })
+ipcMain.handle(IPC_CHANNELS.MY_FEATURE, async (_event, args) => { ... })
 
-// 3. 렌더러에서 호출 — Pinia store
-const result = await window.electron.ipcRenderer.invoke('my-feature:action', args)
+// 3. 렌더러에서 타입 지정 helper 호출
+const result = await invokeIpc(IPC_CHANNELS.MY_FEATURE, args)
 ```
 
 ### 데이터베이스
@@ -67,7 +72,7 @@ const result = await window.electron.ipcRenderer.invoke('my-feature:action', arg
 
 - Naive UI 컴포넌트는 개별 import (tree-shaking)
 - Pinia 스토어는 Composition API 패턴 (`defineStore(name, setupFn)`)
-- 스토어에서 main process와 통신 시 `window.electron.ipcRenderer.invoke()` 사용
+- 스토어에서 main process와 통신 시 `invokeIpc()` 사용
 - 파괴적 renderer 액션(삭제, 취소 등)은 bare 버튼을 직접 두기보다 `src/renderer/src/components/common/ConfirmActionButton.ts` 같은 재사용 확인 컴포넌트 우선
 - 일반 페이지는 `PageShell` + `PageHeader`를 사용해 최대 폭(기본 1440px, 설정형 960px)과 헤더 간격을 통일
 - 카드/행의 보조 액션이 2개 이상이면 `OverflowActionMenu`로 이동하고, 파괴적 항목은 `confirmText`를 지정해 재확인
@@ -120,18 +125,19 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-**테스트 프레임워크: Vitest** — 34개 파일, 422개 테스트 케이스.
+**테스트 프레임워크: Vitest** — 현재 규모와 통과 여부는 `npm test`로 확인.
 
 - 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
-- IPC 검증 테스트: `tests/main/ipc/validators.test.ts` — 32개 테스트 케이스
+- IPC 검증 테스트: `tests/main/ipc/validators.test.ts`
 
 ### 코드 품질 도구
 
 - **Pre-commit 훅**: `husky` + `lint-staged` — 커밋 시 자동 ESLint(`*.ts,*.vue`) + Prettier(`*.ts,*.vue,*.json,*.md`) 실행
 - **실행**: `npx husky init` 후 `.husky/pre-commit` 파일이 `npx lint-staged` 실행
 - **줄바꿈 정책**: `.gitattributes`로 추적 텍스트 파일 LF 정규화. 대규모 CRLF churn은 기능 변경과 분리
+- **CI 품질 게이트**: lint + typecheck + coverage thresholds + `electron-vite build`를 순서대로 실행
 - **릴리즈 무결성**: GitHub Release workflow는 Windows 배포물과 함께 `checksums-sha256.txt`를 생성·첨부해 검증 가능한 초안을 남김
 
 ## 현재 구조
@@ -270,49 +276,8 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
-**0.16.1** — MCP start/stop의 외부 CLI 설정 쓰기·삭제를 제거하고, Codex 연결을 공식 `codex mcp add` 일회성 등록 방식으로 전환. 테스트 422개
-**0.16.0** — 1440px 페이지 셸, 모듈 목록+상세, 워크플로우 역할별 드로어, 카드 오버플로 액션, ComfyUI/MCP 전역 상태 분리, 갤러리 로딩·오류·빈 상태 개선. 테스트 419개
-**0.15.8** — queue-manager의 순수 helper/type guard를 `queue-utils.ts`로 추출하고, `queue-utils`/`config-generator` 단위 테스트를 bounded scope로 확장. 테스트 410개
-**0.15.7** — main 프로세스 crash handler 추가, touched catch 블록의 의도/진단 로그 정리, release workflow SHA256 checksum 첨부, Vitest coverage include 확장. 테스트 397개
-**0.15.6** — Gallery 정렬/평점 필터와 Settings 테마 옵션을 locale-reactive helper + computed로 정렬해 실행 중 언어 변경 시 즉시 반영. README 테스트 통계도 28개 파일 / 394개 케이스로 동기화.
-**0.15.5** — 숫자 설정 fallback helper, workflow/job destructive action 확인 UX, generation-only workflow 안내, startup/manual connection 실패 토스트, reorder 트랜잭션, terminal instance limit. 테스트 392개
-**0.15.4** — 감사 반영 하드닝: 권한 높은 파일 경로 IPC를 `local-asset` 허용 규칙으로 정렬, output root/terminal cwd의 크로스플랫폼 fallback 수정, renderer store 및 MCP/WebSocket JSON 실패 가시성 강화, `.gitattributes` LF 정책 추가. 테스트 374개
-**0.15.3** — 갤러리 이미지 회귀 수정: `queue-manager`와 `local-asset` 프로토콜이 같은 출력 루트 해석 규칙을 사용하고, `local-asset`은 현재 출력 디렉터리 + DB 등록 gallery 자산 경로만 허용하도록 조정. 테스트 357개
-**0.15.2** — 감사 후속 하드닝: `local-asset` 출력 디렉터리 화이트리스트, 갤러리 쿼리 검증/ORDER BY 화이트리스트, MCP loopback origin 제한 + Settings opt-in 시작, safe-json helper 도입, shipped navigation 정리. 테스트 344개
-**0.15.1** — 갤러리 파일명 검색: 필터 바에 검색 입력창 추가, 300ms 디바운스, file_path LIKE 매칭. 테스트 305개
-**0.15.0** — MCP 내보내기/비교/동기화 도구: export_module_items_to_file(JSON/CSV/MD 파일 내보내기), diff_module_with_file(이름 기반 매칭+태그 단위 diff), sync_module_from_file(upsert 동기화, delete_missing, dry_run). 파일 직렬화 유틸리티, 비교 엔진. list_modules에 item_count 포함. 테스트 302개
-**0.14.0** — MCP 대량 생성/가져오기/복제/통계: bulk_create_module_items(최대 200개 트랜잭션 생성), import_module_items_from_file(JSON/CSV/MD 파일 파싱→등록, dry_run), duplicate_module(모듈+아이템 원자적 복제), get_module_stats(모듈 요약 통계). 파일 파서 유틸리티. 테스트 281개
-**0.13.0** — MCP 일괄 작업 도구: bulk_update_module_items(최대 200개 트랜잭션 업데이트), replace_tag_in_module(태그 일괄 치환, dry_run), validate_module_tags(모듈 단위 태그 검증), search_module_items(텍스트 검색), get_module_item(단일 조회), list_module_items 페이지네이션. 태그 유틸리티(replaceTagInPrompt, extractTagsFromPrompt). 테스트 257개
-**0.12.7** — 터미널 탭 전환 시 입력 깨짐 수정: display:none→visibility:hidden으로 xterm.js 캔버스 크기 유지, 초기 마운트 시 PTY resize IPC 전송, nextTick+rAF 조합으로 fit() 타이밍 안정화, ResizeObserver 비활성 탭 감지. 테스트 233개
-**0.12.6** — 패키징된 앱에서 Danbooru 태그 DB 로드 실패 수정: process.resourcesPath → app.getAppPath() 경로 해석 변경, MCP 태그 도구 자동 재로드, 에러 메시지 상세화. 오프라인 환경 대응: 네트워크 사전 프로브(2초+60초 캐시), unverified 상태 추가, MCP 응답에 online_available 플래그. 테스트 233개
-**0.12.5** — 대량 배치 성능 최적화: taskDurations O(n²)→O(1) 이동 평균, 배치 모드 DB 디바운스 10초, 이미지 버퍼 이중 복사 제거, JobsView 폴링 10초+디바운스, GalleryView 새로고침 10초, App.vue IPC 리스너 정리. 테스트 229개
-**0.12.4** — Copilot CLI MCP 지원(`~/.copilot/mcp-config.json` 자동 생성), CLI별 개별 상태 표시, 사이드바 접기 시 다이아몬드 아이콘, 터미널 MCP 자동 시작, GitHub Actions Node.js 24 마이그레이션(upload-artifact@v6, download-artifact@v8). 테스트 229개
-**0.12.3** — 모듈 아이템 폼 수정: i18n 충돌로 인한 긍정 프롬프트 필드 미표시 해결, 비-네거티브 모듈 및 변형에서 negative 필드 완전 제거 (UI + 합성 엔진), 갤러리 상세 뷰어 사이드바 좌→우 이동. 테스트 229개
-**0.12.2** — CI 경고 전면 해소: GitHub Actions Node.js 24 마이그레이션(checkout@v6, setup-node@v5), Vue 속성 순서 경고 10건 수정, ESLint 에러 해결, Prettier 포맷팅 일괄 적용. 테스트 229개
-**0.12.1** — v0.12.0 호환성 수정: preload 샌드박스 번들링 수정, 갤러리 이미지 403/CSP 수정, 갤러리 상세 뷰어 좌우 분할 레이아웃 (Lightroom 스타일). 테스트 229개
-**0.12.0** — 보안 감사 기반 전면 개선: Electron 보안 하드닝(sandbox/webSecurity/CSP), IPC 입력 검증, Repository 필드 화이트리스트, 경로 순회 차단, 매직 넘버 상수 추출, 배치 위자드 composable, 에러 핸들링 개선, i18n 완성(6개 뷰), 구조화 로깅(electron-log), pre-commit 훅(husky+lint-staged), IPC 검증 테스트 32개. 테스트 229개
-**0.11.0** — 갤러리 뷰어 강화: 좌우 네비게이션(← →), 클립보드 복사(Ctrl+C), 파일 탐색기 열기, 상세 모달에서 삭제, 프롬프트/시드 표시, 파일 크기·해상도 표시. 테스트 197개
-**0.10.7** — 파일 덮어쓰기 방지: 재실행 시 동일 파일명이면 자동 숫자 접미사(\_001~\_999) 추가. 테스트 197개
-**0.10.6** — 재실행 UI 수정: BATCH_RERUN 비블로킹화로 재실행 후 갤러리·작업 상태 즉시 반영. 테스트 197개
-**0.10.5** — 실시간 UI 업데이트: BATCH_START 비블로킹화로 작업 시작 즉시 상태 반영, 갤러리 태스크 완료 시 자동 갱신(2초 디바운스). 테스트 197개
-**0.10.4** — 변수 오버라이드 UI 일관성: 새 배치 생성 시에도 오버라이드 표시, 접기/펼치기 토글 추가. 테스트 197개
-**0.10.3** — 앱 비정상 종료 후 배치 작업 상태 복구: 시작 시 고아 작업 자동 감지→paused 전환, cold resume/cancel 지원, 정상 종료 시 상태 보존. 테스트 197개
-**0.10.2** — 고정 모듈 프롬프트 변형 지원: 슬롯에 지정된 `promptVariant`가 고정 모듈 아이템에도 적용 (변형 있으면 사용, 없으면 기본 폴백). 테스트 187개
-**0.10.1** — 배치 수정/복제 시 '추가 텍스트' 고정 모듈 혼입 버그 수정: `userPrefixText` 필드로 원본 보존, 복원 시 우선 사용. 테스트 187개
-**0.10.0** — Danbooru 태그 검증 MCP 도구: 태그 검증(validate), 검색(search), 인기 태그(get_popular) + 프롬프트 가이드. 로컬 6,549개 태그 + Danbooru API 온라인 폴백. 테스트 187개
-**0.9.1** — WebSocket 기반 완료 감지: REST 폴링 제거로 ComfyUI 부하 대폭 절감. 프리뷰 쓰로틀링(500ms). 프롬프트 변형 편집 버그 수정
-**0.9.0** — 지연 태스크 생성(Lazy Task Expansion): 배치 생성 시 태스크 사전 생성 없이 실행 시 동적 생성. 모듈 데이터 스냅샷으로 실행 안정성 확보. 테스트 159개
-**0.8.1** — 대량 배치 최적화: 청크 기반 태스크 처리(50개 단위), ComfyUI 히스토리 자동 정리, DB 트랜잭션 최적화, 실시간 ETA 표시
-**0.8.0** — 슬롯별 프롬프트 변형 (Prompt Variants): 같은 아이템에 대해 슬롯마다 다른 프롬프트 사용 가능. MCP 도구에도 변형 지원 추가. MCP 세션 메모리 누수 수정 (타임아웃 + 최대 세션 제한)
-**0.7.1** — MCP 서버 세션 관리 버그 수정, 멀티 CLI 호환성 개선 (Copilot/Claude/Gemini/Codex)
-**0.7.0** — MCP 서버 + 내장 터미널: LLM CLI가 앱 기능을 MCP 도구로 제어 가능, 5+1 페이지 구조, 커스텀 앱 아이콘·브랜딩
-**0.6.0** — UI 리디자인: 4+1 페이지 구조, 배치/큐 통합 (JobsView), 3단계 배치 위자드
-**0.5.0** — 슬롯별 모듈 매핑 (프리픽스/서픽스 + 모듈 체크박스 + 슬롯별 합성)
-**0.4.0** — ComfyUI 리소스 브라우저 (모델/LoRA/샘플러 드롭다운) + 배치 작업 복제
-**0.3.0** — 프롬프트 슬롯 시스템 (역할 자동 감지 + 수동 설정 + 슬롯 기반 주입)
-**0.2.5** — 이미지 다운로드 파라미터 순서 수정, 히스토리 완료 판정 개선
-**0.2.4** — 배치 작업 생성 IPC structuredClone 오류 수정
-**0.2.3** — 모듈 편집 기능 추가, 배치 빌더 UUID 표시 및 UX 개선
-**0.2.2** — IPC structuredClone 직렬화 오류 수정 (toPlain 유틸리티)
-**0.2.1** — UI 버그 수정 3건 (모듈 생성, 워크플로우 변수 스크롤, 워크플로우 편집)
-**0.2.0** — 테스트 인프라 추가 (Vitest, 146개 테스트 케이스)
+**0.16.2** — 문서·버전 드리프트 정리, CI 품질 게이트, 공유 IPC 계약, QueueManager 생명주기 회귀 테스트 강화.
+**0.16.1** — MCP start/stop의 외부 CLI 설정 쓰기·삭제를 제거하고, Codex 연결을 공식 `codex mcp add` 일회성 등록 방식으로 전환.
+**0.16.0** — 1440px 페이지 셸, 모듈 목록+상세, 워크플로우 역할별 드로어, 카드 오버플로 액션, ComfyUI/MCP 전역 상태 분리, 갤러리 상태 개선.
+
+이전 버전 내역은 `CHANGELOG.md`를 참조합니다.

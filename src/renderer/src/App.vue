@@ -7,8 +7,10 @@ import AppLayout from './components/layout/AppLayout.vue'
 import { useSettingsStore } from './stores/settings.store'
 import { useConnectionStore } from './stores/connection.store'
 import { useQueueStore } from './stores/queue.store'
-import type { QueueProgress } from './types/ipc'
+import type { QueueProgress, QueueTaskCompletedEvent, QueueTaskFailedEvent } from './types/ipc'
 import { parseIntegerOrFallback } from './utils/number'
+import { onIpc } from './utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { darkThemeOverrides, lightThemeOverrides } from './theme-overrides'
 
 const settingsStore = useSettingsStore()
@@ -20,27 +22,27 @@ const themeOverrides = computed(() =>
   settingsStore.settings.theme === 'light' ? lightThemeOverrides : darkThemeOverrides
 )
 
-// Named handlers for proper cleanup
-const onConnectionChanged = (_event: unknown, connected: boolean): void => {
+const eventCleanups: Array<() => void> = []
+
+const onConnectionChanged = (connected: boolean): void => {
   connectionStore.setConnectionChanged(connected)
 }
 
-const onQueueProgress = (_event: unknown, data: QueueProgress): void => {
+const onQueueProgress = (data: QueueProgress): void => {
   queueStore.updateProgress(data)
 }
 
-const onTaskCompleted = (
-  _event: unknown,
-  data: { jobId: string; etaMs?: number; avgTaskDurationMs?: number }
-): void => {
+const onTaskCompleted = (data: QueueTaskCompletedEvent): void => {
+  if (!('jobId' in data)) return
   queueStore.onTaskCompleted(data)
 }
 
-const onTaskFailed = (_event: unknown, data: { jobId: string; etaMs?: number }): void => {
+const onTaskFailed = (data: QueueTaskFailedEvent): void => {
+  if (!('jobId' in data)) return
   queueStore.onTaskFailed(data)
 }
 
-const onJobCompleted = (_event: unknown, data: { jobId: string }): void => {
+const onJobCompleted = (data: { jobId: string }): void => {
   queueStore.onJobCompleted(data.jobId)
 }
 
@@ -50,11 +52,13 @@ onMounted(async () => {
   updateTheme(settingsStore.settings.theme)
 
   // Listen for main→renderer events
-  window.electron.ipcRenderer.on('comfyui:connection-changed', onConnectionChanged)
-  window.electron.ipcRenderer.on('queue:progress', onQueueProgress)
-  window.electron.ipcRenderer.on('queue:task-completed', onTaskCompleted)
-  window.electron.ipcRenderer.on('queue:task-failed', onTaskFailed)
-  window.electron.ipcRenderer.on('queue:job-completed', onJobCompleted)
+  eventCleanups.push(
+    onIpc(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, onConnectionChanged),
+    onIpc(IPC_CHANNELS.QUEUE_PROGRESS, onQueueProgress),
+    onIpc(IPC_CHANNELS.QUEUE_TASK_COMPLETED, onTaskCompleted),
+    onIpc(IPC_CHANNELS.QUEUE_TASK_FAILED, onTaskFailed),
+    onIpc(IPC_CHANNELS.QUEUE_JOB_COMPLETED, onJobCompleted)
+  )
 
   // Auto-connect on startup if previously connected
   const host = settingsStore.settings.comfyui_host || 'localhost'
@@ -64,11 +68,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  window.electron.ipcRenderer.removeListener('comfyui:connection-changed', onConnectionChanged)
-  window.electron.ipcRenderer.removeListener('queue:progress', onQueueProgress)
-  window.electron.ipcRenderer.removeListener('queue:task-completed', onTaskCompleted)
-  window.electron.ipcRenderer.removeListener('queue:task-failed', onTaskFailed)
-  window.electron.ipcRenderer.removeListener('queue:job-completed', onJobCompleted)
+  for (const cleanup of eventCleanups.splice(0)) {
+    cleanup()
+  }
 })
 
 watch(

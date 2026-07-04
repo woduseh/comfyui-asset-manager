@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron'
 import { ComfyUIClient } from './client'
 import { ComfyUIWebSocket } from './websocket'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import { PREVIEW_THROTTLE_MS } from '../../constants'
 import log from '../../logger'
 
@@ -96,7 +97,7 @@ class ComfyUIManager {
     })
   }
 
-  private sendToRenderer(channel: string, data: unknown): void {
+  private sendToRenderer<K extends IpcEventChannel>(channel: K, data: IpcEventPayload<K>): void {
     const windows = BrowserWindow.getAllWindows()
     for (const win of windows) {
       if (!win.isDestroyed()) {

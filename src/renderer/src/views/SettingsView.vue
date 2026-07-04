@@ -25,6 +25,8 @@ import { parseIntegerOrFallback } from '@renderer/utils/number'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
 import { buildSettingsThemeOptions } from '@renderer/utils/view-labels'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 const { t, locale } = useI18n()
 const message = useMessage()
@@ -68,7 +70,7 @@ async function handleDisconnect(): Promise<void> {
 }
 
 async function handleBrowseOutput(): Promise<void> {
-  const dir = await window.electron.ipcRenderer.invoke('dialog:open-directory')
+  const dir = await invokeIpc(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY)
   if (dir) {
     outputDir.value = dir
     await settingsStore.setSetting('output_directory', dir)

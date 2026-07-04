@@ -4,6 +4,8 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
+import { invokeIpc, onIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import '@xterm/xterm/css/xterm.css'
 
 const props = defineProps<{
@@ -15,9 +17,8 @@ const terminalStore = useTerminalStore()
 const terminalRef = ref<HTMLDivElement>()
 let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
-let dataListener: ((event: unknown, payload: { id: string; data: string }) => void) | null = null
-let exitListener: ((event: unknown, payload: { id: string; exitCode: number }) => void) | null =
-  null
+let dataCleanup: (() => void) | null = null
+let exitCleanup: (() => void) | null = null
 let resizeObserver: ResizeObserver | null = null
 
 function writeMcpBanner(): void {
@@ -92,7 +93,7 @@ onMounted(() => {
 
     // Sync PTY dimensions with the new terminal size
     if (terminal) {
-      window.electron.ipcRenderer.invoke('terminal:resize', {
+      void invokeIpc(IPC_CHANNELS.TERMINAL_RESIZE, {
         id: props.terminalId,
         cols: terminal.cols,
         rows: terminal.rows
@@ -104,26 +105,24 @@ onMounted(() => {
 
   // Send input to PTY
   terminal.onData((data: string) => {
-    window.electron.ipcRenderer.invoke('terminal:input', {
+    void invokeIpc(IPC_CHANNELS.TERMINAL_INPUT, {
       id: props.terminalId,
       data
     })
   })
 
   // Receive output from PTY
-  dataListener = (_event: unknown, payload: { id: string; data: string }) => {
+  dataCleanup = onIpc(IPC_CHANNELS.TERMINAL_DATA, (payload) => {
     if (payload.id === props.terminalId && terminal) {
       terminal.write(payload.data)
     }
-  }
-  window.electron.ipcRenderer.on('terminal:data', dataListener as (...args: unknown[]) => void)
+  })
 
-  exitListener = (_event: unknown, payload: { id: string; exitCode: number }) => {
+  exitCleanup = onIpc(IPC_CHANNELS.TERMINAL_EXIT, (payload) => {
     if (payload.id === props.terminalId && terminal) {
       terminal.write(`\r\n\x1b[33m[Process exited with code ${payload.exitCode}]\x1b[0m\r\n`)
     }
-  }
-  window.electron.ipcRenderer.on('terminal:exit', exitListener as (...args: unknown[]) => void)
+  })
 
   // Auto-resize
   resizeObserver = new ResizeObserver(() => {
@@ -131,7 +130,7 @@ onMounted(() => {
       fitAddon.fit()
       // Only sync PTY dimensions for the active terminal
       if (props.active && terminal) {
-        window.electron.ipcRenderer.invoke('terminal:resize', {
+        void invokeIpc(IPC_CHANNELS.TERMINAL_RESIZE, {
           id: props.terminalId,
           cols: terminal.cols,
           rows: terminal.rows
@@ -151,7 +150,7 @@ watch(
         // Wait for rendering cycle to ensure container has final dimensions
         requestAnimationFrame(() => {
           fitAddon!.fit()
-          window.electron.ipcRenderer.invoke('terminal:resize', {
+          void invokeIpc(IPC_CHANNELS.TERMINAL_RESIZE, {
             id: props.terminalId,
             cols: terminal!.cols,
             rows: terminal!.rows
@@ -167,18 +166,8 @@ onBeforeUnmount(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
   }
-  if (dataListener) {
-    window.electron.ipcRenderer.removeListener(
-      'terminal:data',
-      dataListener as (...args: unknown[]) => void
-    )
-  }
-  if (exitListener) {
-    window.electron.ipcRenderer.removeListener(
-      'terminal:exit',
-      exitListener as (...args: unknown[]) => void
-    )
-  }
+  dataCleanup?.()
+  exitCleanup?.()
   terminal?.dispose()
 })
 </script>

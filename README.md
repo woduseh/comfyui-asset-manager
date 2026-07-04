@@ -58,6 +58,7 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 - **안전한 Codex 연결**: 앱은 `~/.codex/config.toml`을 수정하지 않으며, 서버를 시작한 뒤 `codex mcp add comfyui-asset-manager --url http://localhost:39464/mcp`를 한 번 실행해 등록
 - **설정 파일 무부작용**: MCP 서버 시작·중지는 외부 CLI 설정 파일을 생성하거나 제거하지 않음
 - **로컬 전용 HTTP 표면**: `/mcp`는 loopback origin(`localhost`, `127.0.0.1`)만 허용하고 `/health`는 유지
+- **타입 안전 IPC**: main/renderer가 공유 채널과 요청·응답·이벤트 계약을 사용해 채널 오타와 payload 불일치를 컴파일 시점에 검출
 - **내장 터미널**: xterm.js 기반, 멀티 탭, 전용 페이지 + 하단 패널 모드
 
 ### ⚙️ 설정
@@ -221,12 +222,14 @@ npm run lint           # ESLint
 ```
 
 - Git은 `.gitattributes` 기준으로 추적 텍스트 파일을 LF로 정규화합니다. 대규모 줄바꿈 diff가 보이면 먼저 정책 파일과 체크아웃 설정을 확인하세요.
+- CI는 lint, typecheck, 커버리지 임계값, Electron Vite 프로덕션 빌드를 모두 검증합니다.
 - GitHub Release 초안은 Windows 배포물과 함께 `checksums-sha256.txt`를 첨부해 다운로드 무결성을 확인할 수 있습니다.
 
 ### 프로젝트 구조
 
 ```
 src/
+├── shared/                        # main/renderer 공용 타입과 순수 유틸리티
 ├── main/                          # Electron 메인 프로세스
 │   ├── index.ts                   # 앱 진입점
 │   ├── ipc/                       # IPC 통신 (channels, handlers, validators)
@@ -256,7 +259,7 @@ src/
 
 ### 테스트 현황
 
-- 현재 기준 **34개 테스트 파일, 422개 테스트 케이스**
+- 현재 테스트 규모와 통과 여부는 `npm test`로 확인합니다.
 
 ## 라이선스
 

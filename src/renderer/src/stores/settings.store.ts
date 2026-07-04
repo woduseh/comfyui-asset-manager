@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
+import { invokeIpc } from '@renderer/utils/ipc'
 
 export interface AppSettings {
   comfyui_host: string
@@ -36,7 +38,7 @@ export const useSettingsStore = defineStore('settings', () => {
   async function loadSettings(): Promise<void> {
     loadError.value = null
     try {
-      const all = await window.electron.ipcRenderer.invoke('settings:getAll')
+      const all = await invokeIpc(IPC_CHANNELS.SETTINGS_GET_ALL)
       if (all) {
         settings.value = { ...defaultSettings, ...all }
       }
@@ -51,7 +53,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const previousValue = settings.value[key]
     settings.value[key] = value
     try {
-      await window.electron.ipcRenderer.invoke('settings:set', { key, value })
+      await invokeIpc(IPC_CHANNELS.SETTINGS_SET, { key, value })
     } catch (error) {
       if (previousValue === undefined) {
         delete settings.value[key]
@@ -63,7 +65,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   async function getSetting(key: string): Promise<string | null> {
-    return await window.electron.ipcRenderer.invoke('settings:get', { key })
+    return await invokeIpc(IPC_CHANNELS.SETTINGS_GET, { key })
   }
 
   return {

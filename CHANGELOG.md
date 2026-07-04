@@ -2,6 +2,22 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.16.2] - 2026-07-04
+
+문서와 런타임 버전의 드리프트를 제거하고, CI 품질 게이트와 공유 IPC 계약, QueueManager 생명주기 회귀 테스트를 강화한 유지보수 릴리스입니다.
+
+### Added
+
+- **공유 IPC 계약**: main/renderer가 함께 사용하는 채널, 요청·응답, 이벤트 payload 타입과 renderer 호출 helper 추가
+- **CI 커버리지 게이트**: 현재 기준선을 보호하는 전역 임계값과 Electron Vite 빌드 검증 추가
+- **QueueManager 회귀 시나리오**: 시작·일시정지·재개·취소·정리·이벤트 경로를 직접 검증
+
+### Changed
+
+- **공유 순수 유틸리티**: JSON 및 숫자 파싱 구현을 `src/shared` 단일 출처로 통합
+- **MCP 버전 단일화**: 서버 health 및 protocol 버전이 `package.json`을 직접 사용
+- **문서 드리프트 정리**: 변동되는 테스트 수치를 제거하고 과거 감사 HTML을 `docs/audit`에 보존
+
 ## [0.16.1] - 2026-06-23
 
 MCP 서버 시작·중지 때마다 외부 CLI 설정 파일을 수정하던 동작을 제거했습니다. 특히 Codex 설정은 앱이 직접 관리하지 않고 Codex 공식 MCP CLI를 통한 일회성 등록 방식으로 전환했습니다.

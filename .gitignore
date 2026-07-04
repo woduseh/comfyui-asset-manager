@@ -1,6 +1,7 @@
 node_modules
 dist
 out
+coverage
 .worktrees/
 .DS_Store
 .eslintcache

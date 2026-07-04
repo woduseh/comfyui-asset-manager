@@ -1,16 +1,25 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 
 let mockDb: SqlJsDatabase
 
-vi.mock('../../../../src/main/services/database/index', () => ({
-  getDatabase: () => mockDb,
+const databaseMocks = vi.hoisted(() => ({
   saveDatabase: vi.fn(),
   setBatchMode: vi.fn()
 }))
 
+const electronMocks = vi.hoisted(() => ({
+  getAllWindows: vi.fn(() => [] as Array<Record<string, unknown>>)
+}))
+
+vi.mock('../../../../src/main/services/database/index', () => ({
+  getDatabase: () => mockDb,
+  saveDatabase: databaseMocks.saveDatabase,
+  setBatchMode: databaseMocks.setBatchMode
+}))
+
 vi.mock('electron', () => ({
-  BrowserWindow: { getAllWindows: () => [] }
+  BrowserWindow: { getAllWindows: electronMocks.getAllWindows }
 }))
 
 vi.mock('../../../../src/main/services/comfyui/manager', () => ({
@@ -34,6 +43,7 @@ vi.mock('../../../../src/main/ipc/channels', () => ({
     QUEUE_TASK_COMPLETED: 'queue:task-completed',
     QUEUE_TASK_FAILED: 'queue:task-failed',
     QUEUE_JOB_COMPLETED: 'queue:job-completed',
+    QUEUE_STATUS_CHANGED: 'queue:status-changed',
     COMFYUI_PREVIEW: 'comfyui:preview'
   }
 }))
@@ -116,6 +126,25 @@ describe('QueueManager Recovery', () => {
     settingsRepo = new SettingsRepository()
     jobRepo = new BatchJobRepository()
     taskRepo = new BatchTaskRepository()
+
+    const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+    const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+    Object.assign(queueManager, {
+      _isProcessing: false,
+      _isPaused: false,
+      _isCancelled: false,
+      _currentJobId: null,
+      _maxRetries: 3
+    })
+    ;(comfyuiManager as { isConnected: boolean }).isConnected = false
+    vi.mocked(comfyuiManager.restClient.interrupt).mockReset().mockResolvedValue(undefined)
+    databaseMocks.saveDatabase.mockClear()
+    databaseMocks.setBatchMode.mockClear()
+    electronMocks.getAllWindows.mockReset().mockReturnValue([])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('recoverInterruptedJobs', () => {
@@ -184,6 +213,120 @@ describe('QueueManager Recovery', () => {
     })
   })
 
+  describe('start and active lifecycle', () => {
+    it('rejects start when ComfyUI is disconnected', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+
+      await expect(queueManager.startJob('job-1')).rejects.toThrow(
+        'Not connected to ComfyUI server'
+      )
+    })
+
+    it('rejects a duplicate start while another job is processing', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      Object.assign(queueManager, { _isProcessing: true })
+
+      await expect(queueManager.startJob('job-1')).rejects.toThrow(
+        'Queue is already processing a job'
+      )
+    })
+
+    it('cleans up processing state and emits status after a successful run', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      const processJob = vi
+        .spyOn(
+          queueManager as unknown as { processJob: (jobId: string) => Promise<void> },
+          'processJob'
+        )
+        .mockResolvedValue(undefined)
+      const send = vi.fn()
+      electronMocks.getAllWindows.mockReturnValue([
+        {
+          isDestroyed: () => false,
+          webContents: { send }
+        }
+      ])
+      const jobId = jobRepo.create({ name: 'Lifecycle Job', config: '{}' })
+
+      await queueManager.startJob(jobId)
+
+      expect(processJob).toHaveBeenCalledWith(jobId)
+      expect(queueManager.isProcessing).toBe(false)
+      expect(queueManager.currentJobId).toBeNull()
+      expect(databaseMocks.setBatchMode.mock.calls).toEqual([[true], [false]])
+      expect(send).toHaveBeenCalledWith('queue:status-changed', {
+        isProcessing: false,
+        isPaused: false,
+        currentJobId: null
+      })
+    })
+
+    it('marks the job failed and still cleans up when processing throws', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      vi.spyOn(
+        queueManager as unknown as { processJob: (jobId: string) => Promise<void> },
+        'processJob'
+      ).mockRejectedValue(new Error('process failed'))
+      const jobId = jobRepo.create({ name: 'Failing Job', config: '{}' })
+
+      await queueManager.startJob(jobId)
+
+      expect(jobRepo.get(jobId)?.status).toBe('failed')
+      expect(queueManager.isProcessing).toBe(false)
+      expect(queueManager.currentJobId).toBeNull()
+      expect(databaseMocks.setBatchMode.mock.calls).toEqual([[true], [false]])
+    })
+
+    it('pauses and hot-resumes the active job', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const jobId = jobRepo.create({ name: 'Active Job', config: '{}' })
+      jobRepo.updateStatus(jobId, 'running')
+      Object.assign(queueManager, {
+        _isProcessing: true,
+        _isPaused: false,
+        _currentJobId: jobId
+      })
+
+      queueManager.pause()
+      expect(queueManager.isPaused).toBe(true)
+      expect(jobRepo.get(jobId)?.status).toBe('paused')
+
+      await queueManager.resume()
+      expect(queueManager.isPaused).toBe(false)
+      expect(jobRepo.get(jobId)?.status).toBe('running')
+    })
+
+    it('hot-cancels remaining tasks and tolerates interrupt failure', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      const jobId = jobRepo.create({ name: 'Active Job', config: '{}' })
+      jobRepo.updateStatus(jobId, 'running')
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      Object.assign(queueManager, {
+        _isProcessing: true,
+        _isPaused: true,
+        _currentJobId: jobId
+      })
+      vi.mocked(comfyuiManager.restClient.interrupt).mockRejectedValueOnce(
+        new Error('interrupt unavailable')
+      )
+
+      expect(() => queueManager.cancel()).not.toThrow()
+      await Promise.resolve()
+
+      expect(queueManager.isPaused).toBe(false)
+      expect(jobRepo.get(jobId)?.status).toBe('cancelled')
+      expect(taskRepo.listByJob(jobId)[0].status).toBe('cancelled')
+      expect(comfyuiManager.restClient.interrupt).toHaveBeenCalledOnce()
+    })
+  })
+
   describe('cold cancel', () => {
     it('cancels orphaned running job via cancel()', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
@@ -240,6 +383,21 @@ describe('QueueManager Recovery', () => {
       await queueManager.resume()
       expect(jobRepo.get(jobId)?.status).toBe('draft')
     })
+
+    it('starts the first paused job when no loop is active', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const firstId = jobRepo.create({ name: 'Paused Job 1', config: '{}' })
+      const secondId = jobRepo.create({ name: 'Paused Job 2', config: '{}' })
+      jobRepo.updateStatus(firstId, 'paused')
+      jobRepo.updateStatus(secondId, 'paused')
+      const selectedId = jobRepo.list('paused')[0].id as string
+      const startJob = vi.spyOn(queueManager, 'startJob').mockResolvedValue(undefined)
+
+      await queueManager.resume()
+
+      expect(startJob).toHaveBeenCalledOnce()
+      expect(startJob).toHaveBeenCalledWith(selectedId)
+    })
   })
 
   describe('retry settings', () => {
@@ -249,9 +407,10 @@ describe('QueueManager Recovery', () => {
 
       settingsRepo.set('batch.maxRetries', 'not-a-number')
       ;(comfyuiManager as { isConnected: boolean }).isConnected = true
-      ;(queueManager as { processJob: (jobId: string) => Promise<void> }).processJob = vi
-        .fn()
-        .mockResolvedValue(undefined)
+      vi.spyOn(
+        queueManager as unknown as { processJob: (jobId: string) => Promise<void> },
+        'processJob'
+      ).mockResolvedValue(undefined)
 
       const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
       await queueManager.startJob(jobId)

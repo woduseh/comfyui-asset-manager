@@ -2,6 +2,7 @@ import * as pty from 'node-pty'
 import { BrowserWindow } from 'electron'
 import { homedir } from 'os'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import { mcpServerManager } from '../mcp'
 import { MAX_TERMINAL_INSTANCES } from '../../constants'
 
@@ -84,7 +85,7 @@ class PtyManager {
     return Array.from(this.terminals.keys())
   }
 
-  private sendToRenderer(channel: string, data: unknown): void {
+  private sendToRenderer<K extends IpcEventChannel>(channel: K, data: IpcEventPayload<K>): void {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) {
         win.webContents.send(channel, data)

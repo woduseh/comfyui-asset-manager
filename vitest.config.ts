@@ -14,19 +14,29 @@ export default defineConfig({
         'src/main/services/**/*.ts',
         'src/main/ipc/validators.ts',
         'src/main/utils/*.ts',
-        'src/main/crash-handler.ts'
+        'src/main/crash-handler.ts',
+        'src/shared/**/*.ts'
       ],
       exclude: [
         // websocket.ts: depends on 'ws' native WebSocket — requires live server for meaningful tests
         'src/main/services/comfyui/websocket.ts',
-        // queue-manager.ts: orchestrates ComfyUI REST + WebSocket + fs writes — integration-heavy
+        // queue-manager.ts: public lifecycle paths have direct regression tests; the long-running
+        // ComfyUI REST/WebSocket/fs execution loop remains outside the coverage gate.
         'src/main/services/batch/queue-manager.ts'
-      ]
+      ],
+      thresholds: {
+        statements: 55,
+        branches: 50,
+        functions: 60,
+        lines: 55
+      }
     }
   },
   resolve: {
     alias: {
-      '@main': resolve(__dirname, 'src/main')
+      '@main': resolve(__dirname, 'src/main'),
+      '@renderer': resolve(__dirname, 'src/renderer/src'),
+      '@shared': resolve(__dirname, 'src/shared')
     }
   }
 })

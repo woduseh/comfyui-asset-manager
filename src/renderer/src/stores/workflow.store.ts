@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { toPlain } from '@renderer/utils/ipc'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 export interface WorkflowItem {
   id: string
@@ -20,8 +21,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
   async function loadWorkflows(category?: string): Promise<void> {
     loading.value = true
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'workflow:list',
+      const result = await invokeIpc(
+        IPC_CHANNELS.WORKFLOW_LIST,
         category ? { category } : undefined
       )
       workflows.value = result || []
@@ -31,18 +32,18 @@ export const useWorkflowStore = defineStore('workflow', () => {
   }
 
   async function getWorkflow(id: string): Promise<Record<string, unknown> | null> {
-    const result = await window.electron.ipcRenderer.invoke('workflow:get', { id })
+    const result = await invokeIpc(IPC_CHANNELS.WORKFLOW_GET, { id })
     currentWorkflow.value = result
     return result
   }
 
   async function deleteWorkflow(id: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke('workflow:delete', { id })
+    await invokeIpc(IPC_CHANNELS.WORKFLOW_DELETE, { id })
     workflows.value = workflows.value.filter((w) => w.id !== id)
   }
 
   async function updateWorkflow(id: string, data: Partial<Record<string, unknown>>): Promise<void> {
-    await window.electron.ipcRenderer.invoke('workflow:update', { id, data: toPlain(data) })
+    await invokeIpc(IPC_CHANNELS.WORKFLOW_UPDATE, { id, data })
     await loadWorkflows()
   }
 

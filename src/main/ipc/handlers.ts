@@ -138,7 +138,7 @@ export function registerIpcHandlers(): void {
   })
 
   // === Available Models ===
-  ipcMain.handle('comfyui:models', async () => {
+  ipcMain.handle(IPC_CHANNELS.COMFYUI_MODELS, async () => {
     if (!comfyuiManager.isConnected) return null
     try {
       return await comfyuiManager.restClient.getAvailableModels()
@@ -223,12 +223,15 @@ export function registerIpcHandlers(): void {
   })
 
   // === Workflow Variable Management ===
-  ipcMain.handle('workflow:variables', (_event, { workflowId }: { workflowId: string }) => {
-    return workflowRepo.getVariables(workflowId)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.WORKFLOW_VARIABLES,
+    (_event, { workflowId }: { workflowId: string }) => {
+      return workflowRepo.getVariables(workflowId)
+    }
+  )
 
   ipcMain.handle(
-    'workflow:set-variables',
+    IPC_CHANNELS.WORKFLOW_SET_VARIABLES,
     (
       _event,
       {
@@ -440,7 +443,7 @@ export function registerIpcHandlers(): void {
     return true
   })
 
-  ipcMain.handle('batch:delete-tasks', (_event, { jobId }: { jobId: string }) => {
+  ipcMain.handle(IPC_CHANNELS.BATCH_DELETE_TASKS, (_event, { jobId }: { jobId: string }) => {
     batchTaskRepo.deleteByJob(jobId)
     return true
   })
@@ -462,7 +465,7 @@ export function registerIpcHandlers(): void {
 
   // Batch task count preview
   ipcMain.handle(
-    'batch:preview-count',
+    IPC_CHANNELS.BATCH_PREVIEW_COUNT,
     (
       _event,
       {
@@ -558,7 +561,7 @@ export function registerIpcHandlers(): void {
   })
 
   // Get tasks for a batch job
-  ipcMain.handle('batch:tasks', (_event, { jobId }: { jobId: string }) => {
+  ipcMain.handle(IPC_CHANNELS.BATCH_TASKS, (_event, { jobId }: { jobId: string }) => {
     return batchTaskRepo.listByJob(jobId)
   })
 
@@ -588,7 +591,7 @@ export function registerIpcHandlers(): void {
     return true
   })
 
-  ipcMain.handle('queue:status', () => {
+  ipcMain.handle(IPC_CHANNELS.QUEUE_STATUS, () => {
     return {
       isProcessing: queueManager.isProcessing,
       isPaused: queueManager.isPaused,
@@ -669,7 +672,7 @@ export function registerIpcHandlers(): void {
 
   // Prompt Preview
   ipcMain.handle(
-    'prompt:preview',
+    IPC_CHANNELS.PROMPT_PREVIEW,
     (
       _event,
       { moduleIds, variables }: { moduleIds: string[]; variables?: Record<string, string> }
@@ -699,14 +702,14 @@ export function registerIpcHandlers(): void {
   )
 
   // Module import/export
-  ipcMain.handle('module:export', (_event, { moduleId }: { moduleId: string }) => {
+  ipcMain.handle(IPC_CHANNELS.MODULE_EXPORT, (_event, { moduleId }: { moduleId: string }) => {
     const mod = moduleRepo.get(moduleId)
     if (!mod) return null
     const items = moduleItemRepo.list(moduleId)
     return JSON.stringify({ module: mod, items }, null, 2)
   })
 
-  ipcMain.handle('module:import-data', (_event, { jsonData }: { jsonData: string }) => {
+  ipcMain.handle(IPC_CHANNELS.MODULE_IMPORT_DATA, (_event, { jsonData }: { jsonData: string }) => {
     try {
       const dataResult = safeJsonParse<ModuleImportPayload>(jsonData, {
         context: 'Module import data',
@@ -742,7 +745,7 @@ export function registerIpcHandlers(): void {
   })
 
   // Dashboard statistics
-  ipcMain.handle('dashboard:stats', () => {
+  ipcMain.handle(IPC_CHANNELS.DASHBOARD_STATS, () => {
     const db = getDatabase()
 
     const imgCountStmt = db.prepare('SELECT COUNT(*) as count FROM generated_images')

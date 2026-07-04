@@ -31,6 +31,8 @@ import ActionableEmptyState from '@renderer/components/common/ActionableEmptySta
 import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -94,7 +96,7 @@ async function updatePreview(): Promise<void> {
     return
   }
   try {
-    promptPreview.value = await window.electron.ipcRenderer.invoke('prompt:preview', {
+    promptPreview.value = await invokeIpc(IPC_CHANNELS.PROMPT_PREVIEW, {
       moduleIds: [selectedModuleId.value]
     })
   } catch (error) {
@@ -296,7 +298,7 @@ async function handleToggleItem(item: ModuleItem): Promise<void> {
 
 async function handleExport(): Promise<void> {
   if (!selectedModuleId.value) return
-  const data = await window.electron.ipcRenderer.invoke('module:export', {
+  const data = await invokeIpc(IPC_CHANNELS.MODULE_EXPORT, {
     moduleId: selectedModuleId.value
   })
   if (data) {
@@ -308,10 +310,10 @@ async function handleExport(): Promise<void> {
 async function handleImportModule(): Promise<void> {
   try {
     const text = await navigator.clipboard.readText()
-    const result = await window.electron.ipcRenderer.invoke('module:import-data', {
+    const result = await invokeIpc(IPC_CHANNELS.MODULE_IMPORT_DATA, {
       jsonData: text
     })
-    if (result.error) {
+    if ('error' in result) {
       message.error(result.error)
     } else {
       await moduleStore.loadModules()
@@ -326,7 +328,7 @@ async function handleImportModule(): Promise<void> {
 async function handleReorderItems(): Promise<void> {
   if (!selectedModuleId.value) return
   const itemIds = moduleStore.currentItems.map((item) => item.id)
-  await window.electron.ipcRenderer.invoke('module-item:reorder', { itemIds })
+  await invokeIpc(IPC_CHANNELS.MODULE_ITEM_REORDER, { itemIds })
 }
 
 onMounted(() => {

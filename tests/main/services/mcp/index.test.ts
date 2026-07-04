@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import http from 'http'
+import packageJson from '../../../../package.json'
 
 vi.mock('../../../../src/main/services/mcp/tools', () => ({
   registerMcpTools: vi.fn()
@@ -142,7 +143,11 @@ describe('McpServerManager origin policy', () => {
     })
 
     expect(response.statusCode).toBe(200)
-    expect(JSON.parse(response.body)).toMatchObject({ status: 'ok' })
+    expect(JSON.parse(response.body)).toMatchObject({
+      status: 'ok',
+      name: 'comfyui-asset-manager',
+      version: packageJson.version
+    })
   })
 
   it('does not mutate client configuration when the server starts or stops', async () => {

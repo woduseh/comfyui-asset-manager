@@ -29,6 +29,8 @@ import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
 import { safeJsonParse } from '@renderer/utils/safe-json'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { groupWorkflowVariables } from '@renderer/utils/workflow-variable-groups'
 import {
   buildWorkflowCategoryOptions,
@@ -133,12 +135,12 @@ const columns = computed<DataTableColumns<WorkflowItem>>(() => [
 ])
 
 async function handleImport(): Promise<void> {
-  const filePath = await window.electron.ipcRenderer.invoke('dialog:open-file', {
+  const filePath = await invokeIpc(IPC_CHANNELS.DIALOG_OPEN_FILE, {
     filters: [{ name: 'JSON', extensions: ['json'] }]
   })
   if (filePath) {
-    const result = await window.electron.ipcRenderer.invoke('workflow:import', { filePath })
-    if (result.error) {
+    const result = await invokeIpc(IPC_CHANNELS.WORKFLOW_IMPORT, { filePath })
+    if ('error' in result) {
       message.error(result.error)
     } else {
       message.success(
@@ -156,7 +158,7 @@ async function handleViewDetail(id: string): Promise<void> {
     editDescription.value = (detailWorkflow.value.description as string) || ''
     originalName.value = editName.value
     originalDescription.value = editDescription.value
-    detailVariables.value = await window.electron.ipcRenderer.invoke('workflow:variables', {
+    detailVariables.value = await invokeIpc(IPC_CHANNELS.WORKFLOW_VARIABLES, {
       workflowId: id
     })
     showDetailDrawer.value = true
@@ -245,7 +247,7 @@ function getVarTypeTagType(varType: string): TagType {
 }
 
 async function handleRoleChange(variableId: string, role: string): Promise<void> {
-  await window.electron.ipcRenderer.invoke('workflow:update-variable-role', { variableId, role })
+  await invokeIpc(IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE, { variableId, role })
   const variable = detailVariables.value.find((item) => item.id === variableId)
   if (variable) variable.role = role
 }

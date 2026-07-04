@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
+import { invokeIpc } from '@renderer/utils/ipc'
 
 export interface TerminalTab {
   id: string
@@ -31,7 +33,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   })
 
   async function createTab(): Promise<string> {
-    const terminalId = await window.electron.ipcRenderer.invoke('terminal:create', {
+    const terminalId = await invokeIpc(IPC_CHANNELS.TERMINAL_CREATE, {
       cols: 80,
       rows: 24
     })
@@ -46,7 +48,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function closeTab(id: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke('terminal:destroy', { id })
+    await invokeIpc(IPC_CHANNELS.TERMINAL_DESTROY, { id })
     tabs.value = tabs.value.filter((t) => t.id !== id)
     if (activeTabId.value === id) {
       activeTabId.value = tabs.value.length > 0 ? tabs.value[tabs.value.length - 1].id : null
@@ -76,20 +78,20 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function fetchMcpStatus(): Promise<void> {
-    const status = await window.electron.ipcRenderer.invoke('mcp:status')
+    const status = await invokeIpc(IPC_CHANNELS.MCP_STATUS)
     mcpStatus.value = status
     await fetchMcpConfigStatus()
   }
 
   async function fetchMcpConfigStatus(): Promise<void> {
-    const status = await window.electron.ipcRenderer.invoke('mcp:config-status')
+    const status = await invokeIpc(IPC_CHANNELS.MCP_CONFIG_STATUS)
     mcpConfigStatus.value = status
   }
 
   async function startMcpServer(
     port?: number
   ): Promise<{ success: boolean; url?: string; error?: string }> {
-    const result = await window.electron.ipcRenderer.invoke('mcp:start', { port })
+    const result = await invokeIpc(IPC_CHANNELS.MCP_START, { port })
     if (result.success) {
       mcpStatus.value = { isRunning: true, port: result.port, url: result.url }
       await fetchMcpConfigStatus()
@@ -98,7 +100,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function stopMcpServer(): Promise<void> {
-    await window.electron.ipcRenderer.invoke('mcp:stop')
+    await invokeIpc(IPC_CHANNELS.MCP_STOP)
     mcpStatus.value = { ...mcpStatus.value, isRunning: false }
     await fetchMcpConfigStatus()
   }
@@ -106,7 +108,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   async function setupMcpForCli(
     targetDir?: string
   ): Promise<{ success: boolean; configPath?: string; error?: string }> {
-    const result = await window.electron.ipcRenderer.invoke('mcp:setup-cli', { targetDir })
+    const result = await invokeIpc(IPC_CHANNELS.MCP_SETUP_CLI, { targetDir })
     if (result.success) {
       await fetchMcpConfigStatus()
     }
@@ -114,7 +116,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function removeMcpFromCli(targetDir?: string): Promise<{ success: boolean }> {
-    const result = await window.electron.ipcRenderer.invoke('mcp:remove-cli', { targetDir })
+    const result = await invokeIpc(IPC_CHANNELS.MCP_REMOVE_CLI, { targetDir })
     await fetchMcpConfigStatus()
     return result
   }

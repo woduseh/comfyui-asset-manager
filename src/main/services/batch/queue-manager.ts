@@ -19,6 +19,7 @@ import {
 } from '../database/repositories'
 import { setBatchMode } from '../database'
 import { IPC_CHANNELS } from '../../ipc/channels'
+import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import log from '../../logger'
 import {
   TASK_CHUNK_SIZE,
@@ -390,7 +391,7 @@ class QueueManager {
 
             this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
               jobId,
-              taskId: task.id,
+              taskId: task.id as string,
               error: (error as Error).message,
               completed: completedCount,
               failed: failedCount,
@@ -829,7 +830,7 @@ class QueueManager {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  private sendToRenderer(channel: string, data: unknown): void {
+  private sendToRenderer<K extends IpcEventChannel>(channel: K, data: IpcEventPayload<K>): void {
     const windows = BrowserWindow.getAllWindows()
     for (const win of windows) {
       if (!win.isDestroyed()) {
@@ -839,7 +840,7 @@ class QueueManager {
   }
 
   private sendStatusToRenderer(): void {
-    this.sendToRenderer('queue:status-changed', {
+    this.sendToRenderer(IPC_CHANNELS.QUEUE_STATUS_CHANGED, {
       isProcessing: this._isProcessing,
       isPaused: this._isPaused,
       currentJobId: this._currentJobId

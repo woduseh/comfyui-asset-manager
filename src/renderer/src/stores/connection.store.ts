@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ComfyUIStatus } from '@renderer/types/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
+import { invokeIpc } from '@renderer/utils/ipc'
 
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ComfyUIStatus>({
@@ -23,7 +25,7 @@ export const useConnectionStore = defineStore('connection', () => {
     try {
       const h = host || status.value.host
       const p = port || status.value.port
-      const result = await window.electron.ipcRenderer.invoke('comfyui:connect', {
+      const result = await invokeIpc(IPC_CHANNELS.COMFYUI_CONNECT, {
         host: h,
         port: p
       })
@@ -45,14 +47,14 @@ export const useConnectionStore = defineStore('connection', () => {
   }
 
   async function disconnect(): Promise<void> {
-    await window.electron.ipcRenderer.invoke('comfyui:disconnect')
+    await invokeIpc(IPC_CHANNELS.COMFYUI_DISCONNECT)
     status.value.connected = false
     connectionState.value = 'disconnected'
   }
 
   async function fetchSystemStats(): Promise<void> {
     try {
-      const stats = await window.electron.ipcRenderer.invoke('comfyui:system-stats')
+      const stats = await invokeIpc(IPC_CHANNELS.COMFYUI_SYSTEM_STATS)
       if (stats) {
         status.value.systemStats = stats
       }

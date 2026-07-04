@@ -35,6 +35,8 @@ import { NAV_ITEMS } from '@renderer/navigation'
 import type { RouteName } from '@renderer/navigation'
 import { parseIntegerOrFallback } from '@renderer/utils/number'
 import { getServiceStatusType } from '@renderer/utils/status-presentation'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 const router = useRouter()
 const route = useRoute()
@@ -125,7 +127,7 @@ async function handleToggleConnection(): Promise<void> {
   if (connectionStore.isConnected) {
     await connectionStore.disconnect()
   } else {
-    const settings = await window.electron.ipcRenderer.invoke('settings:getAll')
+    const settings = await invokeIpc(IPC_CHANNELS.SETTINGS_GET_ALL)
     const host =
       typeof settings?.comfyui_host === 'string' && settings.comfyui_host
         ? settings.comfyui_host

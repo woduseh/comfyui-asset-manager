@@ -12,9 +12,10 @@ import {
   MCP_ALLOWED_ORIGIN_HOSTS
 } from '../../constants'
 import log from '../../logger'
+import packageJson from '../../../../package.json'
 
 const SERVER_NAME = 'comfyui-asset-manager'
-const SERVER_VERSION = '0.8.0'
+const SERVER_VERSION = packageJson.version
 
 interface McpSession {
   transport: StreamableHTTPServerTransport

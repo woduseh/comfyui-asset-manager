@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GalleryQuery } from '@renderer/types/ipc'
-import { toPlain } from '@renderer/utils/ipc'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { DEFAULT_GALLERY_PAGE_SIZE } from '@renderer/constants'
 
 export interface GalleryImage {
@@ -44,7 +45,7 @@ export const useGalleryStore = defineStore('gallery', () => {
         ...filters.value
       }
 
-      const result = await window.electron.ipcRenderer.invoke('gallery:list', toPlain(query))
+      const result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, query)
       if (result) {
         images.value = result.items as GalleryImage[]
         total.value = result.total
@@ -55,7 +56,7 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
 
   async function rateImage(id: string, rating: number): Promise<void> {
-    await window.electron.ipcRenderer.invoke('gallery:rate', { id, rating })
+    await invokeIpc(IPC_CHANNELS.GALLERY_RATE, { id, rating })
     const img = images.value.find((i) => i.id === id)
     if (img) img.rating = rating
   }
@@ -64,12 +65,12 @@ export const useGalleryStore = defineStore('gallery', () => {
     const img = images.value.find((i) => i.id === id)
     if (!img) return
     const newFav = img.is_favorite ? false : true
-    await window.electron.ipcRenderer.invoke('gallery:favorite', { id, favorite: newFav })
+    await invokeIpc(IPC_CHANNELS.GALLERY_FAVORITE, { id, favorite: newFav })
     img.is_favorite = newFav ? 1 : 0
   }
 
   async function deleteImages(ids: string[]): Promise<void> {
-    await window.electron.ipcRenderer.invoke('gallery:delete', { ids })
+    await invokeIpc(IPC_CHANNELS.GALLERY_DELETE, { ids })
     images.value = images.value.filter((i) => !ids.includes(i.id))
     total.value -= ids.length
   }
@@ -84,12 +85,12 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
 
   async function copyToClipboard(filePath: string): Promise<boolean> {
-    const result = await window.electron.ipcRenderer.invoke('gallery:copy-clipboard', { filePath })
+    const result = await invokeIpc(IPC_CHANNELS.GALLERY_COPY_CLIPBOARD, { filePath })
     return result?.success === true
   }
 
   async function showInExplorer(filePath: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke('gallery:show-in-explorer', { filePath })
+    await invokeIpc(IPC_CHANNELS.GALLERY_SHOW_IN_EXPLORER, { filePath })
   }
 
   return {

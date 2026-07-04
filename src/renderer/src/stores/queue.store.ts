@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { QueueProgress } from '@renderer/types/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
+import { invokeIpc } from '@renderer/utils/ipc'
 
 export interface QueueJobInfo {
   id: string
@@ -27,8 +29,8 @@ export const useQueueStore = defineStore('queue', () => {
   })
 
   async function loadActiveJobs(): Promise<void> {
-    const running = await window.electron.ipcRenderer.invoke('batch:list', { status: 'running' })
-    const queued = await window.electron.ipcRenderer.invoke('batch:list', { status: 'queued' })
+    const running = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'running' })
+    const queued = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'queued' })
     activeJobs.value = [...(running || []), ...(queued || [])].map(
       (j: Record<string, unknown>) => ({
         id: j.id as string,

@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { ModuleType } from '@renderer/types/ipc'
-import { toPlain } from '@renderer/utils/ipc'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 export interface PromptModule {
   id: string
@@ -36,10 +37,7 @@ export const useModuleStore = defineStore('module', () => {
   async function loadModules(type?: string): Promise<void> {
     loading.value = true
     try {
-      const result = await window.electron.ipcRenderer.invoke(
-        'module:list',
-        type ? { type } : undefined
-      )
+      const result = await invokeIpc(IPC_CHANNELS.MODULE_LIST, type ? { type } : undefined)
       modules.value = (result || []) as PromptModule[]
     } finally {
       loading.value = false
@@ -47,7 +45,7 @@ export const useModuleStore = defineStore('module', () => {
   }
 
   async function getModule(id: string): Promise<PromptModule | null> {
-    const result = await window.electron.ipcRenderer.invoke('module:get', { id })
+    const result = await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })
     currentModule.value = result as PromptModule
     return currentModule.value
   }
@@ -58,23 +56,23 @@ export const useModuleStore = defineStore('module', () => {
     description?: string
     parent_id?: string
   }): Promise<string> {
-    const id = await window.electron.ipcRenderer.invoke('module:create', toPlain(data))
+    const id = await invokeIpc(IPC_CHANNELS.MODULE_CREATE, data)
     await loadModules()
     return id
   }
 
   async function updateModule(id: string, data: Partial<Record<string, unknown>>): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module:update', { id, data: toPlain(data) })
+    await invokeIpc(IPC_CHANNELS.MODULE_UPDATE, { id, data })
     await loadModules()
   }
 
   async function deleteModule(id: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module:delete', { id })
+    await invokeIpc(IPC_CHANNELS.MODULE_DELETE, { id })
     modules.value = modules.value.filter((m) => m.id !== id)
   }
 
   async function loadItems(moduleId: string): Promise<void> {
-    const result = await window.electron.ipcRenderer.invoke('module-item:list', { moduleId })
+    const result = await invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, { moduleId })
     currentItems.value = (result || []) as ModuleItem[]
   }
 
@@ -91,7 +89,7 @@ export const useModuleStore = defineStore('module', () => {
       ...data,
       prompt_variants: data.prompt_variants ? JSON.stringify(data.prompt_variants) : '{}'
     }
-    const id = await window.electron.ipcRenderer.invoke('module-item:create', toPlain(payload))
+    const id = await invokeIpc(IPC_CHANNELS.MODULE_ITEM_CREATE, payload)
     await loadItems(data.module_id)
     return id
   }
@@ -101,12 +99,12 @@ export const useModuleStore = defineStore('module', () => {
     moduleId: string,
     data: Partial<Record<string, unknown>>
   ): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module-item:update', { id, data: toPlain(data) })
+    await invokeIpc(IPC_CHANNELS.MODULE_ITEM_UPDATE, { id, data })
     await loadItems(moduleId)
   }
 
   async function deleteItem(id: string, moduleId: string): Promise<void> {
-    await window.electron.ipcRenderer.invoke('module-item:delete', { id })
+    await invokeIpc(IPC_CHANNELS.MODULE_ITEM_DELETE, { id })
     await loadItems(moduleId)
   }
 

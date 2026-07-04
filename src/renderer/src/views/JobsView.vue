@@ -39,7 +39,8 @@ import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/st
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
-import { toPlain } from '@renderer/utils/ipc'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
 import {
   addModuleToMatrix as addModuleToMatrixShared,
@@ -221,7 +222,7 @@ const canGoStep3 = computed(() => taskPreview.value.totalTasks > 0)
 
 // ─── Load workflow variables ───
 async function loadWorkflowVariables(workflowId: string): Promise<void> {
-  const variables = await window.electron.ipcRenderer.invoke('workflow:variables', { workflowId })
+  const variables = await invokeIpc(IPC_CHANNELS.WORKFLOW_VARIABLES, { workflowId })
   slotMappings.value = variables
     .filter(
       (v: Record<string, unknown>) => v.role === 'prompt_positive' || v.role === 'prompt_negative'
@@ -242,7 +243,7 @@ async function loadWorkflowVariables(workflowId: string): Promise<void> {
     }))
 
   try {
-    batchResources.value = await window.electron.ipcRenderer.invoke('comfyui:models')
+    batchResources.value = await invokeIpc(IPC_CHANNELS.COMFYUI_MODELS)
   } catch (error) {
     void error
     batchResources.value = null
@@ -279,7 +280,7 @@ watch(selectedWorkflowId, async (id) => {
 async function loadBatchJobs(): Promise<void> {
   loadingJobs.value = true
   try {
-    batchJobs.value = (await window.electron.ipcRenderer.invoke('batch:list')) || []
+    batchJobs.value = (await invokeIpc(IPC_CHANNELS.BATCH_LIST)) || []
   } finally {
     loadingJobs.value = false
   }
@@ -287,7 +288,7 @@ async function loadBatchJobs(): Promise<void> {
 
 async function loadQueueStatus(): Promise<void> {
   try {
-    queueStatus.value = await window.electron.ipcRenderer.invoke('queue:status')
+    queueStatus.value = await invokeIpc(IPC_CHANNELS.QUEUE_STATUS)
   } catch (error) {
     void error
     /* Queue status polling is best-effort; leave the last snapshot intact on failure. */
@@ -296,7 +297,7 @@ async function loadQueueStatus(): Promise<void> {
 
 async function handleReorderJobs(): Promise<void> {
   const jobIds = batchJobs.value.map((j) => j.id as string)
-  await window.electron.ipcRenderer.invoke('batch:reorder', { jobIds })
+  await invokeIpc(IPC_CHANNELS.BATCH_REORDER, { jobIds })
 }
 
 function getModuleName(moduleId: string): string {
@@ -315,7 +316,7 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
 
 // ─── Queue controls ───
 async function handleStartJob(jobId: string): Promise<void> {
-  const result = await window.electron.ipcRenderer.invoke('batch:start', { id: jobId })
+  const result = await invokeIpc(IPC_CHANNELS.BATCH_START, { id: jobId })
   if (result.success) {
     message.success(t('batch.msg.started'))
   } else {
@@ -330,21 +331,21 @@ async function handleStartJob(jobId: string): Promise<void> {
 }
 
 async function handlePause(): Promise<void> {
-  await window.electron.ipcRenderer.invoke('batch:pause')
+  await invokeIpc(IPC_CHANNELS.BATCH_PAUSE)
   message.info(t('batch.msg.paused'))
   await loadBatchJobs()
   await loadQueueStatus()
 }
 
 async function handleResume(): Promise<void> {
-  await window.electron.ipcRenderer.invoke('batch:resume')
+  await invokeIpc(IPC_CHANNELS.BATCH_RESUME)
   message.info(t('batch.msg.resumed'))
   await loadBatchJobs()
   await loadQueueStatus()
 }
 
 async function handleCancel(): Promise<void> {
-  await window.electron.ipcRenderer.invoke('batch:cancel')
+  await invokeIpc(IPC_CHANNELS.BATCH_CANCEL)
   message.warning(t('batch.msg.cancelled'))
   await loadBatchJobs()
   await loadQueueStatus()
@@ -352,14 +353,14 @@ async function handleCancel(): Promise<void> {
 
 // ─── Job actions ───
 async function handleDeleteJob(id: string): Promise<void> {
-  await window.electron.ipcRenderer.invoke('batch:delete', { id })
+  await invokeIpc(IPC_CHANNELS.BATCH_DELETE, { id })
   await loadBatchJobs()
   message.success(t('batch.msg.deleted'))
 }
 
 async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
   try {
-    const result = await window.electron.ipcRenderer.invoke('batch:rerun', { id: job.id as string })
+    const result = await invokeIpc(IPC_CHANNELS.BATCH_RERUN, { id: job.id as string })
     if (result.success) {
       message.success(t('batch.msg.rerunStartedShort'))
     } else {
@@ -423,44 +424,41 @@ async function handleCreateBatch(): Promise<void> {
 
   try {
     if (editingJobId.value) {
-      await window.electron.ipcRenderer.invoke('batch:delete-tasks', { jobId: editingJobId.value })
-      await window.electron.ipcRenderer.invoke('batch:delete', { id: editingJobId.value })
+      await invokeIpc(IPC_CHANNELS.BATCH_DELETE_TASKS, { jobId: editingJobId.value })
+      await invokeIpc(IPC_CHANNELS.BATCH_DELETE, { id: editingJobId.value })
     }
 
-    const result = await window.electron.ipcRenderer.invoke(
-      'batch:create',
-      toPlain({
-        name: batchName.value,
-        description: batchDescription.value,
-        workflowId: selectedWorkflowId.value,
-        moduleSelections: moduleSelections.value.map((s) => ({
-          moduleId: s.moduleId,
-          moduleType: s.moduleType,
-          selectedItemIds: s.selectedItemIds
-        })),
-        countPerCombination: countPerCombination.value,
-        seedMode: seedMode.value,
-        fixedSeed: fixedSeed.value,
-        outputFolderPattern: outputPattern.value,
-        fileNamePattern: filePattern.value,
-        slotMappings: slotMappings.value.map((s) => ({
-          variableId: s.variableId,
-          nodeId: s.nodeId,
-          fieldName: s.fieldName,
-          role: s.role,
-          action: s.action,
-          fixedValue: s.fixedValue,
-          assignedModuleIds: s.assignedModuleIds,
-          prefixModuleIds: s.prefixModuleIds,
-          prefixText: s.prefixText,
-          suffixText: s.suffixText,
-          promptVariant: s.promptVariant
-        })),
-        variableOverrides: variableOverrides.value
-          .filter((vo) => vo.enabled)
-          .map((vo) => ({ nodeId: vo.nodeId, fieldName: vo.fieldName, value: vo.value }))
-      })
-    )
+    const result = await invokeIpc(IPC_CHANNELS.BATCH_CREATE, {
+      name: batchName.value,
+      description: batchDescription.value,
+      workflowId: selectedWorkflowId.value,
+      moduleSelections: moduleSelections.value.map((s) => ({
+        moduleId: s.moduleId,
+        moduleType: s.moduleType,
+        selectedItemIds: s.selectedItemIds
+      })),
+      countPerCombination: countPerCombination.value,
+      seedMode: seedMode.value,
+      fixedSeed: fixedSeed.value,
+      outputFolderPattern: outputPattern.value,
+      fileNamePattern: filePattern.value,
+      slotMappings: slotMappings.value.map((s) => ({
+        variableId: s.variableId,
+        nodeId: s.nodeId,
+        fieldName: s.fieldName,
+        role: s.role,
+        action: s.action,
+        fixedValue: s.fixedValue,
+        assignedModuleIds: s.assignedModuleIds,
+        prefixModuleIds: s.prefixModuleIds,
+        prefixText: s.prefixText,
+        suffixText: s.suffixText,
+        promptVariant: s.promptVariant
+      })),
+      variableOverrides: variableOverrides.value
+        .filter((vo) => vo.enabled)
+        .map((vo) => ({ nodeId: vo.nodeId, fieldName: vo.fieldName, value: vo.value }))
+    })
 
     const isEdit = editingJobId.value !== null
     editingJobId.value = null

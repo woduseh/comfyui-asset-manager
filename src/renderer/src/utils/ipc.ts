@@ -1,4 +1,11 @@
 import { toRaw, isRef, isReactive } from 'vue'
+import type {
+  IpcEventChannel,
+  IpcEventPayload,
+  IpcInvokeArgs,
+  IpcInvokeChannel,
+  IpcInvokeResult
+} from '@shared/ipc-contract'
 
 /**
  * Strip Vue reactivity from data before sending through Electron IPC.
@@ -10,4 +17,29 @@ export function toPlain<T>(data: T): T {
   if (isReactive(data)) return JSON.parse(JSON.stringify(data))
   if (typeof data === 'object') return JSON.parse(JSON.stringify(data))
   return data
+}
+
+type InvokeParameters<K extends IpcInvokeChannel> =
+  undefined extends IpcInvokeArgs<K> ? [args?: IpcInvokeArgs<K>] : [args: IpcInvokeArgs<K>]
+
+export function invokeIpc<K extends IpcInvokeChannel>(
+  channel: K,
+  ...args: InvokeParameters<K>
+): Promise<IpcInvokeResult<K>> {
+  const payload = args.length > 0 ? toPlain(args[0]) : undefined
+  return window.electron.ipcRenderer.invoke(channel, payload) as Promise<IpcInvokeResult<K>>
+}
+
+export function onIpc<K extends IpcEventChannel>(
+  channel: K,
+  listener: (payload: IpcEventPayload<K>) => void
+): () => void {
+  const wrapped = (_event: unknown, payload: IpcEventPayload<K>): void => {
+    listener(payload)
+  }
+
+  window.electron.ipcRenderer.on(channel, wrapped)
+  return () => {
+    window.electron.ipcRenderer.removeListener(channel, wrapped)
+  }
 }

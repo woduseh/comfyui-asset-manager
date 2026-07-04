@@ -2,6 +2,60 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [1.0.0] - 2026-07-04
+
+로컬 MCP 서버에 기본 Bearer 인증을 적용한 보안 릴리스입니다. 기존 MCP 클라이언트는 새
+토큰을 설정하기 전까지 연결되지 않으므로 MAJOR 버전으로 올립니다.
+
+### Added
+
+- **MCP Bearer 인증**: 256비트 토큰 생성·영속화·복사·회전과 timing-safe 요청 검증 추가
+- **인증 설정 UI**: 인증 토글, 마스킹 토큰, 회전 확인, 오래된 클라이언트 설정 경고 추가
+- **인증 회귀 테스트**: 무토큰·오류 토큰·정상 토큰·CORS preflight·CLI 설정 형식 검증
+
+### Changed
+
+- **기본 보안 정책**: 신규·기존 설치 모두 `mcp_auth_required=true`를 기본 적용
+- **CLI 설정 생성**: Claude Code, Gemini CLI, Copilot CLI 설정에 현재 Authorization
+  헤더를 포함하며 Gemini는 공식 `httpUrl` 형식 사용
+- **Codex 등록 안내**: 앱은 Codex 설정을 계속 읽기만 하며
+  `--bearer-token-env-var COMFYUI_ASSET_MANAGER_MCP_TOKEN` 등록 흐름 안내
+- **설정 IPC 축소**: CLI 설정 생성·제거에서 renderer 지정 경로를 제거하고 사용자 홈만
+  대상으로 제한
+
+### Security
+
+- `/mcp` 요청은 OPTIONS를 제외하고 Bearer 토큰이 일치해야 하며, `/health`는 인증 없이
+  유지
+- 토큰은 범용 settings 조회에서 제외되고 로그에 기록하지 않음
+
+## [0.16.3] - 2026-07-04
+
+sql.js 저장 안전성과 유지보수성을 높이고 대형 MCP·Jobs 파일을 동작 변경 없이 분할한
+PATCH 릴리스입니다.
+
+### Added
+
+- **트랜잭션 helper**: 중첩 SAVEPOINT, 롤백, 최외곽 커밋 후 단일 저장 예약을 지원하는
+  `withTransaction()` 추가
+- **DB 저장 회귀 테스트**: 중첩·롤백·쓰기 직렬화·rename 실패 시 기존 파일 보존 검증
+- **better-sqlite3 스파이크**: Electron 39 호환성과 실제·합성 DB 성능 측정 보고서 추가
+- **MCP 등록 계약**: 도구 30개와 프롬프트 1개의 등록 순서를 고정하는 테스트 추가
+- **Jobs 컴포넌트 테스트**: 위자드 payload와 카드·실행 상태 액션 회귀 검증
+
+### Changed
+
+- **직렬 원자 저장**: revision 기반 단일 writer, 임시 파일+rename, 제한 재시도, 종료 flush
+  도입
+- **안전한 앱 종료**: 실행 상태, MCP 종료, DB flush를 기다리는 비동기 `before-quit` 적용
+- **MCP 도구 분할**: 단일 1,828줄 파일을 도메인별 등록 모듈로 분리
+- **JobsView 분할**: 목록 orchestration과 위자드·단계·카드·상태 표시 컴포넌트 분리
+
+### Deferred
+
+- **better-sqlite3 전환**: 파일·Electron 호환성은 확인했으나 합의한 성능 게이트를
+  통과하지 못해 보류
+
 ## [0.16.2] - 2026-07-04
 
 문서와 런타임 버전의 드리프트를 제거하고, CI 품질 게이트와 공유 IPC 계약, QueueManager 생명주기 회귀 테스트를 강화한 유지보수 릴리스입니다.

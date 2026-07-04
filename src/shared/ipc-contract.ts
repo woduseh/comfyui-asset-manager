@@ -262,6 +262,12 @@ export interface McpStatus {
   isRunning: boolean
   port: number
   url: string
+  authRequired: boolean
+}
+
+export interface McpAuthStatus {
+  required: boolean
+  token: string
 }
 
 export interface McpConfigStatus {
@@ -269,6 +275,12 @@ export interface McpConfigStatus {
   copilotCli: boolean
   geminiCli: boolean
   codexCli: boolean
+  authReady: {
+    claudeCode: boolean
+    copilotCli: boolean
+    geminiCli: boolean
+    codexCli: boolean
+  }
   configPath: string
 }
 
@@ -431,9 +443,12 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.MCP_START]: IpcCall<{ port?: number }, McpStartResult>
   [IPC_CHANNELS.MCP_STOP]: IpcCall<undefined, boolean>
   [IPC_CHANNELS.MCP_STATUS]: IpcCall<undefined, McpStatus>
+  [IPC_CHANNELS.MCP_AUTH_STATUS]: IpcCall<undefined, McpAuthStatus>
+  [IPC_CHANNELS.MCP_AUTH_SET_REQUIRED]: IpcCall<{ required: boolean }, McpAuthStatus>
+  [IPC_CHANNELS.MCP_AUTH_ROTATE]: IpcCall<undefined, McpAuthStatus>
   [IPC_CHANNELS.MCP_CONFIG_STATUS]: IpcCall<undefined, McpConfigStatus>
-  [IPC_CHANNELS.MCP_SETUP_CLI]: IpcCall<{ targetDir?: string }, McpSetupResult>
-  [IPC_CHANNELS.MCP_REMOVE_CLI]: IpcCall<{ targetDir?: string }, McpRemoveResult>
+  [IPC_CHANNELS.MCP_SETUP_CLI]: IpcCall<undefined, McpSetupResult>
+  [IPC_CHANNELS.MCP_REMOVE_CLI]: IpcCall<undefined, McpRemoveResult>
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeContract

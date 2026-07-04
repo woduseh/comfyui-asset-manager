@@ -42,6 +42,11 @@ import {
   writeMcpJsonConfig,
   removeMcpJsonConfig
 } from '../services/mcp/config-generator'
+import {
+  getOrCreateMcpAuthConfig,
+  rotateMcpAuthToken,
+  setMcpAuthRequired
+} from '../services/mcp/auth'
 import { isJsonObject, safeJsonParse } from '../utils/safe-json'
 import { resolveDirectAssetPathFromSettings } from '../services/assets/local-asset'
 
@@ -274,6 +279,7 @@ export function registerIpcHandlers(): void {
 
   // Settings
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_event, { key }: { key: string }) => {
+    validateSettingsKey(key)
     return settingsRepo.get(key)
   })
 
@@ -863,7 +869,8 @@ export function registerIpcHandlers(): void {
   // === MCP Server ===
   ipcMain.handle(IPC_CHANNELS.MCP_START, async (_event, { port }: { port?: number }) => {
     try {
-      await mcpServerManager.start(port)
+      const auth = getOrCreateMcpAuthConfig(settingsRepo)
+      await mcpServerManager.start(port, auth)
       return { success: true, url: mcpServerManager.url, port: mcpServerManager.port }
     } catch (error) {
       return { success: false, error: (error as Error).message }
@@ -879,29 +886,57 @@ export function registerIpcHandlers(): void {
     return {
       isRunning: mcpServerManager.isRunning,
       port: mcpServerManager.port,
-      url: mcpServerManager.url
+      url: mcpServerManager.url,
+      authRequired: mcpServerManager.authRequired
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.MCP_CONFIG_STATUS, () => {
-    return getMcpConfigStatus()
+  ipcMain.handle(IPC_CHANNELS.MCP_AUTH_STATUS, () => {
+    return getOrCreateMcpAuthConfig(settingsRepo)
   })
 
-  ipcMain.handle(IPC_CHANNELS.MCP_SETUP_CLI, (_event, { targetDir }: { targetDir?: string }) => {
+  ipcMain.handle(
+    IPC_CHANNELS.MCP_AUTH_SET_REQUIRED,
+    (_event, { required }: { required: boolean }) => {
+      if (typeof required !== 'boolean') {
+        throw new Error('Expected boolean')
+      }
+      const auth = setMcpAuthRequired(required, settingsRepo)
+      mcpServerManager.updateAuth(auth)
+      return auth
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.MCP_AUTH_ROTATE, () => {
+    const auth = rotateMcpAuthToken(settingsRepo)
+    mcpServerManager.updateAuth(auth)
+    return auth
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_CONFIG_STATUS, () => {
+    const auth = getOrCreateMcpAuthConfig(settingsRepo)
+    return getMcpConfigStatus(auth.token, auth.required)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MCP_SETUP_CLI, () => {
     if (!mcpServerManager.isRunning) {
       return { success: false, error: 'MCP server is not running' }
     }
     try {
-      const configPath = writeMcpJsonConfig(mcpServerManager.url, targetDir)
+      const auth = getOrCreateMcpAuthConfig(settingsRepo)
+      const configPath = writeMcpJsonConfig(
+        mcpServerManager.url,
+        auth.required ? auth.token : undefined
+      )
       return { success: true, configPath }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.MCP_REMOVE_CLI, (_event, { targetDir }: { targetDir?: string }) => {
+  ipcMain.handle(IPC_CHANNELS.MCP_REMOVE_CLI, () => {
     try {
-      const removed = removeMcpJsonConfig(targetDir)
+      const removed = removeMcpJsonConfig()
       return { success: true, removed }
     } catch (error) {
       return { success: false, error: (error as Error).message }

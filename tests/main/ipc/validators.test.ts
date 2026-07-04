@@ -107,6 +107,7 @@ describe('validateSettingsKey', () => {
     expect(validateSettingsKey('comfyui_host')).toBe('comfyui_host')
     expect(validateSettingsKey('language')).toBe('language')
     expect(validateSettingsKey('mcp_port')).toBe('mcp_port')
+    expect(validateSettingsKey('mcp_auth_required')).toBe('mcp_auth_required')
     expect(validateSettingsKey('output.directory')).toBe('output.directory')
   })
 

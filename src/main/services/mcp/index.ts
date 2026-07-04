@@ -4,6 +4,7 @@ import { registerMcpTools } from './tools'
 import { tagService } from '../tags'
 import http from 'http'
 import { randomUUID } from 'crypto'
+import { isMcpRequestAuthorized, type McpAuthConfig } from './auth'
 import {
   DEFAULT_MCP_PORT,
   MAX_MCP_SESSIONS,
@@ -80,7 +81,10 @@ function setMcpCorsHeaders(res: http.ServerResponse, allowedOrigin?: string): vo
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id')
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Accept, Authorization, Mcp-Session-Id'
+  )
   res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
 }
 
@@ -90,6 +94,7 @@ class McpServerManager {
   private _isRunning = false
   private _port = DEFAULT_MCP_PORT
   private cleanupTimer: ReturnType<typeof setInterval> | null = null
+  private auth: McpAuthConfig = { required: false, token: '' }
 
   get isRunning(): boolean {
     return this._isRunning
@@ -101,6 +106,18 @@ class McpServerManager {
 
   get url(): string {
     return `http://localhost:${this._port}/mcp`
+  }
+
+  get authRequired(): boolean {
+    return this.auth.required
+  }
+
+  updateAuth(auth: McpAuthConfig): void {
+    const changed = this.auth.required !== auth.required || this.auth.token !== auth.token
+    this.auth = { ...auth }
+    if (changed) {
+      this.destroyAllSessions()
+    }
   }
 
   private startCleanupTimer(): void {
@@ -139,6 +156,12 @@ class McpServerManager {
     this.sessions.delete(id)
   }
 
+  private destroyAllSessions(): void {
+    for (const [id, session] of this.sessions) {
+      this.destroySession(id, session)
+    }
+  }
+
   private evictOldestSession(): void {
     let oldestId: string | null = null
     let oldestTime = Infinity
@@ -154,9 +177,12 @@ class McpServerManager {
     }
   }
 
-  async start(port?: number): Promise<void> {
+  async start(port?: number, auth?: McpAuthConfig): Promise<void> {
     if (this._isRunning) return
 
+    if (auth) {
+      this.updateAuth(auth)
+    }
     this._port = port || DEFAULT_MCP_PORT
 
     // Load Danbooru tag database
@@ -180,6 +206,21 @@ class McpServerManager {
         if (req.method === 'OPTIONS') {
           res.writeHead(204)
           res.end()
+          return
+        }
+
+        if (!isMcpRequestAuthorized(req.headers.authorization, this.auth)) {
+          res.writeHead(401, {
+            'Content-Type': 'application/json',
+            'WWW-Authenticate': 'Bearer'
+          })
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32001, message: 'Unauthorized' },
+              id: null
+            })
+          )
           return
         }
 
@@ -320,20 +361,20 @@ class McpServerManager {
 
     this.stopCleanupTimer()
 
-    for (const [id, session] of this.sessions) {
-      this.destroySession(id, session)
-    }
+    this.destroyAllSessions()
 
     return new Promise((resolve) => {
       if (this.httpServer) {
         this.httpServer.close(() => {
           this._isRunning = false
           this.httpServer = null
+          this.auth = { required: false, token: '' }
           log.info('[MCP] Server stopped')
           resolve()
         })
       } else {
         this._isRunning = false
+        this.auth = { required: false, token: '' }
         resolve()
       }
     })

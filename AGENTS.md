@@ -63,6 +63,10 @@ const result = await invokeIpc(IPC_CHANNELS.MY_FEATURE, args)
 
 - sql.js (WASM SQLite, in-memory)
 - 모든 mutation 후 `saveDatabase()` 호출 필수
+- 여러 mutation을 하나로 묶을 때는 `withTransaction()` 사용. 중첩은 SAVEPOINT로 처리하며
+  최외곽 커밋 후 저장을 한 번만 예약
+- DB 파일 저장은 단일 직렬 writer와 임시 파일+rename을 사용하고, 정상 종료 시
+  `closeDatabase()` flush를 반드시 await
 - Repository 패턴: `src/main/services/database/repositories/index.ts`
 - 새 테이블 추가 시 `createTables()` 함수에 `CREATE TABLE IF NOT EXISTS` 추가
 - `module_items.prompt_variants`: JSON 컬럼 — `Record<string, { prompt, negative }>` 형식으로 슬롯별 변형 프롬프트 저장
@@ -161,13 +165,14 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 - `src/main/services/mcp/` — MCP 서버 서비스
   - `index.ts`: 서버 매니저 (Streamable HTTP, 포트 설정, 시작/중지)
-  - `tools.ts`: 30개 도구 + 1개 프롬프트 정의 (모듈 CRUD/복제/통계, 아이템 CRUD + 일괄 생성/업데이트/파일 가져오기/내보내기/비교/동기화, 워크플로우, 배치, 태그 검증/검색/인기/치환)
+  - `tools/`: 30개 도구 + 1개 프롬프트를 도메인별 등록 모듈로 정의
   - `file-parser.ts`: 파일 파서 (JSON/CSV/Markdown → 모듈 아이템 변환)
   - `../tags/utils.ts`: 태그 유틸리티 (replaceTagInPrompt, extractTagsFromPrompt)
   - `config-generator.ts`: 사용자가 Settings에서 명시적으로 요청할 때만 `.mcp.json`, Gemini, Copilot CLI 설정 생성/제거
 - 기존 Repository 클래스를 직접 호출하므로 IPC를 거치지 않음
 - `@modelcontextprotocol/sdk` 패키지 사용
-- 보안: localhost만 바인딩 (기본 포트: 39464)
+- 보안: localhost만 바인딩 (기본 포트: 39464), `/mcp` Bearer 인증 기본 ON,
+  `/health`만 공개
 - **세션 관리**: 최대 10개 동시 세션, 30분 타임아웃 자동 정리, LRU 퇴출
 - **외부 설정 무부작용**: MCP 서버 start/stop은 CLI 설정 파일을 수정하지 않음. Codex는 공식 `codex mcp add/remove` 명령으로만 등록하며 앱은 `~/.codex/config.toml`을 읽기만 함
 - **프롬프트 변형 지원**: `create_module_item`/`update_module_item`에서 `prompt_variants`, `create_batch_job`에서 `slot_mappings` + `promptVariant` 파라미터 지원
@@ -276,8 +281,8 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**1.0.0** — MCP Bearer 인증 기본 적용, 토큰 회전·클라이언트 설정 갱신·Codex 환경변수 등록 흐름 추가.
+**0.16.3** — DB 트랜잭션·직렬 원자 저장, MCP 도구 도메인 분할, JobsView 컴포넌트 분리.
 **0.16.2** — 문서·버전 드리프트 정리, CI 품질 게이트, 공유 IPC 계약, QueueManager 생명주기 회귀 테스트 강화.
-**0.16.1** — MCP start/stop의 외부 CLI 설정 쓰기·삭제를 제거하고, Codex 연결을 공식 `codex mcp add` 일회성 등록 방식으로 전환.
-**0.16.0** — 1440px 페이지 셸, 모듈 목록+상세, 워크플로우 역할별 드로어, 카드 오버플로 액션, ComfyUI/MCP 전역 상태 분리, 갤러리 상태 개선.
 
 이전 버전 내역은 `CHANGELOG.md`를 참조합니다.

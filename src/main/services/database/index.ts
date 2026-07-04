@@ -1,17 +1,131 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { DB_SAVE_DEBOUNCE_MS, DB_SAVE_DEBOUNCE_BATCH_MS } from '../../constants'
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  promises as fs,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync
+} from 'fs'
+import {
+  DB_RENAME_RETRY_DELAYS_MS,
+  DB_SAVE_DEBOUNCE_BATCH_MS,
+  DB_SAVE_DEBOUNCE_MS,
+  DB_SAVE_RETRY_DELAYS_MS
+} from '../../constants'
+import log from '../../logger'
 
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let writePromise: Promise<void> | null = null
+let requestedSaveRevision = 0
+let persistedSaveRevision = 0
+let consecutiveSaveFailures = 0
 let batchMode = false
+let isClosing = false
+let transactionDepth = 0
+let savepointCounter = 0
+
+const SQLITE_OK = 'ok'
 
 function getDbPath(): string {
   const userDataPath = app.getPath('userData')
   return join(userDataPath, 'data', 'comfyui_asset_manager.db')
+}
+
+function getTempDbPath(): string {
+  return `${dbPath}.tmp`
+}
+
+function isRetryableRenameError(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) return false
+  return ['EPERM', 'EACCES', 'EBUSY'].includes(String(error.code))
+}
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs))
+}
+
+async function renameDatabaseFile(tempPath: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(tempPath, dbPath)
+      return
+    } catch (error) {
+      const retryDelay = DB_RENAME_RETRY_DELAYS_MS[attempt]
+      if (retryDelay === undefined || !isRetryableRenameError(error)) {
+        throw error
+      }
+      await wait(retryDelay)
+    }
+  }
+}
+
+async function writeDatabaseSnapshot(buffer: Buffer): Promise<void> {
+  const tempPath = getTempDbPath()
+  const file = await fs.open(tempPath, 'w')
+  try {
+    await file.writeFile(buffer)
+    await file.sync()
+  } finally {
+    await file.close()
+  }
+  await renameDatabaseFile(tempPath)
+}
+
+function writeDatabaseSnapshotSync(buffer: Buffer): void {
+  const tempPath = getTempDbPath()
+  const descriptor = openSync(tempPath, 'w')
+  try {
+    writeFileSync(descriptor, buffer)
+    fsyncSync(descriptor)
+  } finally {
+    closeSync(descriptor)
+  }
+  renameSync(tempPath, dbPath)
+}
+
+function recoverTemporaryDatabase(SQL: Awaited<ReturnType<typeof initSqlJs>>): void {
+  const tempPath = getTempDbPath()
+  if (!existsSync(tempPath)) return
+
+  if (existsSync(dbPath)) {
+    try {
+      unlinkSync(tempPath)
+    } catch (error) {
+      log.warn('[Database] Failed to remove a stale temporary database:', error)
+    }
+    return
+  }
+
+  let temporaryDatabase: SqlJsDatabase | null = null
+  try {
+    temporaryDatabase = new SQL.Database(readFileSync(tempPath))
+    const check = temporaryDatabase.exec('PRAGMA quick_check;')
+    const result = check[0]?.values[0]?.[0]
+    if (result !== SQLITE_OK) {
+      throw new Error(`SQLite quick_check returned ${String(result)}`)
+    }
+    temporaryDatabase.close()
+    temporaryDatabase = null
+    renameSync(tempPath, dbPath)
+    log.info('[Database] Recovered database from a temporary snapshot')
+  } catch (error) {
+    temporaryDatabase?.close()
+    log.warn('[Database] Discarding an invalid temporary database snapshot:', error)
+    try {
+      unlinkSync(tempPath)
+    } catch (cleanupError) {
+      log.warn('[Database] Failed to remove the invalid temporary database:', cleanupError)
+    }
+  }
 }
 
 export async function initDatabase(): Promise<SqlJsDatabase> {
@@ -19,11 +133,19 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
 
   const SQL = await initSqlJs()
   dbPath = getDbPath()
+  isClosing = false
+  requestedSaveRevision = 0
+  persistedSaveRevision = 0
+  consecutiveSaveFailures = 0
+  transactionDepth = 0
+  savepointCounter = 0
 
   const dataDir = join(app.getPath('userData'), 'data')
   if (!existsSync(dataDir)) {
     mkdirSync(dataDir, { recursive: true })
   }
+
+  recoverTemporaryDatabase(SQL)
 
   if (existsSync(dbPath)) {
     const fileBuffer = readFileSync(dbPath)
@@ -49,25 +171,81 @@ export function getDatabase(): SqlJsDatabase {
 }
 
 export function saveDatabase(): void {
-  if (!db) return
+  if (!db || isClosing) return
+  if (transactionDepth > 0) return
+
+  requestDatabaseSave()
+}
+
+function requestDatabaseSave(delayMs?: number): void {
+  if (!db || isClosing) return
+
+  requestedSaveRevision++
+  if (writePromise) return
 
   if (saveTimer) {
     clearTimeout(saveTimer)
   }
 
-  const debounceMs = batchMode ? DB_SAVE_DEBOUNCE_BATCH_MS : DB_SAVE_DEBOUNCE_MS
+  const debounceMs = delayMs ?? (batchMode ? DB_SAVE_DEBOUNCE_BATCH_MS : DB_SAVE_DEBOUNCE_MS)
 
   saveTimer = setTimeout(() => {
-    if (!db) return
-    const data = db.export()
-    const buffer = Buffer.from(data)
-    writeFileSync(dbPath, buffer)
     saveTimer = null
+    void ensureSaveLoop()
   }, debounceMs)
 }
 
 export function setBatchMode(enabled: boolean): void {
   batchMode = enabled
+}
+
+function scheduleSaveRetry(): void {
+  if (!db || isClosing || saveTimer) return
+  const retryDelay = DB_SAVE_RETRY_DELAYS_MS[consecutiveSaveFailures - 1]
+  if (retryDelay === undefined) return
+
+  saveTimer = setTimeout(() => {
+    saveTimer = null
+    void ensureSaveLoop()
+  }, retryDelay)
+}
+
+function ensureSaveLoop(): Promise<void> {
+  if (writePromise) return writePromise
+  if (!db || persistedSaveRevision >= requestedSaveRevision) {
+    return Promise.resolve()
+  }
+
+  writePromise = (async () => {
+    while (db && persistedSaveRevision < requestedSaveRevision) {
+      const snapshotRevision = requestedSaveRevision
+      const buffer = Buffer.from(db.export())
+
+      try {
+        await writeDatabaseSnapshot(buffer)
+        persistedSaveRevision = snapshotRevision
+        consecutiveSaveFailures = 0
+      } catch (error) {
+        consecutiveSaveFailures++
+        log.error('[Database] Failed to persist database snapshot:', error)
+        scheduleSaveRetry()
+        return
+      }
+    }
+  })().finally(() => {
+    writePromise = null
+  })
+
+  return writePromise
+}
+
+export async function flushDatabase(): Promise<void> {
+  if (!db) return
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  await ensureSaveLoop()
 }
 
 export function saveDatabaseSync(): void {
@@ -76,16 +254,74 @@ export function saveDatabaseSync(): void {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  const data = db.export()
-  const buffer = Buffer.from(data)
-  writeFileSync(dbPath, buffer)
+  const snapshotRevision = ++requestedSaveRevision
+  writeDatabaseSnapshotSync(Buffer.from(db.export()))
+  persistedSaveRevision = snapshotRevision
+  consecutiveSaveFailures = 0
 }
 
-export function closeDatabase(): void {
-  if (db) {
+export async function closeDatabase(): Promise<void> {
+  if (!db) return
+
+  isClosing = true
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+
+  let closeError: unknown
+  try {
+    if (writePromise) {
+      await writePromise
+    }
     saveDatabaseSync()
+  } catch (error) {
+    closeError = error
+    log.error('[Database] Final database flush failed:', error)
+  } finally {
     db.close()
     db = null
+    writePromise = null
+    transactionDepth = 0
+    savepointCounter = 0
+  }
+
+  if (closeError) {
+    throw closeError
+  }
+}
+
+export function withTransaction<T>(fn: () => T): T {
+  const database = getDatabase()
+  const isOutermost = transactionDepth === 0
+  const savepointName = `app_tx_${++savepointCounter}`
+  let committed = false
+
+  database.run(isOutermost ? 'BEGIN TRANSACTION' : `SAVEPOINT ${savepointName}`)
+  transactionDepth++
+
+  try {
+    const result = fn()
+    database.run(isOutermost ? 'COMMIT' : `RELEASE SAVEPOINT ${savepointName}`)
+    committed = true
+    return result
+  } catch (error) {
+    try {
+      if (isOutermost) {
+        database.run('ROLLBACK')
+      } else {
+        database.run(`ROLLBACK TO SAVEPOINT ${savepointName}`)
+        database.run(`RELEASE SAVEPOINT ${savepointName}`)
+      }
+    } catch (rollbackError) {
+      log.warn('[Database] Transaction rollback failed:', rollbackError)
+    }
+    throw error
+  } finally {
+    transactionDepth--
+    if (isOutermost && committed) {
+      requestDatabaseSave()
+    }
   }
 }
 
@@ -315,6 +551,7 @@ function createTables(database: SqlJsDatabase): void {
       ('output_pattern', '{job}/{character}/{outfit}/{emotion}'),
       ('filename_pattern', '{character}_{outfit}_{emotion}_{index}'),
       ('max_retries', '3'),
-      ('auto_save_interval', '5000');
+      ('auto_save_interval', '5000'),
+      ('mcp_auth_required', 'true');
   `)
 }

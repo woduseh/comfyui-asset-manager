@@ -6,7 +6,18 @@ let mockDb: SqlJsDatabase
 
 vi.mock('../../../../src/main/services/database/index', () => ({
   getDatabase: () => mockDb,
-  saveDatabase: vi.fn()
+  saveDatabase: vi.fn(),
+  withTransaction: <T>(fn: () => T): T => {
+    mockDb.run('BEGIN TRANSACTION')
+    try {
+      const result = fn()
+      mockDb.run('COMMIT')
+      return result
+    } catch (error) {
+      mockDb.run('ROLLBACK')
+      throw error
+    }
+  }
 }))
 
 // Import after mocking
@@ -121,6 +132,13 @@ describe('Database Repositories', () => {
       const all = repo.getAll()
       expect(all).toHaveProperty('comfyui_host', 'localhost')
       expect(all).toHaveProperty('comfyui_port', '8188')
+    })
+
+    it('does not expose private MCP tokens through getAll', () => {
+      repo.set('mcp_auth_token', 'secret')
+
+      expect(repo.get('mcp_auth_token')).toBe('secret')
+      expect(repo.getAll()).not.toHaveProperty('mcp_auth_token')
     })
 
     it('deletes a setting', () => {

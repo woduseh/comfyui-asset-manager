@@ -14,13 +14,41 @@ function logConfigDebug(context: string, error: unknown): void {
 interface McpJsonConfig {
   mcpServers: Record<
     string,
-    { type?: string; url?: string; command?: string; args?: string[]; tools?: string[] }
+    {
+      type?: string
+      url?: string
+      httpUrl?: string
+      command?: string
+      args?: string[]
+      tools?: string[]
+      headers?: Record<string, string>
+    }
   >
 }
 
 interface GeminiSettings {
-  mcpServers?: Record<string, { type?: string; url?: string; command?: string; args?: string[] }>
+  mcpServers?: McpJsonConfig['mcpServers']
   [key: string]: unknown
+}
+
+interface McpClientAuthReadiness {
+  claudeCode: boolean
+  copilotCli: boolean
+  geminiCli: boolean
+  codexCli: boolean
+}
+
+function getAuthorizationHeaders(token?: string): Record<string, string> | undefined {
+  return token ? { Authorization: `Bearer ${token}` } : undefined
+}
+
+function hasCurrentAuthorization(
+  entry: McpJsonConfig['mcpServers'][string] | undefined,
+  token: string | undefined,
+  authRequired: boolean
+): boolean {
+  if (!authRequired) return true
+  return Boolean(token && entry?.headers?.Authorization === `Bearer ${token}`)
 }
 
 export function parseJsonConfigText<T = unknown>(raw: string, context: string): T | null {
@@ -37,8 +65,8 @@ export function parseJsonConfigText<T = unknown>(raw: string, context: string): 
  * Writes or merges our MCP server entry into a `.mcp.json` file
  * (Claude Code and other standard MCP clients).
  */
-function writeDotMcpJson(url: string, targetDir?: string): string {
-  const dir = targetDir || homedir()
+function writeDotMcpJson(url: string, token: string | undefined, homeDir: string): string {
+  const dir = homeDir
   const filePath = join(dir, '.mcp.json')
 
   let config: McpJsonConfig = { mcpServers: {} }
@@ -60,7 +88,11 @@ function writeDotMcpJson(url: string, targetDir?: string): string {
     }
   }
 
-  config.mcpServers[MCP_SERVER_NAME] = { url }
+  config.mcpServers[MCP_SERVER_NAME] = {
+    type: 'http',
+    url,
+    headers: getAuthorizationHeaders(token)
+  }
 
   writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8')
   return filePath
@@ -68,10 +100,10 @@ function writeDotMcpJson(url: string, targetDir?: string): string {
 
 /**
  * Writes our MCP server entry into Gemini CLI settings.
- * Gemini CLI reads from `~/.gemini/settings.json` with `type: "http"`.
+ * Gemini CLI reads streamable HTTP servers from `~/.gemini/settings.json` via `httpUrl`.
  */
-function writeGeminiConfig(url: string): string | null {
-  const geminiDir = join(homedir(), '.gemini')
+function writeGeminiConfig(url: string, token: string | undefined, homeDir: string): string | null {
+  const geminiDir = join(homeDir, '.gemini')
   const filePath = join(geminiDir, 'settings.json')
 
   try {
@@ -98,7 +130,10 @@ function writeGeminiConfig(url: string): string | null {
     }
 
     if (!settings.mcpServers) settings.mcpServers = {}
-    settings.mcpServers[MCP_SERVER_NAME] = { type: 'http', url }
+    settings.mcpServers[MCP_SERVER_NAME] = {
+      httpUrl: url,
+      headers: getAuthorizationHeaders(token)
+    }
 
     writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8')
     return filePath
@@ -112,8 +147,12 @@ function writeGeminiConfig(url: string): string | null {
  * Writes our MCP server entry into GitHub Copilot CLI config.
  * Copilot CLI reads from `~/.copilot/mcp-config.json` with `type: "http"`.
  */
-function writeCopilotCliConfig(url: string): string | null {
-  const copilotDir = join(homedir(), '.copilot')
+function writeCopilotCliConfig(
+  url: string,
+  token: string | undefined,
+  homeDir: string
+): string | null {
+  const copilotDir = join(homeDir, '.copilot')
   const filePath = join(copilotDir, 'mcp-config.json')
 
   try {
@@ -139,7 +178,12 @@ function writeCopilotCliConfig(url: string): string | null {
       }
     }
 
-    config.mcpServers[MCP_SERVER_NAME] = { type: 'http', url, tools: ['*'] }
+    config.mcpServers[MCP_SERVER_NAME] = {
+      type: 'http',
+      url,
+      tools: ['*'],
+      headers: getAuthorizationHeaders(token)
+    }
 
     writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf-8')
     return filePath
@@ -152,17 +196,21 @@ function writeCopilotCliConfig(url: string): string | null {
 /**
  * Writes MCP server config for all supported CLIs.
  */
-export function writeMcpJsonConfig(url: string, targetDir?: string): string {
-  const mcpJsonPath = writeDotMcpJson(url, targetDir)
+export function writeMcpJsonConfig(
+  url: string,
+  token?: string,
+  homeDir: string = homedir()
+): string {
+  const mcpJsonPath = writeDotMcpJson(url, token, homeDir)
 
   // Also configure Gemini CLI if installed
-  const geminiPath = writeGeminiConfig(url)
+  const geminiPath = writeGeminiConfig(url, token, homeDir)
   if (geminiPath) {
     log.info(`[MCP] Gemini CLI config written to ${geminiPath}`)
   }
 
   // Also configure Copilot CLI if installed
-  const copilotPath = writeCopilotCliConfig(url)
+  const copilotPath = writeCopilotCliConfig(url, token, homeDir)
   if (copilotPath) {
     log.info(`[MCP] Copilot CLI config written to ${copilotPath}`)
   }
@@ -173,11 +221,11 @@ export function writeMcpJsonConfig(url: string, targetDir?: string): string {
 /**
  * Removes our MCP server entry from all config files.
  */
-export function removeMcpJsonConfig(targetDir?: string): boolean {
+export function removeMcpJsonConfig(homeDir: string = homedir()): boolean {
   let removed = false
 
   // Remove from .mcp.json
-  const dir = targetDir || homedir()
+  const dir = homeDir
   const mcpJsonPath = join(dir, '.mcp.json')
   if (existsSync(mcpJsonPath)) {
     try {
@@ -197,7 +245,7 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
   }
 
   // Remove from Gemini CLI settings
-  const geminiPath = join(homedir(), '.gemini', 'settings.json')
+  const geminiPath = join(homeDir, '.gemini', 'settings.json')
   if (existsSync(geminiPath)) {
     try {
       const raw = readFileSync(geminiPath, 'utf-8')
@@ -216,7 +264,7 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
   }
 
   // Remove from Copilot CLI config
-  const copilotConfigPath = join(homedir(), '.copilot', 'mcp-config.json')
+  const copilotConfigPath = join(homeDir, '.copilot', 'mcp-config.json')
   if (existsSync(copilotConfigPath)) {
     try {
       const raw = readFileSync(copilotConfigPath, 'utf-8')
@@ -240,60 +288,89 @@ export function removeMcpJsonConfig(targetDir?: string): boolean {
 /**
  * Checks whether each supported CLI has been configured for MCP.
  */
-export function getMcpConfigStatus(): {
+export function getMcpConfigStatus(
+  token?: string,
+  authRequired = true,
+  homeDir: string = homedir()
+): {
   claudeCode: boolean
   copilotCli: boolean
   geminiCli: boolean
   codexCli: boolean
+  authReady: McpClientAuthReadiness
   configPath: string
 } {
-  const configPath = join(homedir(), '.mcp.json')
+  const configPath = join(homeDir, '.mcp.json')
   let claudeCode = false
   let copilotCli = false
   let geminiCli = false
   let codexCli = false
+  const authReady: McpClientAuthReadiness = {
+    claudeCode: !authRequired,
+    copilotCli: !authRequired,
+    geminiCli: !authRequired,
+    codexCli: !authRequired
+  }
 
   if (existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, 'utf-8')
       const config = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
       claudeCode = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
+      authReady.claudeCode = hasCurrentAuthorization(
+        config?.mcpServers?.[MCP_SERVER_NAME],
+        token,
+        authRequired
+      )
     } catch (error) {
       logConfigDebug('Failed to inspect .mcp.json MCP status', error)
     }
   }
 
-  const copilotConfigPath = join(homedir(), '.copilot', 'mcp-config.json')
+  const copilotConfigPath = join(homeDir, '.copilot', 'mcp-config.json')
   if (existsSync(copilotConfigPath)) {
     try {
       const raw = readFileSync(copilotConfigPath, 'utf-8')
       const config = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
       copilotCli = !!(config && config.mcpServers && config.mcpServers[MCP_SERVER_NAME])
+      authReady.copilotCli = hasCurrentAuthorization(
+        config?.mcpServers?.[MCP_SERVER_NAME],
+        token,
+        authRequired
+      )
     } catch (error) {
       logConfigDebug('Failed to inspect Copilot CLI MCP status', error)
     }
   }
 
-  const geminiPath = join(homedir(), '.gemini', 'settings.json')
+  const geminiPath = join(homeDir, '.gemini', 'settings.json')
   if (existsSync(geminiPath)) {
     try {
       const raw = readFileSync(geminiPath, 'utf-8')
       const settings = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
       geminiCli = !!(settings && settings.mcpServers && settings.mcpServers[MCP_SERVER_NAME])
+      authReady.geminiCli = hasCurrentAuthorization(
+        settings?.mcpServers?.[MCP_SERVER_NAME],
+        token,
+        authRequired
+      )
     } catch (error) {
       logConfigDebug('Failed to inspect Gemini CLI MCP status', error)
     }
   }
 
-  const codexPath = join(homedir(), '.codex', 'config.toml')
+  const codexPath = join(homeDir, '.codex', 'config.toml')
   if (existsSync(codexPath)) {
     try {
       const content = readFileSync(codexPath, 'utf-8')
       codexCli = content.includes(TOML_SECTION_HEADER)
+      authReady.codexCli =
+        !authRequired ||
+        (codexCli && content.includes('bearer_token_env_var = "COMFYUI_ASSET_MANAGER_MCP_TOKEN"'))
     } catch (error) {
       logConfigDebug('Failed to inspect Codex CLI MCP status', error)
     }
   }
 
-  return { claudeCode, copilotCli, geminiCli, codexCli, configPath }
+  return { claudeCode, copilotCli, geminiCli, codexCli, authReady, configPath }
 }

@@ -26,8 +26,12 @@ import {
 } from './constants'
 import { installCrashHandlers } from './crash-handler'
 import { parseIntegerOrFallback } from './utils/number'
+import { getOrCreateMcpAuthConfig } from './services/mcp/auth'
 
 installCrashHandlers(process, log, (code) => app.exit(code))
+
+let shutdownStarted = false
+let shutdownComplete = false
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -107,7 +111,8 @@ app.whenReady().then(async () => {
     const mcpEnabled = settingsRepo.get('mcp_enabled')
     if (mcpEnabled === 'true') {
       const mcpPort = parseIntegerOrFallback(settingsRepo.get('mcp_port'), DEFAULT_MCP_PORT)
-      mcpServerManager.start(mcpPort).catch((err: Error) => {
+      const auth = getOrCreateMcpAuthConfig(settingsRepo)
+      mcpServerManager.start(mcpPort, auth).catch((err: Error) => {
         log.error('[MCP] Auto-start failed:', err.message)
       })
     }
@@ -128,7 +133,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+async function performShutdown(): Promise<void> {
   // Clean up running job state so it can be recovered on next startup
   try {
     if (queueManager.isProcessing && queueManager.currentJobId) {
@@ -145,9 +150,11 @@ app.on('before-quit', () => {
   ptyManager.destroyAll()
 
   // Stop MCP server
-  mcpServerManager.stop().catch((e) => {
+  try {
+    await mcpServerManager.stop()
+  } catch (e) {
     log.warn('[before-quit] MCP server stop failed:', e)
-  })
+  }
 
   // Disconnect from ComfyUI and save database
   try {
@@ -156,5 +163,23 @@ app.on('before-quit', () => {
     // Best-effort disconnect during quit; logging only
     log.debug('[before-quit] ComfyUI disconnect error:', e)
   }
-  closeDatabase()
+
+  try {
+    await closeDatabase()
+  } catch (e) {
+    log.error('[before-quit] Database flush failed:', e)
+  }
+}
+
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return
+
+  event.preventDefault()
+  if (shutdownStarted) return
+  shutdownStarted = true
+
+  void performShutdown().finally(() => {
+    shutdownComplete = true
+    app.quit()
+  })
 })

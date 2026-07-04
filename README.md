@@ -55,16 +55,17 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 - **MCP 서버**: LLM CLI (Copilot, Claude, Gemini, Codex)가 앱 기능을 도구로 호출 가능 (30개 도구)
 - **대량 작업 도구**: 일괄 생성/업데이트, 파일 가져오기/내보내기 (JSON/CSV/MD), 모듈 비교/동기화, 복제, 태그 치환
 - **명시적 MCP 시작**: 설정에서 서버를 켜면 즉시 시작되고 이후 앱 시작 시 자동 실행을 유지. 터미널 탭만으로는 자동 시작되지 않음
-- **안전한 Codex 연결**: 앱은 `~/.codex/config.toml`을 수정하지 않으며, 서버를 시작한 뒤 `codex mcp add comfyui-asset-manager --url http://localhost:39464/mcp`를 한 번 실행해 등록
+- **기본 Bearer 인증**: 신규·기존 설치 모두 256비트 토큰 인증을 사용하며 설정에서 토큰 복사·회전과 클라이언트 설정 갱신 가능
+- **안전한 Codex 연결**: 앱은 `~/.codex/config.toml`을 수정하지 않으며, 토큰 환경 변수를 설정한 뒤 `codex mcp add ... --bearer-token-env-var COMFYUI_ASSET_MANAGER_MCP_TOKEN`으로 등록
 - **설정 파일 무부작용**: MCP 서버 시작·중지는 외부 CLI 설정 파일을 생성하거나 제거하지 않음
-- **로컬 전용 HTTP 표면**: `/mcp`는 loopback origin(`localhost`, `127.0.0.1`)만 허용하고 `/health`는 유지
+- **로컬 전용 HTTP 표면**: `/mcp`는 loopback origin과 올바른 Bearer 토큰을 요구하고 `/health`는 인증 없이 유지
 - **타입 안전 IPC**: main/renderer가 공유 채널과 요청·응답·이벤트 계약을 사용해 채널 오타와 payload 불일치를 컴파일 시점에 검출
 - **내장 터미널**: xterm.js 기반, 멀티 탭, 전용 페이지 + 하단 패널 모드
 
 ### ⚙️ 설정
 
 - ComfyUI 서버 주소·포트, 출력 디렉토리/패턴
-- 다크/라이트 테마, 한국어/영어 UI, MCP 서버 포트
+- 다크/라이트 테마, 한국어/영어 UI, MCP 서버 포트·인증 토큰
 - 실행 중 언어를 바꾸면 갤러리 정렬/평점 필터와 설정 테마 옵션 라벨도 즉시 갱신
 
 ---
@@ -254,7 +255,7 @@ src/
 - `local-asset://`는 현재 출력 디렉터리 내부 파일과 DB에 등록된 갤러리 이미지 경로만 허용, 경로 순회·realpath escape 차단
 - 워크플로우 가져오기와 갤러리 파일 액션(클립보드/탐색기)은 절대 경로 검증 후 같은 허용 규칙을 재사용
 - 갤러리 조회 IPC 검증 + SQL `ORDER BY` 화이트리스트로 정렬 입력 하드닝
-- MCP HTTP 표면은 loopback origin만 허용하며, Settings opt-in일 때만 자동 시작
+- MCP HTTP 표면은 loopback origin과 기본 Bearer 인증을 요구하며, Settings opt-in일 때만 자동 시작
 - 구조화 로깅 (`electron-log`, 5MB 로테이션)
 
 ### 테스트 현황

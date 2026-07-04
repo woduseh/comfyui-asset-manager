@@ -22,6 +22,8 @@ vi.mock('../../../../src/main/services/tags', () => ({
 
 import { mcpServerManager } from '../../../../src/main/services/mcp/index'
 
+const TEST_AUTH = { required: true, token: 'a'.repeat(64) }
+
 async function getAvailablePort(): Promise<number> {
   const server = http.createServer()
   await new Promise<void>((resolve, reject) => {
@@ -160,5 +162,36 @@ describe('McpServerManager origin policy', () => {
 
     expect(configMocks.writeMcpJsonConfig).not.toHaveBeenCalled()
     expect(configMocks.removeMcpJsonConfig).not.toHaveBeenCalled()
+  })
+
+  it('requires the configured bearer token for MCP requests', async () => {
+    const port = await getAvailablePort()
+    await mcpServerManager.start(port, TEST_AUTH)
+
+    const missing = await request(port, '/mcp')
+    const wrong = await request(port, '/mcp', {
+      headers: { Authorization: `Bearer ${'b'.repeat(64)}` }
+    })
+    const authorized = await request(port, '/mcp', {
+      headers: { Authorization: `Bearer ${TEST_AUTH.token}` }
+    })
+
+    expect(missing.statusCode).toBe(401)
+    expect(missing.headers['www-authenticate']).toBe('Bearer')
+    expect(wrong.statusCode).toBe(401)
+    expect(authorized.statusCode).toBe(400)
+  })
+
+  it('allows unauthenticated CORS preflight and exposes the authorization header', async () => {
+    const port = await getAvailablePort()
+    await mcpServerManager.start(port, TEST_AUTH)
+
+    const response = await request(port, '/mcp', {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:3000' }
+    })
+
+    expect(response.statusCode).toBe(204)
+    expect(response.headers['access-control-allow-headers']).toContain('Authorization')
   })
 })

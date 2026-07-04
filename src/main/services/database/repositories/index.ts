@@ -1,4 +1,4 @@
-import { getDatabase, saveDatabase } from '../index'
+import { getDatabase, saveDatabase, withTransaction } from '../index'
 import { v4 as uuidv4 } from 'uuid'
 import log from '../../../logger'
 
@@ -37,6 +37,8 @@ interface SettingRecord {
   value: string
 }
 
+const PRIVATE_SETTINGS_KEYS = new Set(['mcp_auth_token'])
+
 export class SettingsRepository {
   get(key: string): string | null {
     const db = getDatabase()
@@ -63,7 +65,9 @@ export class SettingsRepository {
     const stmt = db.prepare('SELECT key, value FROM settings')
     while (stmt.step()) {
       const row = stmt.getAsObject() as SettingRecord
-      result[row.key] = row.value
+      if (!PRIVATE_SETTINGS_KEYS.has(row.key)) {
+        result[row.key] = row.value
+      }
     }
     stmt.free()
     return result
@@ -295,8 +299,7 @@ export class ModuleRepository {
 
     const newModuleId = uuidv4()
 
-    db.run('BEGIN TRANSACTION')
-    try {
+    return withTransaction(() => {
       db.run(
         `INSERT INTO prompt_modules (id, name, type, description, parent_id)
          VALUES (?, ?, ?, ?, ?)`,
@@ -339,13 +342,8 @@ export class ModuleRepository {
         )
       }
 
-      db.run('COMMIT')
-      saveDatabase()
       return { newModuleId, itemsCopied: sourceItems.length }
-    } catch (e) {
-      db.run('ROLLBACK')
-      throw e
-    }
+    })
   }
 }
 
@@ -444,17 +442,11 @@ export class ModuleItemRepository {
 
   reorder(itemIds: string[]): void {
     const db = getDatabase()
-    db.run('BEGIN TRANSACTION')
-    try {
+    withTransaction(() => {
       for (let i = 0; i < itemIds.length; i++) {
         db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
       }
-      db.run('COMMIT')
-      saveDatabase()
-    } catch (error) {
-      db.run('ROLLBACK')
-      throw error
-    }
+    })
   }
 
   bulkUpdate(updates: Array<{ id: string; data: Partial<Record<string, unknown>> }>): {
@@ -466,8 +458,7 @@ export class ModuleItemRepository {
     const errors: Array<{ id: string; error: string }> = []
     let succeeded = 0
 
-    db.run('BEGIN TRANSACTION')
-    try {
+    withTransaction(() => {
       for (const update of updates) {
         try {
           const sanitized = sanitizeUpdateFields(update.data, ALLOWED_UPDATE_FIELDS.module_items)
@@ -489,12 +480,7 @@ export class ModuleItemRepository {
           log.warn(`bulkUpdate failed for item ${update.id}: ${msg}`)
         }
       }
-      db.run('COMMIT')
-      saveDatabase()
-    } catch (e) {
-      db.run('ROLLBACK')
-      throw e
-    }
+    })
 
     return { succeeded, failed: errors.length, errors }
   }
@@ -521,8 +507,7 @@ export class ModuleItemRepository {
     const errors: Array<{ index: number; error: string }> = []
     let succeeded = 0
 
-    db.run('BEGIN TRANSACTION')
-    try {
+    withTransaction(() => {
       for (let i = 0; i < items.length; i++) {
         try {
           const item = items[i]
@@ -551,12 +536,7 @@ export class ModuleItemRepository {
           log.warn(`bulkCreate failed for item at index ${i}: ${msg}`)
         }
       }
-      db.run('COMMIT')
-      saveDatabase()
-    } catch (e) {
-      db.run('ROLLBACK')
-      throw e
-    }
+    })
 
     return { ids, succeeded, failed: errors.length, errors }
   }
@@ -714,17 +694,11 @@ export class BatchJobRepository {
 
   reorder(jobIds: string[]): void {
     const db = getDatabase()
-    db.run('BEGIN TRANSACTION')
-    try {
+    withTransaction(() => {
       for (let i = 0; i < jobIds.length; i++) {
         db.run('UPDATE batch_jobs SET sort_order = ? WHERE id = ?', [i, jobIds[i]])
       }
-      db.run('COMMIT')
-      saveDatabase()
-    } catch (error) {
-      db.run('ROLLBACK')
-      throw error
-    }
+    })
   }
 }
 
@@ -779,8 +753,7 @@ export class BatchTaskRepository {
     }>
   ): void {
     const db = getDatabase()
-    db.run('BEGIN TRANSACTION')
-    try {
+    withTransaction(() => {
       for (const task of tasks) {
         const id = uuidv4()
         db.run(
@@ -789,12 +762,7 @@ export class BatchTaskRepository {
           [id, task.job_id, task.prompt_data, task.sort_order, task.metadata]
         )
       }
-      db.run('COMMIT')
-    } catch (e) {
-      db.run('ROLLBACK')
-      throw e
-    }
-    saveDatabase()
+    })
   }
 
   updateStatus(

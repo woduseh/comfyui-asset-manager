@@ -24,6 +24,7 @@ import { useTerminalStore } from '@renderer/stores/terminal.store'
 import { parseIntegerOrFallback } from '@renderer/utils/number'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
 import { buildSettingsThemeOptions } from '@renderer/utils/view-labels'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
@@ -45,8 +46,24 @@ const hasAnyManagedCliConfig = computed(
     terminalStore.mcpConfigStatus.copilotCli ||
     terminalStore.mcpConfigStatus.geminiCli
 )
+const hasOutdatedMcpAuthConfig = computed(() => {
+  if (!terminalStore.mcpAuthStatus.required) return false
+  const status = terminalStore.mcpConfigStatus
+  return (
+    (status.claudeCode && !status.authReady.claudeCode) ||
+    (status.copilotCli && !status.authReady.copilotCli) ||
+    (status.geminiCli && !status.authReady.geminiCli) ||
+    (status.codexCli && !status.authReady.codexCli)
+  )
+})
+const mcpTokenEnvironmentVariable = 'COMFYUI_ASSET_MANAGER_MCP_TOKEN'
 const codexAddCommand = computed(
-  () => `codex mcp add comfyui-asset-manager --url ${terminalStore.mcpStatus.url}`
+  () =>
+    `codex mcp add comfyui-asset-manager --url ${terminalStore.mcpStatus.url} --bearer-token-env-var ${mcpTokenEnvironmentVariable}`
+)
+const codexTokenCommand = computed(
+  () =>
+    `[Environment]::SetEnvironmentVariable('${mcpTokenEnvironmentVariable}','${terminalStore.mcpAuthStatus.token}','User')`
 )
 const codexRemoveCommand = 'codex mcp remove comfyui-asset-manager'
 
@@ -189,6 +206,30 @@ async function handleMcpPortChange(value: number | null): Promise<void> {
 
 function handleCopyMcpUrl(): void {
   navigator.clipboard.writeText(terminalStore.mcpStatus.url)
+}
+
+async function handleMcpAuthRequiredChange(required: boolean): Promise<void> {
+  try {
+    await terminalStore.setMcpAuthRequired(required)
+    settingsStore.settings.mcp_auth_required = required ? 'true' : 'false'
+  } catch (error) {
+    message.error(t('settings.mcp.auth.updateFailed', { error: getErrorMessage(error) }))
+    await terminalStore.fetchMcpAuthStatus()
+  }
+}
+
+async function handleCopyMcpToken(): Promise<void> {
+  await navigator.clipboard.writeText(terminalStore.mcpAuthStatus.token)
+  message.success(t('settings.mcp.auth.tokenCopied'))
+}
+
+async function handleRotateMcpToken(): Promise<void> {
+  try {
+    await terminalStore.rotateMcpAuthToken()
+    message.success(t('settings.mcp.auth.rotated'))
+  } catch (error) {
+    message.error(t('settings.mcp.auth.rotateFailed', { error: getErrorMessage(error) }))
+  }
 }
 
 async function handleSetupCli(): Promise<void> {
@@ -340,6 +381,38 @@ onMounted(async () => {
             @update:value="handleMcpPortChange"
           />
         </NFormItem>
+        <NFormItem :label="t('settings.mcp.auth.required')">
+          <NSwitch
+            :value="terminalStore.mcpAuthStatus.required"
+            @update:value="handleMcpAuthRequiredChange"
+          />
+        </NFormItem>
+        <NFormItem
+          v-if="terminalStore.mcpAuthStatus.required"
+          :label="t('settings.mcp.auth.token')"
+        >
+          <NSpace vertical style="width: 100%">
+            <NInput
+              :value="terminalStore.mcpAuthStatus.token"
+              type="password"
+              show-password-on="click"
+              readonly
+            />
+            <NSpace :size="8">
+              <NButton size="small" @click="handleCopyMcpToken">
+                {{ t('settings.mcp.auth.copyToken') }}
+              </NButton>
+              <ConfirmActionButton
+                size="small"
+                type="warning"
+                quaternary
+                :label="t('settings.mcp.auth.rotate')"
+                :confirm-text="t('settings.mcp.auth.rotateConfirm')"
+                @confirm="handleRotateMcpToken"
+              />
+            </NSpace>
+          </NSpace>
+        </NFormItem>
         <NFormItem :label="t('settings.mcp.status')">
           <NSpace align="center" :size="8">
             <NTag
@@ -375,9 +448,19 @@ onMounted(async () => {
       </p>
 
       <NSpace vertical :size="12">
+        <NAlert
+          v-if="hasOutdatedMcpAuthConfig"
+          type="warning"
+          :title="t('settings.mcp.auth.configUpdateTitle')"
+          :bordered="false"
+        >
+          {{ t('settings.mcp.auth.configUpdateDescription') }}
+        </NAlert>
+
         <!-- Environment Variables -->
         <NAlert type="info" :title="t('settings.mcp.cliSetup.envTitle')" :bordered="false">
-          <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>
+          <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>,
+          <code>{{ '$' + mcpTokenEnvironmentVariable }}</code>
           <br />
           <span style="font-size: 12px; color: var(--n-text-color3)">
             {{ t('settings.mcp.cliSetup.envDescription') }}
@@ -405,6 +488,19 @@ onMounted(async () => {
           </div>
           <code class="codex-setup__command">{{ codexAddCommand }}</code>
           <NSpace :size="8" :wrap="true">
+            <NButton
+              v-if="terminalStore.mcpAuthStatus.required"
+              size="small"
+              @click="
+                handleCopyCodexCommand(
+                  codexTokenCommand,
+                  'settings.mcp.auth.codexTokenCommandCopied'
+                )
+              "
+            >
+              <template #icon><NIcon :component="CopyOutline" /></template>
+              {{ t('settings.mcp.auth.copyCodexTokenCommand') }}
+            </NButton>
             <NButton
               size="small"
               @click="

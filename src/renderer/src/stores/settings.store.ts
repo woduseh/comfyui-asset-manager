@@ -27,7 +27,8 @@ const defaultSettings: AppSettings = {
   max_retries: '3',
   auto_save_interval: '5000',
   mcp_enabled: 'false',
-  mcp_port: '39464'
+  mcp_port: '39464',
+  mcp_auth_required: 'true'
 }
 
 export const useSettingsStore = defineStore('settings', () => {

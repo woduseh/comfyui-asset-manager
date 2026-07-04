@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { invokeIpc } from '@renderer/utils/ipc'
+import type { McpAuthStatus, McpConfigStatus, McpStatus } from '@shared/ipc-contract'
 
 export interface TerminalTab {
   id: string
@@ -13,22 +14,27 @@ export const useTerminalStore = defineStore('terminal', () => {
   const activeTabId = ref<string | null>(null)
   const panelVisible = ref(false)
   const panelHeight = ref(300)
-  const mcpStatus = ref<{ isRunning: boolean; port: number; url: string }>({
+  const mcpStatus = ref<McpStatus>({
     isRunning: false,
     port: 39464,
-    url: 'http://localhost:39464/mcp'
+    url: 'http://localhost:39464/mcp',
+    authRequired: true
   })
-  const mcpConfigStatus = ref<{
-    claudeCode: boolean
-    copilotCli: boolean
-    geminiCli: boolean
-    codexCli: boolean
-    configPath: string
-  }>({
+  const mcpAuthStatus = ref<McpAuthStatus>({
+    required: true,
+    token: ''
+  })
+  const mcpConfigStatus = ref<McpConfigStatus>({
     claudeCode: false,
     copilotCli: false,
     geminiCli: false,
     codexCli: false,
+    authReady: {
+      claudeCode: false,
+      copilotCli: false,
+      geminiCli: false,
+      codexCli: false
+    },
     configPath: ''
   })
 
@@ -80,7 +86,12 @@ export const useTerminalStore = defineStore('terminal', () => {
   async function fetchMcpStatus(): Promise<void> {
     const status = await invokeIpc(IPC_CHANNELS.MCP_STATUS)
     mcpStatus.value = status
+    await fetchMcpAuthStatus()
     await fetchMcpConfigStatus()
+  }
+
+  async function fetchMcpAuthStatus(): Promise<void> {
+    mcpAuthStatus.value = await invokeIpc(IPC_CHANNELS.MCP_AUTH_STATUS)
   }
 
   async function fetchMcpConfigStatus(): Promise<void> {
@@ -93,7 +104,13 @@ export const useTerminalStore = defineStore('terminal', () => {
   ): Promise<{ success: boolean; url?: string; error?: string }> {
     const result = await invokeIpc(IPC_CHANNELS.MCP_START, { port })
     if (result.success) {
-      mcpStatus.value = { isRunning: true, port: result.port, url: result.url }
+      mcpStatus.value = {
+        isRunning: true,
+        port: result.port,
+        url: result.url,
+        authRequired: mcpAuthStatus.value.required
+      }
+      await fetchMcpAuthStatus()
       await fetchMcpConfigStatus()
     }
     return result
@@ -105,18 +122,31 @@ export const useTerminalStore = defineStore('terminal', () => {
     await fetchMcpConfigStatus()
   }
 
-  async function setupMcpForCli(
-    targetDir?: string
-  ): Promise<{ success: boolean; configPath?: string; error?: string }> {
-    const result = await invokeIpc(IPC_CHANNELS.MCP_SETUP_CLI, { targetDir })
+  async function setMcpAuthRequired(required: boolean): Promise<void> {
+    mcpAuthStatus.value = await invokeIpc(IPC_CHANNELS.MCP_AUTH_SET_REQUIRED, { required })
+    mcpStatus.value = { ...mcpStatus.value, authRequired: required }
+    await fetchMcpConfigStatus()
+  }
+
+  async function rotateMcpAuthToken(): Promise<void> {
+    mcpAuthStatus.value = await invokeIpc(IPC_CHANNELS.MCP_AUTH_ROTATE)
+    await fetchMcpConfigStatus()
+  }
+
+  async function setupMcpForCli(): Promise<{
+    success: boolean
+    configPath?: string
+    error?: string
+  }> {
+    const result = await invokeIpc(IPC_CHANNELS.MCP_SETUP_CLI)
     if (result.success) {
       await fetchMcpConfigStatus()
     }
     return result
   }
 
-  async function removeMcpFromCli(targetDir?: string): Promise<{ success: boolean }> {
-    const result = await invokeIpc(IPC_CHANNELS.MCP_REMOVE_CLI, { targetDir })
+  async function removeMcpFromCli(): Promise<{ success: boolean }> {
+    const result = await invokeIpc(IPC_CHANNELS.MCP_REMOVE_CLI)
     await fetchMcpConfigStatus()
     return result
   }
@@ -127,6 +157,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     panelVisible,
     panelHeight,
     mcpStatus,
+    mcpAuthStatus,
     mcpConfigStatus,
     createTab,
     closeTab,
@@ -135,9 +166,12 @@ export const useTerminalStore = defineStore('terminal', () => {
     showPanel,
     hidePanel,
     fetchMcpStatus,
+    fetchMcpAuthStatus,
     fetchMcpConfigStatus,
     startMcpServer,
     stopMcpServer,
+    setMcpAuthRequired,
+    rotateMcpAuthToken,
     setupMcpForCli,
     removeMcpFromCli
   }

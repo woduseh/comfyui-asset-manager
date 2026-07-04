@@ -16,6 +16,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'auto_save_interval',
   'mcp_enabled',
   'mcp_port',
+  'mcp_auth_required',
   'batch.maxRetries',
   'output.directory'
 ])

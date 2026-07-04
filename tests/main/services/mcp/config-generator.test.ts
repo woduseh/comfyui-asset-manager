@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const tempDirs: string[] = []
+const TEST_TOKEN = 'a'.repeat(64)
 
 function createTempHome(): string {
   const dir = mkdtempSync(join(tmpdir(), 'comfyui-asset-manager-mcp-'))
@@ -79,14 +80,16 @@ describe('writeMcpJsonConfig', () => {
     const homeDir = createTempHome()
     const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
 
-    const filePath = writeMcpJsonConfig('http://127.0.0.1:39464/mcp', homeDir)
+    const filePath = writeMcpJsonConfig('http://127.0.0.1:39464/mcp', TEST_TOKEN, homeDir)
 
     expect(filePath).toBe(join(homeDir, '.mcp.json'))
     expect(existsSync(filePath)).toBe(true)
     expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({
       mcpServers: {
         'comfyui-asset-manager': {
-          url: 'http://127.0.0.1:39464/mcp'
+          type: 'http',
+          url: 'http://127.0.0.1:39464/mcp',
+          headers: { Authorization: `Bearer ${TEST_TOKEN}` }
         }
       }
     })
@@ -110,12 +113,16 @@ describe('writeMcpJsonConfig', () => {
     )
 
     const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
-    writeMcpJsonConfig('http://localhost:39464/mcp', homeDir)
+    writeMcpJsonConfig('http://localhost:39464/mcp', TEST_TOKEN, homeDir)
 
     expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({
       mcpServers: {
         existing: { url: 'https://example.com/mcp' },
-        'comfyui-asset-manager': { url: 'http://localhost:39464/mcp' }
+        'comfyui-asset-manager': {
+          type: 'http',
+          url: 'http://localhost:39464/mcp',
+          headers: { Authorization: `Bearer ${TEST_TOKEN}` }
+        }
       }
     })
   })
@@ -129,9 +136,32 @@ describe('writeMcpJsonConfig', () => {
     writeFileSync(codexPath, original, 'utf-8')
 
     const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
-    writeMcpJsonConfig('http://127.0.0.1:39464/mcp', homeDir)
+    writeMcpJsonConfig('http://127.0.0.1:39464/mcp', TEST_TOKEN, homeDir)
 
     expect(readFileSync(codexPath, 'utf-8')).toBe(original)
+  })
+
+  it('writes authenticated Gemini and Copilot HTTP configurations', async () => {
+    const homeDir = createTempHome()
+    mkdirSync(join(homeDir, '.gemini'))
+    mkdirSync(join(homeDir, '.copilot'))
+    const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+    writeMcpJsonConfig('http://127.0.0.1:39464/mcp', TEST_TOKEN, homeDir)
+
+    const gemini = JSON.parse(readFileSync(join(homeDir, '.gemini', 'settings.json'), 'utf-8'))
+    expect(gemini.mcpServers['comfyui-asset-manager']).toEqual({
+      httpUrl: 'http://127.0.0.1:39464/mcp',
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` }
+    })
+
+    const copilot = JSON.parse(readFileSync(join(homeDir, '.copilot', 'mcp-config.json'), 'utf-8'))
+    expect(copilot.mcpServers['comfyui-asset-manager']).toEqual({
+      type: 'http',
+      url: 'http://127.0.0.1:39464/mcp',
+      tools: ['*'],
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` }
+    })
   })
 })
 
@@ -194,5 +224,33 @@ describe('removeMcpJsonConfig', () => {
 
     expect(removeMcpJsonConfig(homeDir)).toBe(false)
     expect(readFileSync(codexPath, 'utf-8')).toBe(original)
+  })
+})
+
+describe('getMcpConfigStatus', () => {
+  it('reports whether configured clients carry the current authentication token', async () => {
+    const homeDir = createTempHome()
+    const codexDir = join(homeDir, '.codex')
+    mkdirSync(codexDir)
+    writeFileSync(
+      join(codexDir, 'config.toml'),
+      [
+        '[mcp_servers."comfyui-asset-manager"]',
+        'url = "http://127.0.0.1:39464/mcp"',
+        'bearer_token_env_var = "COMFYUI_ASSET_MANAGER_MCP_TOKEN"'
+      ].join('\n'),
+      'utf-8'
+    )
+    const { getMcpConfigStatus, writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+    writeMcpJsonConfig('http://127.0.0.1:39464/mcp', TEST_TOKEN, homeDir)
+
+    const current = getMcpConfigStatus(TEST_TOKEN, true, homeDir)
+    const rotated = getMcpConfigStatus('b'.repeat(64), true, homeDir)
+
+    expect(current.claudeCode).toBe(true)
+    expect(current.authReady.claudeCode).toBe(true)
+    expect(current.authReady.codexCli).toBe(true)
+    expect(rotated.authReady.claudeCode).toBe(false)
+    expect(rotated.authReady.codexCli).toBe(true)
   })
 })

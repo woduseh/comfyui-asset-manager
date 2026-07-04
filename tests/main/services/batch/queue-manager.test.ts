@@ -15,7 +15,18 @@ const electronMocks = vi.hoisted(() => ({
 vi.mock('../../../../src/main/services/database/index', () => ({
   getDatabase: () => mockDb,
   saveDatabase: databaseMocks.saveDatabase,
-  setBatchMode: databaseMocks.setBatchMode
+  setBatchMode: databaseMocks.setBatchMode,
+  withTransaction: <T>(fn: () => T): T => {
+    mockDb.run('BEGIN TRANSACTION')
+    try {
+      const result = fn()
+      mockDb.run('COMMIT')
+      return result
+    } catch (error) {
+      mockDb.run('ROLLBACK')
+      throw error
+    }
+  }
 }))
 
 vi.mock('electron', () => ({

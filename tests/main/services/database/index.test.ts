@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, promises as fsPromises } from 'fs'
 import { tmpdir } from 'os'
-import { join, resolve } from 'path'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'path'
 
 const electronState = vi.hoisted(() => ({ userDataPath: '' }))
 
@@ -48,7 +48,13 @@ afterEach(async () => {
 
   const resolvedDirectory = resolve(testDirectory)
   const resolvedTempRoot = resolve(tmpdir())
-  if (!resolvedDirectory.startsWith(`${resolvedTempRoot}\\`)) {
+  const relativeDirectory = relative(resolvedTempRoot, resolvedDirectory)
+  const isOutsideTempRoot =
+    relativeDirectory === '' ||
+    relativeDirectory === '..' ||
+    relativeDirectory.startsWith(`..${sep}`) ||
+    isAbsolute(relativeDirectory)
+  if (isOutsideTempRoot || !basename(resolvedDirectory).startsWith('comfyui-asset-manager-db-')) {
     throw new Error(`Refusing to remove non-temporary test directory: ${resolvedDirectory}`)
   }
   rmSync(resolvedDirectory, { recursive: true, force: true })

@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
   CHARACTER_DELETE: 'character:delete',
 
   BATCH_CREATE: 'batch:create',
+  BATCH_UPDATE_DRAFT: 'batch:update-draft',
   BATCH_LIST: 'batch:list',
   BATCH_GET: 'batch:get',
   BATCH_START: 'batch:start',

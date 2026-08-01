@@ -135,19 +135,15 @@ const columns = computed<DataTableColumns<WorkflowItem>>(() => [
 ])
 
 async function handleImport(): Promise<void> {
-  const filePath = await invokeIpc(IPC_CHANNELS.DIALOG_OPEN_FILE, {
-    filters: [{ name: 'JSON', extensions: ['json'] }]
-  })
-  if (filePath) {
-    const result = await invokeIpc(IPC_CHANNELS.WORKFLOW_IMPORT, { filePath })
-    if ('error' in result) {
-      message.error(result.error)
-    } else {
-      message.success(
-        t('workflow.msg.importSuccess', { name: result.name, count: result.variableCount })
-      )
-      await workflowStore.loadWorkflows()
-    }
+  const result = await invokeIpc(IPC_CHANNELS.WORKFLOW_IMPORT)
+  if (!result) return
+  if ('error' in result) {
+    message.error(result.error)
+  } else {
+    message.success(
+      t('workflow.msg.importSuccess', { name: result.name, count: result.variableCount })
+    )
+    await workflowStore.loadWorkflows()
   }
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "comfyui-asset-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "ComfyUI 대량 이미지 생성 및 자산 관리 도구",
   "main": "./out/main/index.js",
   "author": "ComfyUI Asset Manager",
@@ -29,6 +29,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "verify:release": "node scripts/verify-release.mjs",
     "prepare": "husky"
   },
   "dependencies": {

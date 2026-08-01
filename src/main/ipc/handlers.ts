@@ -1,6 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, shell, clipboard, nativeImage } from 'electron'
-import { readFileSync, existsSync } from 'fs'
-import { basename } from 'path'
+import { existsSync } from 'fs'
 import { IPC_CHANNELS } from './channels'
 import log from '../logger'
 import {
@@ -11,8 +10,19 @@ import {
   validateId,
   validateRating,
   validateStringArray,
-  validatePositiveInt,
-  validateAbsolutePath
+  validateAbsolutePath,
+  validateBoolean,
+  validateCharacterData,
+  validateIntegerRange,
+  validateModuleData,
+  validateModuleItemData,
+  validateModuleType,
+  validateTerminalDimensions,
+  validateTerminalInput,
+  validateWorkflowCategory,
+  validateWorkflowRole,
+  validateWorkflowUpdate,
+  validateWorkflowVariables
 } from './validators'
 import {
   SettingsRepository,
@@ -20,21 +30,12 @@ import {
   ModuleRepository,
   ModuleItemRepository,
   CharacterRepository,
-  BatchJobRepository,
-  BatchTaskRepository,
   GeneratedImageRepository
 } from '../services/database/repositories'
 import { comfyuiManager } from '../services/comfyui/manager'
-import { parseWorkflow } from '../services/comfyui/workflow-parser'
-import { previewPrompt, buildPrompt } from '../services/prompt/composition-engine'
-import { calculateTaskCount, countTotalTasksFromData } from '../services/batch/task-generator'
-import type {
-  BatchConfig,
-  BatchModuleSelection,
-  ModuleDataSnapshot
-} from '../services/batch/task-generator'
-import { queueManager } from '../services/batch/queue-manager'
-import { getDatabase } from '../services/database'
+import { importWorkflowFromSelectedPath } from '../services/comfyui/workflow-import'
+import { previewPrompt } from '../services/prompt/composition-engine'
+import { getDatabase, withTransaction } from '../services/database'
 import { ptyManager } from '../services/terminal/pty-manager'
 import { mcpServerManager } from '../services/mcp'
 import {
@@ -49,14 +50,13 @@ import {
 } from '../services/mcp/auth'
 import { isJsonObject, safeJsonParse } from '../utils/safe-json'
 import { resolveDirectAssetPathFromSettings } from '../services/assets/local-asset'
+import { registerBatchHandlers } from './handlers/batch'
 
 const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
 const moduleRepo = new ModuleRepository()
 const moduleItemRepo = new ModuleItemRepository()
 const characterRepo = new CharacterRepository()
-const batchJobRepo = new BatchJobRepository()
-const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
 
 interface ModuleImportPayload {
@@ -115,6 +115,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.COMFYUI_CONNECT,
     async (_event, { host, port }: { host: string; port: number }) => {
+      validateString(host, 255)
+      validateIntegerRange(port, 1, 65_535, 'ComfyUI port')
       const success = await comfyuiManager.connect(host, port)
       return success
     }
@@ -154,74 +156,16 @@ export function registerIpcHandlers(): void {
   })
 
   // === Workflow Import ===
-  ipcMain.handle(IPC_CHANNELS.WORKFLOW_IMPORT, (_event, { filePath }: { filePath: string }) => {
+  ipcMain.handle(IPC_CHANNELS.WORKFLOW_IMPORT, async () => {
     try {
-      const validatedPath = validateAbsolutePath(filePath, ['.json'])
-      if (!existsSync(validatedPath)) {
-        throw new Error('Workflow file not found')
-      }
-
-      const content = readFileSync(validatedPath, 'utf-8')
-      const workflowJson = safeJsonParse<Record<string, unknown>>(content, {
-        context: 'Workflow file',
-        validate: isJsonObject,
-        invalidShapeMessage: 'Workflow file must contain a JSON object'
+      const win = BrowserWindow.getFocusedWindow()
+      if (!win) return null
+      const selection = await dialog.showOpenDialog(win, {
+        properties: ['openFile'],
+        filters: [{ name: 'JSON Files', extensions: ['json'] }]
       })
-      if (!workflowJson.ok) {
-        throw new Error(workflowJson.error)
-      }
-
-      const json = workflowJson.value
-      const fileName = basename(validatedPath, '.json')
-
-      // Detect if this is UI format or API format
-      let apiJson: string
-      let uiJson: string | null = null
-
-      if (json.nodes && json.links) {
-        // This is UI format - we'd need conversion, store as-is for now
-        // TODO: Implement UI→API format conversion
-        uiJson = content
-        throw new Error(
-          'UI format workflow detected. Please export in API format (Save API Format).'
-        )
-      } else {
-        // This is API format
-        apiJson = content
-      }
-
-      const parsed = parseWorkflow(apiJson, fileName)
-
-      // Save to database
-      const workflowId = workflowRepo.create({
-        name: parsed.name,
-        description: `Imported from ${basename(validatedPath)}`,
-        category: parsed.suggestedCategory,
-        api_json: apiJson,
-        ui_json: uiJson || undefined,
-        variables: JSON.stringify(parsed.variables)
-      })
-
-      // Save extracted variables
-      workflowRepo.setVariables(
-        workflowId,
-        parsed.variables.map((v) => ({
-          node_id: v.nodeId,
-          field_name: v.fieldName,
-          display_name: v.displayName,
-          var_type: v.varType,
-          default_val: v.currentValue !== undefined ? String(v.currentValue) : undefined,
-          description: `${v.nodeType} → ${v.fieldName}`,
-          role: v.role
-        }))
-      )
-
-      return {
-        id: workflowId,
-        name: parsed.name,
-        category: parsed.suggestedCategory,
-        variableCount: parsed.variables.length
-      }
+      if (selection.canceled || selection.filePaths.length === 0) return null
+      return importWorkflowFromSelectedPath(selection.filePaths[0], workflowRepo)
     } catch (error) {
       return { error: (error as Error).message }
     }
@@ -231,6 +175,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_VARIABLES,
     (_event, { workflowId }: { workflowId: string }) => {
+      validateId(workflowId)
       return workflowRepo.getVariables(workflowId)
     }
   )
@@ -254,6 +199,8 @@ export function registerIpcHandlers(): void {
         }>
       }
     ) => {
+      validateId(workflowId)
+      validateWorkflowVariables(variables)
       workflowRepo.setVariables(workflowId, variables)
       return true
     }
@@ -263,6 +210,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE,
     (_event, { variableId, role }: { variableId: string; role: string }) => {
+      validateId(variableId)
+      validateWorkflowRole(role)
       workflowRepo.updateVariableRole(variableId, role)
       return true
     }
@@ -272,6 +221,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_VALUE,
     (_event, { variableId, value }: { variableId: string; value: string }) => {
+      validateId(variableId)
+      validateString(value, 100_000)
       workflowRepo.updateValue(variableId, value)
       return true
     }
@@ -299,14 +250,17 @@ export function registerIpcHandlers(): void {
 
   // Workflows
   ipcMain.handle(IPC_CHANNELS.WORKFLOW_LIST, (_event, args?: { category?: string }) => {
+    if (args?.category !== undefined) validateWorkflowCategory(args.category)
     return workflowRepo.list(args?.category)
   })
 
   ipcMain.handle(IPC_CHANNELS.WORKFLOW_GET, (_event, { id }: { id: string }) => {
+    validateId(id)
     return workflowRepo.get(id)
   })
 
   ipcMain.handle(IPC_CHANNELS.WORKFLOW_DELETE, (_event, { id }: { id: string }) => {
+    validateId(id)
     workflowRepo.delete(id)
     return true
   })
@@ -314,6 +268,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_UPDATE,
     (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
+      validateId(id)
+      validateWorkflowUpdate(data)
       workflowRepo.update(id, data)
       return true
     }
@@ -321,16 +277,19 @@ export function registerIpcHandlers(): void {
 
   // Modules
   ipcMain.handle(IPC_CHANNELS.MODULE_LIST, (_event, args?: { type?: string }) => {
+    if (args?.type !== undefined) validateModuleType(args.type)
     return moduleRepo.list(args?.type)
   })
 
   ipcMain.handle(IPC_CHANNELS.MODULE_GET, (_event, { id }: { id: string }) => {
+    validateId(id)
     return moduleRepo.get(id)
   })
 
   ipcMain.handle(
     IPC_CHANNELS.MODULE_CREATE,
     (_event, data: { name: string; type: string; description?: string; parent_id?: string }) => {
+      validateModuleData(data)
       return moduleRepo.create(data)
     }
   )
@@ -338,18 +297,22 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.MODULE_UPDATE,
     (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
+      validateId(id)
+      validateModuleData(data, true)
       moduleRepo.update(id, data)
       return true
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.MODULE_DELETE, (_event, { id }: { id: string }) => {
+    validateId(id)
     moduleRepo.delete(id)
     return true
   })
 
   // Module Items
   ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_LIST, (_event, { moduleId }: { moduleId: string }) => {
+    validateId(moduleId)
     const items = moduleItemRepo.list(moduleId)
     return items.map((item) => ({
       ...item,
@@ -372,6 +335,7 @@ export function registerIpcHandlers(): void {
         prompt_variants?: Record<string, { prompt: string; negative: string }> | string
       }
     ) => {
+      validateModuleItemData(data)
       const pv = data.prompt_variants
       const serialized = typeof pv === 'string' ? pv : pv ? JSON.stringify(pv) : '{}'
       return moduleItemRepo.create({ ...data, prompt_variants: serialized })
@@ -381,12 +345,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.MODULE_ITEM_UPDATE,
     (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
+      validateId(id)
+      validateModuleItemData(data, true)
       moduleItemRepo.update(id, data)
       return true
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.MODULE_ITEM_DELETE, (_event, { id }: { id: string }) => {
+    validateId(id)
     moduleItemRepo.delete(id)
     return true
   })
@@ -403,6 +370,7 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.CHARACTER_GET, (_event, { id }: { id: string }) => {
+    validateId(id)
     return characterRepo.get(id)
   })
 
@@ -412,6 +380,7 @@ export function registerIpcHandlers(): void {
       _event,
       data: { name: string; base_prompt: string; negative_prompt?: string; metadata?: string }
     ) => {
+      validateCharacterData(data)
       return characterRepo.create(data)
     }
   )
@@ -419,191 +388,20 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.CHARACTER_UPDATE,
     (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
+      validateId(id)
+      validateCharacterData(data, true)
       characterRepo.update(id, data)
       return true
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.CHARACTER_DELETE, (_event, { id }: { id: string }) => {
+    validateId(id)
     characterRepo.delete(id)
     return true
   })
 
-  // Batch
-  ipcMain.handle(IPC_CHANNELS.BATCH_LIST, (_event, args?: { status?: string }) => {
-    return batchJobRepo.list(args?.status)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_GET, (_event, { id }: { id: string }) => {
-    return batchJobRepo.get(id)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_DELETE, (_event, { id }: { id: string }) => {
-    batchJobRepo.delete(id)
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_REORDER, (_event, { jobIds }: { jobIds: string[] }) => {
-    validateStringArray(jobIds)
-    batchJobRepo.reorder(jobIds)
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_DELETE_TASKS, (_event, { jobId }: { jobId: string }) => {
-    batchTaskRepo.deleteByJob(jobId)
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, (_event, { id }: { id: string }) => {
-    if (queueManager.isProcessing) {
-      return { success: false, error: 'Queue is already processing a job' }
-    }
-    // Delete old task rows and reset progress before starting
-    batchTaskRepo.deleteByJob(id)
-    batchJobRepo.updateProgress(id, 0, 0)
-    batchJobRepo.updateStatus(id, 'draft')
-    // Fire-and-forget so renderer gets immediate response
-    queueManager.startJob(id).catch((err) => {
-      log.error('[QueueManager] Rerun job error:', err)
-    })
-    return { success: true }
-  })
-
-  // Batch task count preview
-  ipcMain.handle(
-    IPC_CHANNELS.BATCH_PREVIEW_COUNT,
-    (
-      _event,
-      {
-        moduleSelections,
-        countPerCombination
-      }: { moduleSelections: BatchModuleSelection[]; countPerCombination: number }
-    ) => {
-      return calculateTaskCount(moduleSelections, countPerCombination)
-    }
-  )
-
-  // Create batch job and expand to tasks
-  ipcMain.handle(IPC_CHANNELS.BATCH_CREATE, (_event, config: BatchConfig) => {
-    // Resolve prefix module IDs to composed text
-    if (config.slotMappings) {
-      for (const slot of config.slotMappings) {
-        // Preserve original user-entered prefixText before mutation (for edit/copy restoration)
-        slot.userPrefixText = slot.prefixText || ''
-
-        if (slot.action === 'inject' && slot.prefixModuleIds && slot.prefixModuleIds.length > 0) {
-          const prefixModules = slot.prefixModuleIds
-            .map((moduleId) => {
-              const mod = moduleRepo.get(moduleId)
-              const items = moduleItemRepo.list(moduleId)
-              return {
-                type: (mod?.type as string) || 'custom',
-                items: items
-                  .filter((item) => (item.enabled as number) !== 0)
-                  .map((item) => {
-                    // Resolve prompt variant if slot specifies one
-                    const variants = validatePromptVariants(item.prompt_variants as string)
-                    const variant = slot.promptVariant ? variants[slot.promptVariant] : undefined
-                    return {
-                      prompt: variant?.prompt ?? (item.prompt as string),
-                      negative: variant?.negative ?? ((item.negative as string) || ''),
-                      weight: (item.weight as number) || 1.0,
-                      enabled: true
-                    }
-                  })
-              }
-            })
-            .filter((m) => m.items.length > 0)
-
-          if (prefixModules.length > 0) {
-            const composed = buildPrompt(prefixModules)
-            const composedText =
-              slot.role === 'prompt_positive' ? composed.positive : composed.negative
-            if (composedText.trim()) {
-              slot.prefixText =
-                composedText.trim() + (slot.prefixText?.trim() ? ', ' + slot.prefixText.trim() : '')
-            }
-          }
-        }
-      }
-    }
-
-    // Load module data for snapshot (freeze current state so deleted items won't break job)
-    const moduleData: ModuleDataSnapshot = config.moduleSelections.map((sel) => {
-      const items = moduleItemRepo.list(sel.moduleId)
-      return {
-        moduleId: sel.moduleId,
-        moduleType: sel.moduleType,
-        items: items.map((item) => ({
-          id: item.id as string,
-          name: item.name as string,
-          prompt: item.prompt as string,
-          negative: (item.negative as string) || '',
-          weight: (item.weight as number) || 1.0,
-          enabled: (item.enabled as number) !== 0,
-          prompt_variants: validatePromptVariants(item.prompt_variants as string)
-        }))
-      }
-    })
-
-    // Calculate total task count without generating tasks
-    const totalTasks = countTotalTasksFromData(config, moduleData)
-
-    // Store resolved config (with prefix text already composed) for lazy expansion
-    const resolvedConfigJson = JSON.stringify(config)
-
-    // Create the job with module data snapshot — NO task rows created
-    const jobId = batchJobRepo.create({
-      name: config.name,
-      description: config.description,
-      config: resolvedConfigJson,
-      workflow_id: config.workflowId,
-      total_tasks: totalTasks,
-      pipeline_config: config.pipelineConfig ? JSON.stringify(config.pipelineConfig) : undefined,
-      module_data_snapshot: JSON.stringify(moduleData)
-    })
-
-    return { jobId, totalTasks }
-  })
-
-  // Get tasks for a batch job
-  ipcMain.handle(IPC_CHANNELS.BATCH_TASKS, (_event, { jobId }: { jobId: string }) => {
-    return batchTaskRepo.listByJob(jobId)
-  })
-
-  // Queue execution control — fire-and-forget so renderer gets immediate response
-  ipcMain.handle(IPC_CHANNELS.BATCH_START, (_event, { id }: { id: string }) => {
-    if (queueManager.isProcessing) {
-      return { success: false, error: 'Queue is already processing a job' }
-    }
-    queueManager.startJob(id).catch((err) => {
-      log.error('[QueueManager] Job execution error:', err)
-    })
-    return { success: true }
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_PAUSE, () => {
-    queueManager.pause()
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_RESUME, async () => {
-    await queueManager.resume()
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.BATCH_CANCEL, () => {
-    queueManager.cancel()
-    return true
-  })
-
-  ipcMain.handle(IPC_CHANNELS.QUEUE_STATUS, () => {
-    return {
-      isProcessing: queueManager.isProcessing,
-      isPaused: queueManager.isPaused,
-      currentJobId: queueManager.currentJobId
-    }
-  })
+  registerBatchHandlers()
 
   // Gallery
   ipcMain.handle(IPC_CHANNELS.GALLERY_LIST, (_event, query) => {
@@ -623,6 +421,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.GALLERY_FAVORITE,
     (_event, { id, favorite }: { id: string; favorite: boolean }) => {
+      validateId(id)
+      validateBoolean(favorite)
       imageRepo.updateFavorite(id, favorite)
       return true
     }
@@ -709,6 +509,7 @@ export function registerIpcHandlers(): void {
 
   // Module import/export
   ipcMain.handle(IPC_CHANNELS.MODULE_EXPORT, (_event, { moduleId }: { moduleId: string }) => {
+    validateId(moduleId)
     const mod = moduleRepo.get(moduleId)
     if (!mod) return null
     const items = moduleItemRepo.list(moduleId)
@@ -717,6 +518,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.MODULE_IMPORT_DATA, (_event, { jsonData }: { jsonData: string }) => {
     try {
+      validateString(jsonData, 1_048_576)
       const dataResult = safeJsonParse<ModuleImportPayload>(jsonData, {
         context: 'Module import data',
         validate: isModuleImportPayload,
@@ -727,24 +529,29 @@ export function registerIpcHandlers(): void {
       }
 
       const data = dataResult.value
-      const modId = moduleRepo.create({
-        name: data.module.name + ' (imported)',
-        type: data.module.type,
-        description: data.module.description || '',
-        parent_id: data.module.parent_id || undefined
-      })
-      for (const item of data.items) {
-        moduleItemRepo.create({
-          module_id: modId,
-          name: item.name,
-          prompt: item.prompt,
-          negative: item.negative || '',
-          weight: item.weight ?? 1.0,
-          sort_order: item.sort_order ?? 0,
-          metadata: item.metadata || '{}'
+      validateModuleData(data.module)
+      for (const item of data.items) validateModuleItemData(item, true)
+
+      return withTransaction(() => {
+        const modId = moduleRepo.create({
+          name: data.module.name + ' (imported)',
+          type: data.module.type,
+          description: data.module.description || '',
+          parent_id: data.module.parent_id || undefined
         })
-      }
-      return { id: modId, name: data.module.name }
+        for (const item of data.items) {
+          moduleItemRepo.create({
+            module_id: modId,
+            name: item.name,
+            prompt: item.prompt,
+            negative: item.negative || '',
+            weight: item.weight ?? 1.0,
+            sort_order: item.sort_order ?? 0,
+            metadata: item.metadata || '{}'
+          })
+        }
+        return { id: modId, name: data.module.name }
+      })
     } catch (error) {
       return { error: (error as Error).message }
     }
@@ -839,8 +646,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_CREATE,
     (_event, { cols, rows }: { cols: number; rows: number }) => {
-      validatePositiveInt(cols)
-      validatePositiveInt(rows)
+      validateTerminalDimensions(cols, rows)
       return ptyManager.create(cols, rows)
     }
   )
@@ -848,6 +654,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_INPUT,
     (_event, { id, data }: { id: string; data: string }) => {
+      validateTerminalInput(id, data)
       ptyManager.write(id, data)
       return true
     }
@@ -856,12 +663,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.TERMINAL_RESIZE,
     (_event, { id, cols, rows }: { id: string; cols: number; rows: number }) => {
+      validateId(id)
+      validateTerminalDimensions(cols, rows)
       ptyManager.resize(id, cols, rows)
       return true
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_DESTROY, (_event, { id }: { id: string }) => {
+    validateId(id)
     ptyManager.destroy(id)
     return true
   })
@@ -869,6 +679,7 @@ export function registerIpcHandlers(): void {
   // === MCP Server ===
   ipcMain.handle(IPC_CHANNELS.MCP_START, async (_event, { port }: { port?: number }) => {
     try {
+      if (port !== undefined) validateIntegerRange(port, 1, 65_535, 'MCP port')
       const auth = getOrCreateMcpAuthConfig(settingsRepo)
       await mcpServerManager.start(port, auth)
       return { success: true, url: mcpServerManager.url, port: mcpServerManager.port }

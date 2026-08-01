@@ -8,7 +8,19 @@ import {
   validateStringArray,
   validatePromptVariants,
   validateGalleryQuery,
-  validateAbsolutePath
+  validateAbsolutePath,
+  validateBatchConfig,
+  validateBatchPreviewInput,
+  validateBoolean,
+  validateCharacterData,
+  validateIntegerRange,
+  validateModuleData,
+  validateModuleItemData,
+  validateTerminalDimensions,
+  validateTerminalInput,
+  validateWorkflowRole,
+  validateWorkflowUpdate,
+  validateWorkflowVariables
 } from '../../../src/main/ipc/validators'
 import { resolve } from 'path'
 
@@ -95,6 +107,7 @@ describe('validateRating', () => {
   it('rejects out-of-range ratings', () => {
     expect(() => validateRating(-1)).toThrow('between 0 and 5')
     expect(() => validateRating(6)).toThrow('between 0 and 5')
+    expect(() => validateRating(Number.NaN)).toThrow('between 0 and 5')
   })
 
   it('rejects non-numbers', () => {
@@ -244,6 +257,7 @@ describe('validateGalleryQuery', () => {
     expect(() => validateGalleryQuery({ page: 1, pageSize: 0 })).toThrow(
       'Gallery page size must be a positive integer'
     )
+    expect(() => validateGalleryQuery({ page: 1, pageSize: 501 })).toThrow('maximum value')
   })
 })
 
@@ -260,5 +274,210 @@ describe('validateAbsolutePath', () => {
   it('rejects disallowed extensions', () => {
     const filePath = resolve('tmp', 'workflow.txt')
     expect(() => validateAbsolutePath(filePath, ['.json'])).toThrow('Invalid file extension')
+  })
+})
+
+describe('bounded primitive validators', () => {
+  it('rejects unsafe integers and out-of-range values', () => {
+    expect(() => validatePositiveInt(Number.MAX_SAFE_INTEGER + 1)).toThrow()
+    expect(validateIntegerRange(5, 1, 10)).toBe(5)
+    expect(() => validateIntegerRange(11, 1, 10, 'Count')).toThrow('Count')
+  })
+
+  it('requires actual booleans', () => {
+    expect(validateBoolean(false)).toBe(false)
+    expect(() => validateBoolean('false')).toThrow('Expected boolean')
+  })
+})
+
+describe('entity mutation validators', () => {
+  it('accepts known module fields and rejects unknown fields or module types', () => {
+    expect(() =>
+      validateModuleData({ name: 'Characters', type: 'character', description: '' })
+    ).not.toThrow()
+    expect(() => validateModuleData({ name: 'Bad', type: 'unknown' })).toThrow('module type')
+    expect(() => validateModuleData({ name: 'Bad', type: 'custom', injected: true })).toThrow(
+      'Unknown module'
+    )
+  })
+
+  it('validates workflow updates and roles', () => {
+    expect(() => validateWorkflowUpdate({ name: 'Workflow', category: 'generation' })).not.toThrow()
+    expect(() => validateWorkflowUpdate({ category: 'invalid' })).toThrow('workflow category')
+    expect(validateWorkflowRole('prompt_positive')).toBe('prompt_positive')
+    expect(() => validateWorkflowRole('administrator')).toThrow('workflow role')
+  })
+
+  it('validates module item prompt variants strictly', () => {
+    expect(() =>
+      validateModuleItemData({
+        module_id: 'module-id',
+        name: 'Alice',
+        prompt: '1girl',
+        prompt_variants: { natural: { prompt: 'portrait', negative: '' } }
+      })
+    ).not.toThrow()
+    expect(() =>
+      validateModuleItemData({
+        module_id: 'module-id',
+        name: 'Alice',
+        prompt: '1girl',
+        prompt_variants: '{'
+      })
+    ).toThrow('prompt variants JSON')
+  })
+
+  it('validates character fields and workflow variable arrays', () => {
+    expect(() => validateCharacterData({ name: 'Alice', base_prompt: '1girl' })).not.toThrow()
+    expect(() =>
+      validateCharacterData({ name: 'Alice', base_prompt: '1girl', extra: true })
+    ).toThrow('Unknown character')
+    expect(() =>
+      validateWorkflowVariables([
+        {
+          node_id: '1',
+          field_name: 'text',
+          display_name: 'Prompt',
+          var_type: 'text',
+          role: 'prompt_positive'
+        }
+      ])
+    ).not.toThrow()
+    expect(() =>
+      validateWorkflowVariables([
+        {
+          node_id: '1',
+          field_name: 'text',
+          display_name: 'Prompt',
+          var_type: 'text',
+          role: 'root'
+        }
+      ])
+    ).toThrow('workflow role')
+  })
+})
+
+function makeBatchConfig(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    name: 'Batch',
+    workflowId: 'workflow-id',
+    moduleSelections: [
+      {
+        moduleId: 'module-id',
+        moduleType: 'character',
+        selectedItemIds: ['item-id']
+      }
+    ],
+    countPerCombination: 1,
+    seedMode: 'random',
+    outputFolderPattern: '{job}',
+    fileNamePattern: '{index}',
+    ...overrides
+  }
+}
+
+describe('validateBatchConfig', () => {
+  it('accepts a complete bounded batch config', () => {
+    expect(() =>
+      validateBatchConfig(
+        makeBatchConfig({
+          slotMappings: [
+            {
+              variableId: 'variable-id',
+              nodeId: '1',
+              fieldName: 'text',
+              role: 'prompt_positive',
+              action: 'inject',
+              fixedValue: '',
+              assignedModuleIds: ['module-id'],
+              prefixModuleIds: [],
+              prefixText: '',
+              suffixText: ''
+            }
+          ],
+          variableOverrides: [{ nodeId: '1', fieldName: 'seed', value: '42' }]
+        })
+      )
+    ).not.toThrow()
+  })
+
+  it('rejects malformed seed modes, counts, and nested fields', () => {
+    expect(() => validateBatchConfig(makeBatchConfig({ seedMode: 'repeat' }))).toThrow('seed mode')
+    expect(() => validateBatchConfig(makeBatchConfig({ countPerCombination: 0 }))).toThrow(
+      'count per combination'
+    )
+    expect(() =>
+      validateBatchConfig(
+        makeBatchConfig({
+          moduleSelections: [
+            {
+              moduleId: 'module-id',
+              moduleType: 'character',
+              selectedItemIds: ['item-id'],
+              injected: true
+            }
+          ]
+        })
+      )
+    ).toThrow('Unknown module selection')
+  })
+
+  it('rejects batch configurations above the task safety ceiling', () => {
+    expect(() =>
+      validateBatchConfig(
+        makeBatchConfig({
+          moduleSelections: Array.from({ length: 3 }, (_, index) => ({
+            moduleId: `module-${index}`,
+            moduleType: 'custom',
+            selectedItemIds: Array.from({ length: 101 }, (_, item) => `item-${item}`)
+          }))
+        })
+      )
+    ).toThrow('maximum task count')
+  })
+
+  it('rejects output folder patterns that can escape the configured root', () => {
+    expect(() =>
+      validateBatchConfig(makeBatchConfig({ outputFolderPattern: '../outside' }))
+    ).toThrow(/output folder pattern/i)
+    expect(() =>
+      validateBatchConfig(makeBatchConfig({ outputFolderPattern: 'nested/../../outside' }))
+    ).toThrow(/output folder pattern/i)
+    expect(() =>
+      validateBatchConfig(makeBatchConfig({ outputFolderPattern: 'C:/outside' }))
+    ).toThrow(/output folder pattern/i)
+    expect(() => validateBatchConfig(makeBatchConfig({ outputFolderPattern: '/outside' }))).toThrow(
+      /output folder pattern/i
+    )
+  })
+
+  it('rejects file name patterns that contain path components', () => {
+    expect(() => validateBatchConfig(makeBatchConfig({ fileNamePattern: '../image' }))).toThrow(
+      /filename pattern/i
+    )
+    expect(() => validateBatchConfig(makeBatchConfig({ fileNamePattern: 'nested/image' }))).toThrow(
+      /filename pattern/i
+    )
+    expect(() =>
+      validateBatchConfig(makeBatchConfig({ fileNamePattern: 'nested\\image' }))
+    ).toThrow(/filename pattern/i)
+  })
+
+  it('uses the same bounds for preview inputs', () => {
+    const config = makeBatchConfig()
+    expect(() =>
+      validateBatchPreviewInput(config.moduleSelections, config.countPerCombination)
+    ).not.toThrow()
+    expect(() => validateBatchPreviewInput([], 10_001)).toThrow('count per combination')
+  })
+})
+
+describe('terminal validators', () => {
+  it('bounds terminal dimensions and input', () => {
+    expect(() => validateTerminalDimensions(120, 40)).not.toThrow()
+    expect(() => validateTerminalDimensions(0, 40)).toThrow('Terminal columns')
+    expect(() => validateTerminalDimensions(120, 1001)).toThrow('Terminal rows')
+    expect(() => validateTerminalInput('terminal-id', 'pwd\r')).not.toThrow()
+    expect(() => validateTerminalInput('../terminal', 'pwd\r')).toThrow('Invalid ID')
   })
 })

@@ -15,23 +15,32 @@ BrowserWindow 생성 또는 프로토콜 핸들러 수정 시 반드시 확인:
 ☑ bypassCSP: false
 ☑ nodeIntegration: false (기본값 유지)
 ☑ contextIsolation: true (기본값 유지)
-☑ 커스텀 프로토콜 핸들러에서 경로 검증 (path.normalize + 화이트리스트)
+☑ 커스텀 프로토콜 핸들러에서 realpath + relative 기반 경로 검증
 ☑ 파일 접근 시 허용 디렉토리 외부 요청은 403 반환
+☑ 외부 파일 import는 main process에서 선택과 읽기를 한 번에 완료
 ```
 
 ### 경로 검증 패턴
 
 ```typescript
-// ✅ 올바른 패턴 — local-asset:// 프로토콜 핸들러
-import path from 'path'
+// ✅ 갤러리 자산 — realpath/relative/DB 추적 여부를 함께 검사하는 기존 helper 재사용
+const allowedPath = resolveDirectAssetPathFromSettings(filePath, {
+  settings: settingsRepo,
+  resolverDeps: {
+    isTrackedAssetPath: (paths) => imageRepo.hasTrackedAssetPath(paths)
+  }
+})
+if (!allowedPath) return { success: false, error: 'Forbidden path' }
+```
 
-const normalizedPath = path.normalize(decodedPath)
-const resolvedPath = path.resolve(normalizedPath)
-const allowedDir = settingsRepo.get('output_directory')
-
-if (!resolvedPath.startsWith(allowedDir + path.sep) && resolvedPath !== allowedDir) {
-  return new Response('Forbidden', { status: 403 })
-}
+```typescript
+// ✅ 외부 workflow import — renderer에 경로를 돌려주지 않고 main에서 즉시 소비
+const selection = await dialog.showOpenDialog(window, {
+  properties: ['openFile'],
+  filters: [{ name: 'JSON Files', extensions: ['json'] }]
+})
+if (selection.canceled) return null
+return importWorkflowFromSelectedPath(selection.filePaths[0], workflowRepo)
 ```
 
 ```typescript
@@ -46,33 +55,33 @@ return net.fetch(pathToFileURL(filePath).toString()) // 경로 순회 가능!
 
 새 IPC 핸들러를 추가할 때 따라야 할 단계:
 
-### 2.1 채널 상수 등록
+### 2.1 공유 채널과 계약 등록
 
 ```typescript
-// src/main/ipc/channels.ts
-export const IPC_MY_FEATURE_CREATE = 'my-feature:create'
-export const IPC_MY_FEATURE_UPDATE = 'my-feature:update'
-export const IPC_MY_FEATURE_DELETE = 'my-feature:delete'
+// src/shared/ipc-channels.ts
+export const IPC_CHANNELS = {
+  MY_FEATURE_CREATE: 'my-feature:create'
+} as const
+
+// src/shared/ipc-contract.ts
+interface IpcInvokeContract {
+  [IPC_CHANNELS.MY_FEATURE_CREATE]: IpcCall<MyFeatureArgs, MyFeatureResult>
+}
 ```
 
 ### 2.2 입력 검증 포함한 핸들러 등록
 
 ```typescript
 // src/main/ipc/handlers.ts
-import { validateString, validateId, validatePositiveInt } from './validators'
+import { validateString, validateIntegerRange } from './validators'
 
-ipcMain.handle(IPC_MY_FEATURE_CREATE, async (_event, args) => {
+ipcMain.handle(IPC_CHANNELS.MY_FEATURE_CREATE, async (_event, args) => {
   // 1. 입력 검증 (데이터 변경 핸들러에 필수)
   const name = validateString(args.name, 200)
-  const count = validatePositiveInt(args.count)
+  const count = validateIntegerRange(args.count, 1, 1000, 'Count')
 
-  // 2. 비즈니스 로직
-  const result = myRepository.create({ name, count })
-
-  // 3. DB 저장 (mutation 후 필수)
-  saveDatabase()
-
-  return result
+  // 2. Repository mutation이 저장을 내부에서 예약
+  return myRepository.create({ name, count })
 })
 ```
 
@@ -89,7 +98,8 @@ ipcMain.handle(IPC_MY_FEATURE_CREATE, async (_event, args) => {
 | ------------ | ------------------------------ | -------------------------------- |
 | 문자열 일반  | `validateString(val, maxLen?)` | 이름, 설명, 프롬프트 텍스트      |
 | ID (UUID 등) | `validateId(val)`              | 엔티티 식별자 (`[a-zA-Z0-9_-]+`) |
-| 양의 정수    | `validatePositiveInt(val)`     | 카운트, 페이지 번호, 포트        |
+| 정수 범위    | `validateIntegerRange(...)`    | 카운트, 페이지 번호, 포트        |
+| boolean      | `validateBoolean(val)`         | 토글, 즐겨찾기 상태              |
 | 평점         | `validateRating(val)`          | 0~5 범위 숫자                    |
 | 설정 키      | `validateSettingsKey(key)`     | 화이트리스트 기반 설정 키        |
 | 문자열 배열  | `validateStringArray(val)`     | ID 목록 (삭제 등)                |
@@ -99,7 +109,8 @@ ipcMain.handle(IPC_MY_FEATURE_CREATE, async (_event, args) => {
 
 1. `src/main/ipc/validators.ts`에 함수 추가
 2. `tests/main/ipc/validators.test.ts`에 테스트 케이스 추가 (정상값 + 경계값 + 잘못된 입력)
-3. `npm test` 통과 확인
+3. handler wiring은 `tests/main/ipc/handlers.test.ts`에서 Repository 호출 전 거부되는지 확인
+4. `npm test` 통과 확인
 
 ---
 
@@ -111,31 +122,38 @@ ipcMain.handle(IPC_MY_FEATURE_CREATE, async (_event, args) => {
 // src/main/services/database/repositories/index.ts
 
 // 테이블별 허용 필드 정의
-const ALLOWED_UPDATE_FIELDS: Record<string, Set<string>> = {
-  workflows: new Set(['name', 'description', 'json_data', 'category', 'variables_config']),
-  prompt_modules: new Set(['name', 'type', 'description'])
+const ALLOWED_UPDATE_FIELDS = {
+  workflows: ['name', 'description', 'category', 'api_json', 'ui_json', 'variables'],
+  prompt_modules: ['name', 'type', 'description', 'parent_id']
   // ...
-}
+} as const
 
 // update() 내부에서 필터링
-function sanitizeUpdateFields(table: string, data: Record<string, unknown>) {
-  const allowed = ALLOWED_UPDATE_FIELDS[table]
-  if (!allowed) return data
-  return Object.fromEntries(Object.entries(data).filter(([key]) => allowed.has(key)))
+function sanitizeUpdateFields(data: Record<string, unknown>, allowedFields: readonly string[]) {
+  return Object.fromEntries(Object.entries(data).filter(([key]) => allowedFields.includes(key)))
 }
 ```
 
 **새 테이블 컬럼 추가 시**: `createTables()`의 스키마와 `ALLOWED_UPDATE_FIELDS`를 **반드시** 동시에 업데이트.
 
-### 3.2 mutation 후 저장
+### 3.2 mutation 저장 책임
 
 ```typescript
-// ✅ 모든 mutation(create, update, delete) 후 호출 필수
-repository.create({ ... })
-saveDatabase()
+// ✅ Repository 메서드가 mutation과 저장 예약을 함께 책임
+create(data) {
+  db.run('INSERT ...', [...])
+  saveDatabase()
+}
 
-// ❌ 안티패턴 — saveDatabase() 누락
-repository.update(id, data)  // 인메모리에만 반영, 앱 종료 시 소실!
+// ✅ 여러 mutation은 최외곽 커밋 후 한 번만 저장
+withTransaction(() => {
+  moduleRepo.create(...)
+  moduleItemRepo.create(...)
+})
+
+// ❌ handler/service에서 Repository 호출 뒤 중복 저장
+repository.update(id, data)
+saveDatabase()
 ```
 
 ---
@@ -281,6 +299,7 @@ restoreSlotMappings(slotMappings, { useUserPrefixText: false }) // BatchView
 src/main/ipc/validators.ts        → tests/main/ipc/validators.test.ts
 src/main/services/tags/index.ts   → tests/main/services/tags/index.test.ts
 src/main/services/batch/queue-manager.ts → tests/main/services/batch/queue-manager.test.ts
+src/renderer/src/locales/*.json   → tests/renderer/locales.test.ts
 ```
 
 ### 7.2 DB 테스트 모킹
@@ -322,8 +341,10 @@ describe('validateString', () => {
 코드 변경을 커밋하기 전에 확인:
 
 ```
-☑ npm test — 전체 테스트 통과
-☑ npx electron-vite build — 빌드 성공
+☑ npm run lint — 정적 검사 통과
+☑ npm run typecheck — main/renderer 타입 검사 통과
+☑ npm run test:coverage — 전체 테스트와 커버리지 게이트 통과
+☑ npx electron-vite build — 프로덕션 빌드 성공
 ☑ 새 IPC 핸들러 → 입력 검증 적용했는가?
 ☑ 새 DB 컬럼 → ALLOWED_UPDATE_FIELDS에 추가했는가?
 ☑ 새 숫자 리터럴 → constants.ts에 명명 상수로 추출했는가?
@@ -331,5 +352,5 @@ describe('validateString', () => {
 ☑ 새 catch 블록 → 로깅 또는 사유 주석이 있는가?
 ☑ 새 유틸 함수 → 단위 테스트를 작성했는가?
 ☑ console.* 사용 → log.* (electron-log)로 교체했는가?
-☑ CHANGELOG.md + AGENTS.md 업데이트했는가?
+☑ CHANGELOG.md + AGENTS.md + README.md를 변경 범위에 맞게 업데이트했는가?
 ```

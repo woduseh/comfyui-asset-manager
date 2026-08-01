@@ -319,8 +319,8 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.COMFYUI_MODELS]: IpcCall<undefined, ComfyUIResources | null>
 
   [IPC_CHANNELS.WORKFLOW_IMPORT]: IpcCall<
-    { filePath: string },
-    { id: string; name: string; category: string; variableCount: number } | { error: string }
+    undefined,
+    { id: string; name: string; category: string; variableCount: number } | { error: string } | null
   >
   [IPC_CHANNELS.WORKFLOW_LIST]: IpcCall<{ category?: string } | undefined, WorkflowRecord[]>
   [IPC_CHANNELS.WORKFLOW_GET]: IpcCall<{ id: string }, WorkflowRecord | null>
@@ -392,6 +392,10 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.CHARACTER_DELETE]: IpcCall<{ id: string }, boolean>
 
   [IPC_CHANNELS.BATCH_CREATE]: IpcCall<BatchConfig, { jobId: string; totalTasks: number }>
+  [IPC_CHANNELS.BATCH_UPDATE_DRAFT]: IpcCall<
+    { id: string; config: BatchConfig },
+    { jobId: string; totalTasks: number }
+  >
   [IPC_CHANNELS.BATCH_LIST]: IpcCall<{ status?: string } | undefined, BatchJobRecord[]>
   [IPC_CHANNELS.BATCH_GET]: IpcCall<{ id: string }, BatchJobRecord | null>
   [IPC_CHANNELS.BATCH_START]: IpcCall<{ id: string }, ActionResult>

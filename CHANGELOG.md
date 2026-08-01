@@ -2,6 +2,71 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [Unreleased]
+
+개인용 운영에서 실제 데이터 손실이나 작업 오판으로 이어질 수 있는 배치 실행 정합성을
+우선 보강했습니다.
+
+### Added
+
+- draft 작업의 ID와 정렬 순서를 유지하면서 설정·스냅샷을 트랜잭션으로 교체하는 편집 IPC
+- Windows/POSIX 출력 루트 containment와 파일명 경로 성분을 검증하는 회귀 테스트
+- IPC와 MCP가 함께 사용하는 lazy 배치 생성·수정 서비스
+
+### Changed
+
+- batch IPC 등록을 전용 handler 모듈로, QueueManager의 prompt 주입·결과 파일 처리를
+  순수 helper로 분리
+- Gallery/Module 뷰의 필터·카드·브라우저 UI를 하위 컴포넌트로 분리하고 갤러리 표시
+  포맷을 테스트 가능한 utility로 이동
+- 새 배치의 출력 폴더·파일명 패턴은 설정 페이지의 저장값을 기본값으로 사용
+- MCP 배치 생성도 태스크 행을 미리 만들지 않고 모듈 스냅샷만 저장하며, 시작 도구는
+  동기 preflight 후 실행 완료를 기다리지 않고 응답
+- 실행 이력이 있는 작업은 직접 편집하지 않고 복제만 허용
+- 갤러리 삭제 문구를 원본 파일을 보존하는 “갤러리에서 제거” 동작으로 명확화
+
+### Fixed
+
+- 재실행 요청이 연결·작업 상태를 확인하기 전에 기존 태스크를 삭제하던 문제를 수정하고,
+  검증 통과 후 초기화를 단일 트랜잭션으로 처리
+- `retrying` 태스크가 재조회되지 않아 작업이 완료된 것처럼 보이던 큐 상태 전이 수정
+- `max_retries` 설정을 실제 실행에 연결하고 일시적 실패 뒤 성공하는 재시도 경로 보강
+- 출력 패턴의 상위 경로 탈출과 중복 파일명 한도 소진 시 기존 파일 덮어쓰기 차단
+- 이미지 없는 ComfyUI 완료 응답을 실패로 처리하고, 결과 DB 저장 실패 시 트랜잭션 롤백과
+  해당 시도에서 생성된 파일 정리
+
+## [1.0.1] - 2026-07-29
+
+Electron IPC 신뢰 경계와 릴리스·테스트 하네스의 정합성을 강화한 보안 PATCH입니다.
+
+### Added
+
+- **main 소유 워크플로우 가져오기**: 파일 선택과 읽기를 main process 안에서 완료하고
+  10MB 크기 제한과 원자적 DB 저장 적용
+- **IPC handler 회귀 테스트**: malformed payload가 Repository·PTY 호출 전에 거부되는지
+  직접 검증
+- **핵심 커버리지 게이트**: QueueManager를 집계에 편입하고 workflow import, IPC
+  validator, MCP module 도구에 파일별 임계값 적용
+- **locale 정합성 테스트**: 한국어·영어 번역 키 집합을 자동 대조
+- **릴리스 메타데이터 검증**: 태그, package, lockfile, CHANGELOG 버전 일치 여부를
+  배포 전에 확인
+
+### Changed
+
+- 워크플로우·모듈·아이템·캐릭터·배치·갤러리·터미널 IPC에 enum, 길이, 범위,
+  구조 검증 적용
+- 모듈 파일 가져오기를 검증 후 단일 DB 트랜잭션으로 처리
+- 릴리스 workflow도 커버리지 게이트를 실행하고 CHANGELOG 누락 시 즉시 실패
+- `README.md`, `AGENTS.md`, `SKILL.md`의 파일 접근·IPC·저장·테스트 패턴을 현재
+  구현과 동기화
+
+### Security
+
+- renderer가 임의 JSON 경로를 workflow import IPC에 제출해 내용을 회수할 수 있던
+  경로 제거
+- 과대 batch, terminal 입력, gallery pagination 및 알 수 없는 update 필드를
+  main process 신뢰 경계에서 차단
+
 ## [1.0.0] - 2026-07-04
 
 로컬 MCP 서버에 기본 Bearer 인증을 적용한 보안 릴리스입니다. 기존 MCP 클라이언트는 새

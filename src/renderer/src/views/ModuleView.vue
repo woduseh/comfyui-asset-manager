@@ -27,12 +27,13 @@ import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/st
 import { buildModulePromptPreviewLabels } from '@renderer/utils/view-labels'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
-import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
 import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
+import ModuleTypeFilter from '@renderer/components/modules/ModuleTypeFilter.vue'
+import ModuleBrowser from '@renderer/components/modules/ModuleBrowser.vue'
 
 const { t } = useI18n()
 const message = useMessage()
@@ -349,88 +350,21 @@ onMounted(() => {
       </template>
     </PageHeader>
 
-    <!-- Filter bar -->
-    <div style="margin: 12px 0">
-      <NSpace :size="4" :wrap="true">
-        <NButton
-          size="small"
-          :type="!filterType ? 'primary' : 'default'"
-          :tertiary="!!filterType"
-          round
-          @click="filterType = null"
-          >{{ t('module.selectAll') }}</NButton
-        >
-        <NButton
-          v-for="opt in moduleTypeOptions"
-          :key="opt.value"
-          size="small"
-          :type="filterType === opt.value ? 'primary' : 'default'"
-          :tertiary="filterType !== opt.value"
-          round
-          @click="filterType = opt.value"
-          >{{ opt.label }}</NButton
-        >
-      </NSpace>
-    </div>
+    <ModuleTypeFilter v-model="filterType" :options="moduleTypeOptions" />
 
     <div
       class="module-workspace"
       :class="{ 'module-workspace--selected': selectedModuleId && selectedModule }"
     >
-      <section
-        class="module-browser"
-        :class="{ 'module-browser--compact': selectedModuleId && selectedModule }"
-      >
-        <div v-if="filteredModules.length > 0" class="module-grid">
-          <NCard
-            v-for="mod in filteredModules"
-            :key="mod.id"
-            size="small"
-            hoverable
-            class="interactive-card module-card"
-            :class="{ 'module-card--selected': selectedModuleId === mod.id }"
-            @click="selectModule(mod.id)"
-          >
-            <div class="module-card__header">
-              <div class="module-card__copy">
-                <NTooltip>
-                  <template #trigger>
-                    <div class="card-title module-card__title">{{ mod.name }}</div>
-                  </template>
-                  {{ mod.name }}
-                </NTooltip>
-                <NTooltip v-if="mod.description">
-                  <template #trigger>
-                    <div class="card-description module-card__description">
-                      {{ mod.description }}
-                    </div>
-                  </template>
-                  {{ mod.description }}
-                </NTooltip>
-              </div>
-              <OverflowActionMenu
-                :actions="getModuleActions()"
-                :menu-label="t('common.moreActions')"
-                :confirm-positive-text="t('common.delete')"
-                :confirm-negative-text="t('common.cancel')"
-                @select="(action) => handleModuleAction(action, mod)"
-              />
-            </div>
-            <div class="module-card__footer">
-              <NTag size="small" round>
-                {{ t(`module.type.${mod.type}`) }}
-              </NTag>
-            </div>
-          </NCard>
-        </div>
-        <ActionableEmptyState
-          v-else
-          :title="t('module.empty')"
-          :description="t('module.emptyDescription')"
-          :action-label="t('module.create')"
-          @action="showCreateModal = true"
-        />
-      </section>
+      <ModuleBrowser
+        :modules="filteredModules"
+        :selected-module-id="selectedModuleId"
+        :compact="!!(selectedModuleId && selectedModule)"
+        :actions="getModuleActions()"
+        @select="selectModule"
+        @action="handleModuleAction"
+        @create="showCreateModal = true"
+      />
 
       <!-- Item detail panel -->
       <section v-if="selectedModuleId && selectedModule" class="module-detail">
@@ -708,28 +642,6 @@ onMounted(() => {
   gap: 18px;
 }
 
-.module-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.module-browser--compact .module-grid {
-  grid-template-columns: 1fr;
-}
-
-.module-card {
-  min-width: 0;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-}
-
-.module-card--selected {
-  border-color: var(--n-color-target, #63e2b7);
-  box-shadow: inset 3px 0 0 #63e2b7;
-}
-
-.module-card__header,
 .module-item__header {
   display: flex;
   align-items: flex-start;
@@ -737,30 +649,9 @@ onMounted(() => {
   gap: 10px;
 }
 
-.module-card__copy,
 .module-item__content {
   min-width: 0;
   flex: 1;
-}
-
-.module-card__title,
-.module-card__description {
-  max-width: 100%;
-}
-
-.module-card__description {
-  margin-top: 4px;
-  min-height: 34px;
-}
-
-.module-browser--compact .module-card__description {
-  min-height: 0;
-  -webkit-line-clamp: 1;
-}
-
-.module-card__footer {
-  display: flex;
-  margin-top: 10px;
 }
 
 .module-detail {

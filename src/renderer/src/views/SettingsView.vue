@@ -346,17 +346,6 @@ onMounted(async () => {
             @update:value="(v: number | null) => handleSettingChange('max_retries', String(v ?? 3))"
           />
         </NFormItem>
-        <NFormItem :label="t('settings.batch.autoSaveInterval')">
-          <NInputNumber
-            :value="parseIntegerOrFallback(settingsStore.settings.auto_save_interval, 5000)"
-            :min="1000"
-            :max="60000"
-            :step="1000"
-            @update:value="
-              (v: number | null) => handleSettingChange('auto_save_interval', String(v ?? 5000))
-            "
-          />
-        </NFormItem>
       </NForm>
     </NCard>
 

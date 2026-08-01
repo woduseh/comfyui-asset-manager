@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NModal, NScrollbar, NSpace, NStep, NSteps, useMessage } from 'naive-ui'
 import { useModuleStore, type PromptModule } from '@renderer/stores/module.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
@@ -44,6 +45,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const message = useMessage()
 const moduleStore = useModuleStore()
+const settingsStore = useSettingsStore()
 const workflowStore = useWorkflowStore()
 const currentStep = ref(1)
 const editingJobId = ref<string | null>(null)
@@ -171,8 +173,11 @@ watch(selectedWorkflowId, async (workflowId) => {
 })
 
 async function loadWizardSources(): Promise<void> {
-  await moduleStore.loadModules()
-  await workflowStore.loadWorkflows()
+  await Promise.all([
+    moduleStore.loadModules(),
+    workflowStore.loadWorkflows(),
+    settingsStore.loaded ? Promise.resolve() : settingsStore.loadSettings()
+  ])
   availableModules.value = moduleStore.modules
 }
 
@@ -188,8 +193,8 @@ async function initializeCreate(): Promise<void> {
   countPerCombination.value = 1
   seedMode.value = 'random'
   fixedSeed.value = 42
-  outputPattern.value = '{job}/{character}/{outfit}/{emotion}'
-  filePattern.value = '{character}_{outfit}_{emotion}_{index}'
+  outputPattern.value = settingsStore.settings.output_pattern
+  filePattern.value = settingsStore.settings.filename_pattern
   showOverrides.value = false
   selectedWorkflowId.value = workflowOptions.value[0]?.value ?? null
 }
@@ -249,12 +254,7 @@ async function handleCreateBatch(): Promise<void> {
   if (!batchName.value || !selectedWorkflowId.value || taskPreview.value.totalTasks === 0) return
 
   try {
-    if (editingJobId.value) {
-      await invokeIpc(IPC_CHANNELS.BATCH_DELETE_TASKS, { jobId: editingJobId.value })
-      await invokeIpc(IPC_CHANNELS.BATCH_DELETE, { id: editingJobId.value })
-    }
-
-    const result = await invokeIpc(IPC_CHANNELS.BATCH_CREATE, {
+    const config = {
       name: batchName.value,
       description: batchDescription.value,
       workflowId: selectedWorkflowId.value,
@@ -288,7 +288,14 @@ async function handleCreateBatch(): Promise<void> {
           fieldName: variable.fieldName,
           value: variable.value
         }))
-    })
+    }
+
+    const result = editingJobId.value
+      ? await invokeIpc(IPC_CHANNELS.BATCH_UPDATE_DRAFT, {
+          id: editingJobId.value,
+          config
+        })
+      : await invokeIpc(IPC_CHANNELS.BATCH_CREATE, config)
 
     const wasEdit = editingJobId.value !== null
     message.success(

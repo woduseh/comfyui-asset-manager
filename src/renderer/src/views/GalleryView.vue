@@ -10,11 +10,8 @@ import {
   NRate,
   NButton,
   NTag,
-  NSelect,
-  NInput,
   NPagination,
   NModal,
-  NCheckbox,
   NDivider,
   NPopconfirm,
   useMessage,
@@ -28,12 +25,13 @@ import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
-import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
 import { buildGalleryRatingOptions, buildGallerySortOptions } from '@renderer/utils/view-labels'
+import { formatGalleryFileSize, parseGalleryGenerationParams } from '@renderer/utils/gallery'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
 import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
-import GalleryThumbnail from '@renderer/components/gallery/GalleryThumbnail.vue'
+import GalleryFilterBar from '@renderer/components/gallery/GalleryFilterBar.vue'
+import GalleryImageCard from '@renderer/components/gallery/GalleryImageCard.vue'
 
 const { t, locale } = useI18n()
 const message = useMessage()
@@ -43,9 +41,6 @@ const queueStore = useQueueStore()
 
 // Filters
 const searchText = ref('')
-const filterCharacter = ref<string | null>(null)
-const filterOutfit = ref<string | null>(null)
-const filterEmotion = ref<string | null>(null)
 const filterRating = ref<number | null>(null)
 const filterFavorite = ref<boolean | null>(null)
 const sortBy = ref<'created_at' | 'rating' | 'file_size'>('created_at')
@@ -77,23 +72,6 @@ function toFileUrl(path: string | undefined): string {
   return 'local-asset://image/' + encodeURIComponent(path)
 }
 
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function parseGenerationParams(json: string | null): Record<string, unknown> | null {
-  if (!json) return null
-  const parsed = safeJsonParse<Record<string, unknown>>(json, {
-    context: 'Generation params',
-    validate: isJsonObject,
-    invalidShapeMessage: 'Generation params must be an object'
-  })
-  return parsed.ok ? parsed.value : null
-}
-
 const sortOptions = computed(() => buildGallerySortOptions(t))
 
 const ratingOptions = computed<SelectMixedOption[]>(() =>
@@ -119,9 +97,6 @@ function goToJobs(): void {
 function applyFilters(): void {
   galleryStore.setFilters({
     searchText: searchText.value || undefined,
-    characterName: filterCharacter.value || undefined,
-    outfitName: filterOutfit.value || undefined,
-    emotionName: filterEmotion.value || undefined,
     minRating: filterRating.value || undefined,
     isFavorite: filterFavorite.value || undefined,
     sortBy: sortBy.value,
@@ -147,9 +122,6 @@ function handleSortChange(val: string): void {
 
 function clearFilters(): void {
   searchText.value = ''
-  filterCharacter.value = null
-  filterOutfit.value = null
-  filterEmotion.value = null
   filterRating.value = null
   filterFavorite.value = null
   sortBy.value = 'created_at'
@@ -309,72 +281,24 @@ onUnmounted(() => {
       </template>
     </PageHeader>
 
-    <!-- Filter bar -->
-    <NCard size="small" style="margin-bottom: 16px">
-      <NSpace align="center" :wrap="true" :size="12" class="gallery-filter-bar">
-        <NInput
-          v-model:value="searchText"
-          size="small"
-          clearable
-          :placeholder="t('gallery.searchPlaceholder')"
-          style="width: 200px"
-          @update:value="handleSearchInput"
-          @clear="applyFilters"
-        />
-        <NSelect
-          :value="sortBy + ':' + sortOrder"
-          :options="sortOptions"
-          size="small"
-          style="width: 160px"
-          @update:value="handleSortChange"
-        />
-        <NSelect
-          v-model:value="filterRating"
-          :options="ratingOptions"
-          size="small"
-          style="width: 120px"
-          :placeholder="t('gallery.ratingPlaceholder')"
-          clearable
-          @update:value="applyFilters"
-        />
-        <NButton
-          size="small"
-          :type="filterFavorite ? 'warning' : 'default'"
-          :tertiary="!filterFavorite"
-          round
-          @click="filterFavorite = filterFavorite ? null : true"
-        >
-          {{ filterFavorite ? t('gallery.favoriteOn') : t('gallery.favoriteOff') }}
-        </NButton>
-        <NButton
-          v-if="searchText || filterRating || filterFavorite"
-          size="small"
-          quaternary
-          @click="clearFilters"
-        >
-          {{ t('gallery.resetFilters') }}
-        </NButton>
-        <div style="flex: 1" />
-        <NButton
-          size="small"
-          :type="selectionMode ? 'primary' : 'default'"
-          @click="toggleSelectionMode"
-        >
-          {{ selectionMode ? t('gallery.selectionModeOff') : t('gallery.selectionModeOn') }}
-        </NButton>
-        <template v-if="selectionMode">
-          <NButton size="small" @click="selectAll">{{ t('gallery.selectAll') }}</NButton>
-          <NPopconfirm @positive-click="deleteSelected">
-            <template #trigger>
-              <NButton size="small" type="error" :disabled="selectedIds.size === 0">
-                {{ t('gallery.deleteCount', { count: selectedIds.size }) }}
-              </NButton>
-            </template>
-            {{ t('gallery.confirmBulkDelete', { count: selectedIds.size }) }}
-          </NPopconfirm>
-        </template>
-      </NSpace>
-    </NCard>
+    <GalleryFilterBar
+      v-model:search-text="searchText"
+      v-model:rating="filterRating"
+      v-model:favorite="filterFavorite"
+      :sort-value="`${sortBy}:${sortOrder}`"
+      :sort-options="sortOptions"
+      :rating-options="ratingOptions"
+      :selection-mode="selectionMode"
+      :selected-count="selectedIds.size"
+      :has-active-filters="hasActiveFilters"
+      @update:sort-value="handleSortChange"
+      @search="handleSearchInput"
+      @apply="applyFilters"
+      @reset="clearFilters"
+      @toggle-selection="toggleSelectionMode"
+      @select-all="selectAll"
+      @delete-selected="deleteSelected"
+    />
 
     <!-- Image grid -->
     <NCard style="margin-top: 0">
@@ -408,60 +332,15 @@ onUnmounted(() => {
           :cols-xl="5"
         >
           <NGridItem v-for="image in galleryStore.images" :key="image.id">
-            <NCard
-              size="small"
-              hoverable
-              :style="{
-                cursor: 'pointer',
-                border: selectedIds.has(image.id) ? '2px solid #63e2b7' : undefined,
-                borderRadius: '12px',
-                overflow: 'hidden'
-              }"
-              @click="openDetail(image)"
-            >
-              <template v-if="selectionMode" #header-extra>
-                <NCheckbox :checked="selectedIds.has(image.id)" />
-              </template>
-              <GalleryThumbnail
-                :src="toFileUrl(image.thumbnail_path || image.file_path)"
-                :alt="image.character_name || image.file_path"
-                :error-text="t('gallery.thumbnailLoadFailed')"
-                :retry-text="t('common.retry')"
-              />
-              <NSpace justify="space-between" align="center" style="margin-top: 8px">
-                <NRate
-                  :value="image.rating"
-                  :count="5"
-                  size="small"
-                  @update:value="(val: number) => galleryStore.rateImage(image.id, val)"
-                />
-                <NButton
-                  text
-                  :type="image.is_favorite ? 'warning' : 'default'"
-                  size="small"
-                  @click.stop="handleToggleFavorite(image)"
-                >
-                  {{ image.is_favorite ? '♥' : '♡' }}
-                </NButton>
-              </NSpace>
-              <div
-                v-if="image.character_name"
-                style="
-                  margin-top: 4px;
-                  font-size: 11px;
-                  opacity: 0.7;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                  white-space: nowrap;
-                "
-              >
-                {{
-                  [image.character_name, image.outfit_name, image.emotion_name]
-                    .filter(Boolean)
-                    .join(' / ')
-                }}
-              </div>
-            </NCard>
+            <GalleryImageCard
+              :image="image"
+              :selected="selectedIds.has(image.id)"
+              :selection-mode="selectionMode"
+              :source="toFileUrl(image.thumbnail_path || image.file_path)"
+              @open="openDetail(image)"
+              @rate="(value) => galleryStore.rateImage(image.id, value)"
+              @favorite="handleToggleFavorite(image)"
+            />
           </NGridItem>
         </NGrid>
 
@@ -595,7 +474,7 @@ onUnmounted(() => {
                 />
               </div>
               <div class="detail-image-meta">
-                {{ formatFileSize(detailImage.file_size) }}
+                {{ formatGalleryFileSize(detailImage.file_size) }}
                 <template v-if="detailImage.width && detailImage.height">
                   · {{ detailImage.width }}×{{ detailImage.height }}
                 </template>
@@ -674,13 +553,15 @@ onUnmounted(() => {
                     <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
                   </div>
                   <div
-                    v-if="parseGenerationParams(detailImage.generation_params)"
+                    v-if="parseGalleryGenerationParams(detailImage.generation_params)"
                     class="prompt-block"
                   >
                     <div class="prompt-label">Parameters</div>
                     <div class="prompt-text params">
                       <template
-                        v-for="(value, key) in parseGenerationParams(detailImage.generation_params)"
+                        v-for="(value, key) in parseGalleryGenerationParams(
+                          detailImage.generation_params
+                        )"
                         :key="key"
                       >
                         <NTag size="tiny" round style="margin: 2px">{{ key }}: {{ value }}</NTag>

@@ -59,10 +59,13 @@ ipcMain.handle(IPC_CHANNELS.MY_FEATURE, async (_event, args) => { ... })
 const result = await invokeIpc(IPC_CHANNELS.MY_FEATURE, args)
 ```
 
+- 도메인 handler가 커지면 `src/main/ipc/handlers/`의 `register*Handlers()` 모듈로 분리하고
+  `handlers.ts`는 등록 순서와 소규모 도메인만 소유
+
 ### 데이터베이스
 
 - sql.js (WASM SQLite, in-memory)
-- 모든 mutation 후 `saveDatabase()` 호출 필수
+- Repository mutation 메서드가 내부에서 `saveDatabase()`를 예약. handler/service에서 중복 호출 금지
 - 여러 mutation을 하나로 묶을 때는 `withTransaction()` 사용. 중첩은 SAVEPOINT로 처리하며
   최외곽 커밋 후 저장을 한 번만 예약
 - DB 파일 저장은 단일 직렬 writer와 임시 파일+rename을 사용하고, 정상 종료 시
@@ -131,10 +134,11 @@ npm run format           # Prettier
 
 **테스트 프레임워크: Vitest** — 현재 규모와 통과 여부는 `npm test`로 확인.
 
-- 테스트 위치: `tests/main/services/` + `tests/main/ipc/` (소스 구조와 미러링)
+- 테스트 위치: `tests/main/`, `tests/renderer/`, `tests/shared/` (소스 구조와 미러링)
 - DB 테스트: sql.js in-memory 인스턴스 + `vi.mock()` 으로 `getDatabase`/`saveDatabase` 모킹
 - HTTP 테스트: `vi.mock('ofetch')` 으로 REST 클라이언트 모킹
-- IPC 검증 테스트: `tests/main/ipc/validators.test.ts`
+- IPC 검증 테스트: `tests/main/ipc/validators.test.ts` + `handlers.test.ts`
+- locale 키 정합성: `tests/renderer/locales.test.ts`
 
 ### 코드 품질 도구
 
@@ -202,8 +206,9 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
 ### 배치 실행 최적화 (v0.8.1~)
 
-- **청크 기반 처리**: `listByJobPending(jobId, limit)` — 50개씩 미완료 태스크만 로드
-- **ComfyUI 히스토리 자동 정리**: 태스크 완료 후 `deleteFromHistory([promptId])` 호출
+- **청크 기반 처리**: `listByJobPending(jobId, limit)` — 50개씩 `pending`/`retrying` 태스크만 로드. 성공·최종 실패·취소만 terminal 상태로 취급
+- **재시도 설정**: `max_retries`가 정식 설정 키이며 초기 시도 이후의 추가 시도 횟수를 뜻함. `batch.maxRetries`는 읽기 호환만 허용
+- **ComfyUI 히스토리 자동 정리**: 태스크 시도 종료 후 성공·실패와 무관하게 `deleteFromHistory([promptId])` 호출
 - **DB 트랜잭션**: `createBulk()`가 `BEGIN`/`COMMIT`으로 감쌈
 - **ETA 계산**: 최근 50개 이동 평균 (`MAX_DURATION_SAMPLES`) × 남은 수. `pushDuration()` 헬퍼가 배열 크기 제한
 - **배치 모드 DB 저장**: `setBatchMode(true/false)`로 디바운스 1초→10초 전환. 배치 시작/종료 시 자동 토글
@@ -212,11 +217,17 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 ### 지연 태스크 생성 (v0.9.0~)
 
 - **Lazy Task Expansion**: 배치 생성 시 태스크 행을 사전 생성하지 않고, `module_data_snapshot`과 resolved config만 저장
+- **공용 생성 서비스**: IPC/MCP adapter는 `batch-job-service.ts`를 통해 동일한 검증·prefix 해석·snapshot·task count를 사용. adapter에서 eager task 생성을 다시 구현하지 않음
+- **draft 편집**: 기존 ID를 유지하는 `updateDraft()`만 사용하고, 실행 이력이 있는 작업은 clone-only. 삭제 후 재생성 방식 금지
 - **동적 생성**: `processJob()` 실행 시 `expandBatchToTasksChunk(config, moduleData, startIndex, 50)`로 50개씩 생성
 - **인덱스 매핑**: `task[i]` → `comboIdx = floor(i / countPerCombination)`, `imgIdx = i % countPerCombination`
 - **결정론적 시드**: incremental seed = `fixedSeed + sortOrder`, fixed seed = `fixedSeed` (인덱스 무관)
 - **하위 호환**: `module_data_snapshot`이 없는 레거시 작업은 기존 청크 DB 로드 경로 사용
 - **DB 공간 절약**: `clearPromptDataForCompleted()` — 완료 태스크의 `prompt_data`를 `{}`로 비움
+- **출력 containment**: 폴더·파일명은 `output-path.ts` helper로 출력 루트 내부인지 확인. 상위 경로, 절대 경로, 파일명 경로 성분을 허용하지 않으며 중복 suffix 한도 소진 시 덮어쓰지 않고 실패
+- **결과 원자성**: 이미지 없는 완료 응답은 실패. 한 태스크의 gallery 행과 완료 상태는 단일 transaction으로 기록하고 실패 시 해당 시도의 출력 파일을 정리
+- **QueueManager 책임 분리**: prompt/seed 주입은 `prompt-injection.ts`, 출력 폴더·파일 다운로드·부분 파일 정리는 `task-output.ts`에 유지
+- **재실행 순서**: terminal 상태와 ComfyUI 연결을 preflight한 뒤 태스크 삭제·진행률 초기화를 `withTransaction()`으로 묶고, 그 후 background start 요청
 
 ### 완료 감지 최적화 (v0.9.1~)
 
@@ -239,6 +250,8 @@ v0.7.0에서 4+1 → 5+1 (터미널 추가):
 - 호버 상승 효과는 클릭 가능한 `.interactive-card`에만 적용
 - 소프트 스크롤바 스타일
 - 제목/설명/메타 텍스트는 공용 `.card-title`/`.card-description`/`.meta-text` 계층 사용
+- 갤러리의 DB-only 삭제 액션은 “갤러리에서 제거”로 표현하고 원본 파일이 유지됨을 확인 문구에 명시. 물리 파일 삭제로 의미를 확대하지 않음
+- Gallery/Module 뷰의 필터·카드·브라우저처럼 독립적인 UI 영역은 각 도메인의 `components/`로 분리하고, 표시용 순수 변환은 `utils/`에 두어 테스트 가능하게 유지
 
 ## 코드 품질 원칙
 
@@ -248,8 +261,9 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 - Electron 렌더러: `sandbox: true`, `webSecurity: true`, `bypassCSP: false` — 절대 변경 금지
 - Preload 번들링: `externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })` — sandbox 모드에서 preload가 정상 로드되려면 `@electron-toolkit/preload`를 반드시 인라인 번들링
-- 파일 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로와 DB에 등록된 gallery 자산 경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
-- 직접 파일 경로를 받는 권한 높은 IPC(`workflow import`, gallery clipboard/explorer 등)는 별도 allow-list를 만들지 말고 `local-asset` 계열 helper를 재사용
+- 자산 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로와 DB에 등록된 gallery 자산 경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
+- 외부 파일 가져오기: 파일 선택과 읽기를 같은 main-process IPC에서 완료. renderer에 선택 경로를 반환한 뒤 별도 읽기 IPC로 다시 받는 패턴 금지
+- gallery clipboard/explorer처럼 자산 경로를 직접 받는 IPC는 `local-asset` 계열 helper를 재사용
 - IPC 핸들러: 데이터 변경(`CREATE`, `UPDATE`, `DELETE`, `SET`) 핸들러에 `validators.ts` 검증 필수
 - Repository `update()`: `ALLOWED_UPDATE_FIELDS` 화이트리스트 외 필드 거부. 새 컬럼 추가 시 화이트리스트도 갱신
 - JSON 파싱: main은 `src/main/utils/safe-json.ts`, renderer는 `src/renderer/src/utils/safe-json.ts`를 사용해 구조 검증과 오류 메시지를 함께 처리. 검증 없는 `JSON.parse()` 직접 사용 금지
@@ -282,8 +296,8 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 
 ## 현재 버전
 
+**1.0.1** — main 소유 workflow import, IPC 런타임 검증, 핵심 커버리지·릴리스 정합성 게이트 강화.
 **1.0.0** — MCP Bearer 인증 기본 적용, 토큰 회전·클라이언트 설정 갱신·Codex 환경변수 등록 흐름 추가.
 **0.16.3** — DB 트랜잭션·직렬 원자 저장, MCP 도구 도메인 분할, JobsView 컴포넌트 분리.
-**0.16.2** — 문서·버전 드리프트 정리, CI 품질 게이트, 공유 IPC 계약, QueueManager 생명주기 회귀 테스트 강화.
 
 이전 버전 내역은 `CHANGELOG.md`를 참조합니다.

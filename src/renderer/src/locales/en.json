@@ -409,7 +409,7 @@
     "rating": "Rating",
     "favorite": "Favorite",
     "export": "Export",
-    "delete": "Delete",
+    "delete": "Remove from Gallery",
     "metadata": "Metadata",
     "compare": "Compare",
     "sortOptions": {
@@ -420,10 +420,10 @@
     },
     "all": "All",
     "msg": {
-      "bulkDeleted": "{count} images deleted",
+      "bulkDeleted": "{count} images removed from the gallery",
       "copiedToClipboard": "Copied to clipboard",
       "copyFailed": "Copy failed",
-      "imageDeleted": "Image deleted"
+      "imageDeleted": "Image removed from the gallery"
     },
     "ratingPlaceholder": "Rating",
     "favoriteOn": "♥ Favorite",
@@ -433,8 +433,8 @@
     "selectionModeOff": "Deselect",
     "selectionModeOn": "Selection Mode",
     "selectAll": "Select All",
-    "deleteCount": "Delete ({count})",
-    "confirmBulkDelete": "Delete {count} selected images?",
+    "deleteCount": "Remove from Gallery ({count})",
+    "confirmBulkDelete": "Remove {count} selected images from the gallery? Original files will be kept.",
     "viewer": {
       "prevImage": "Previous Image (←)",
       "nextImage": "Next Image (→)",
@@ -442,8 +442,8 @@
       "openInExplorer": "Open in File Explorer",
       "removeFavorite": "Remove Favorite",
       "addFavorite": "Add Favorite",
-      "deleteImage": "Delete Image",
-      "confirmDelete": "Delete this image?"
+      "deleteImage": "Remove from Gallery",
+      "confirmDelete": "Remove this image from the gallery? The original file will be kept."
     },
     "meta": {
       "character": "Character",

@@ -6,8 +6,6 @@
  */
 
 import { BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, writeFileSync } from 'fs'
-import { join, dirname, basename, extname } from 'path'
 import { comfyuiManager } from '../comfyui/manager'
 import { resolveConfiguredOutputRoot } from '../output-root'
 import {
@@ -17,7 +15,7 @@ import {
   WorkflowRepository,
   SettingsRepository
 } from '../database/repositories'
-import { setBatchMode } from '../database'
+import { setBatchMode, withTransaction } from '../database'
 import { IPC_CHANNELS } from '../../ipc/channels'
 import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import log from '../../logger'
@@ -26,10 +24,9 @@ import {
   PAUSE_CHECK_INTERVAL_MS,
   TASK_EXECUTION_TIMEOUT_MS,
   COMPLETION_POLL_INTERVAL_MS,
-  MAX_DUPLICATE_FILE_SUFFIX,
   CLEAR_PROMPT_DATA_CHUNK_INTERVAL
 } from '../../constants'
-import { resolveOutputPath, expandBatchToTasksChunk } from '../batch/task-generator'
+import { expandBatchToTasksChunk } from '../batch/task-generator'
 import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
 import { isJsonObject } from '../../utils/safe-json'
 import { parseIntegerOrFallback } from '../../utils/number'
@@ -41,10 +38,16 @@ import {
   isTaskPromptData,
   parseRequiredJson,
   pushDuration,
-  resolveFileName,
   type TaskMetadata,
   type TaskPromptData
 } from './queue-utils'
+import {
+  cleanupPartialOutputFiles,
+  createTaskOutputDirectory,
+  downloadTaskImages,
+  type TaskImageRecord
+} from './task-output'
+import { injectPromptData } from './prompt-injection'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
@@ -58,6 +61,13 @@ export interface QueueManagerEvents {
   taskFailed: (data: { jobId: string; taskId: string; error: string }) => void
   jobComplete: (data: { jobId: string }) => void
   statusChange: (data: { isProcessing: boolean }) => void
+}
+
+interface TaskRunResult {
+  success: boolean
+  cancelled: boolean
+  durationMs: number
+  error?: Error
 }
 
 class QueueManager {
@@ -99,6 +109,38 @@ class QueueManager {
   /**
    * Start processing a batch job
    */
+  preflightStart(
+    jobId: string,
+    allowedStatuses: readonly string[] = ['draft', 'paused']
+  ): { success: boolean; error?: string } {
+    if (this._isProcessing) {
+      return { success: false, error: 'Queue is already processing a job' }
+    }
+    if (!comfyuiManager.isConnected) {
+      return { success: false, error: 'Not connected to ComfyUI server' }
+    }
+
+    const job = batchJobRepo.get(jobId)
+    if (!job) {
+      return { success: false, error: `Batch job not found: ${jobId}` }
+    }
+    if (!allowedStatuses.includes(job.status as string)) {
+      return { success: false, error: `Batch job cannot start from status: ${job.status}` }
+    }
+
+    return { success: true }
+  }
+
+  requestStart(jobId: string): { success: boolean; error?: string } {
+    const preflight = this.preflightStart(jobId)
+    if (!preflight.success) return preflight
+
+    void this.startJob(jobId).catch((error) => {
+      log.error('[QueueManager] Background job execution error:', error)
+    })
+    return { success: true }
+  }
+
   async startJob(jobId: string): Promise<void> {
     if (this._isProcessing) {
       throw new Error('Queue is already processing a job')
@@ -115,7 +157,7 @@ class QueueManager {
     this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, true)
 
     // Load retry setting
-    const retryStr = settingsRepo.get('batch.maxRetries')
+    const retryStr = settingsRepo.get('max_retries') ?? settingsRepo.get('batch.maxRetries')
     this._maxRetries = parseIntegerOrFallback(retryStr, 3)
 
     batchJobRepo.updateStatus(jobId, 'running')
@@ -227,6 +269,41 @@ class QueueManager {
     const CHUNK_SIZE = TASK_CHUNK_SIZE
     let chunksSinceLastClear = 0
 
+    const executeTrackedTask = async (task: Record<string, unknown>): Promise<void> => {
+      const taskId = task.id as string
+      const result = await this.processTaskWithRetries(task, apiJson, jobId, jobConfig, outputRoot)
+      if (result.cancelled) return
+
+      if (result.success) {
+        completedCount++
+        pushDuration(taskDurations, result.durationMs)
+        batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+        this.sendTaskCompletedEvent(
+          jobId,
+          taskId,
+          completedCount,
+          failedCount,
+          totalTasks,
+          taskDurations
+        )
+        return
+      }
+
+      failedCount++
+      batchJobRepo.updateProgress(jobId, completedCount, failedCount)
+      const remainingTasks = totalTasks - completedCount - failedCount
+      const etaMs = computeEta(taskDurations, remainingTasks)
+      this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
+        jobId,
+        taskId,
+        error: result.error?.message ?? 'Task failed',
+        completed: completedCount,
+        failed: failedCount,
+        total: totalTasks,
+        etaMs
+      })
+    }
+
     // Determine execution mode: lazy (has snapshot) or legacy (pre-created tasks)
     const hasSnapshot = !!job.module_data_snapshot
     let moduleDataSnapshot: ModuleDataSnapshot | null = null
@@ -274,53 +351,7 @@ class QueueManager {
             retry_count: 0
           }
 
-          const taskStartTime = Date.now()
-
-          try {
-            await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
-            completedCount++
-            pushDuration(taskDurations, Date.now() - taskStartTime)
-            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-            this.sendTaskCompletedEvent(jobId, taskId, completedCount, totalTasks, taskDurations)
-          } catch (error) {
-            // Retry once for lazy tasks
-            if ((taskRecord.retry_count as number) < this._maxRetries) {
-              batchTaskRepo.updateStatus(taskId, 'retrying', {
-                error_message: (error as Error).message
-              })
-              const retryStartTime = Date.now()
-              try {
-                await this.processTask(taskRecord, apiJson, jobId, jobConfig, outputRoot)
-                completedCount++
-                pushDuration(taskDurations, Date.now() - retryStartTime)
-              } catch (retryError) {
-                failedCount++
-                batchTaskRepo.updateStatus(taskId, 'failed', {
-                  error_message: (retryError as Error).message
-                })
-              }
-            } else {
-              failedCount++
-              batchTaskRepo.updateStatus(taskId, 'failed', {
-                error_message: (error as Error).message
-              })
-            }
-            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-            const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs = computeEta(taskDurations, remainingTasks)
-
-            this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
-              jobId,
-              taskId,
-              error: (error as Error).message,
-              completed: completedCount,
-              failed: failedCount,
-              total: totalTasks,
-              etaMs
-            })
-          }
+          await executeTrackedTask(taskRecord)
         }
 
         startIndex = completedCount + failedCount
@@ -346,59 +377,7 @@ class QueueManager {
           }
           if (this._isCancelled) break
 
-          const taskStartTime = Date.now()
-
-          try {
-            await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
-            completedCount++
-            pushDuration(taskDurations, Date.now() - taskStartTime)
-            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-            this.sendTaskCompletedEvent(
-              jobId,
-              task.id as string,
-              completedCount,
-              totalTasks,
-              taskDurations
-            )
-          } catch (error) {
-            const retryCount = (task.retry_count as number) || 0
-            if (retryCount < this._maxRetries) {
-              batchTaskRepo.updateStatus(task.id as string, 'retrying', {
-                error_message: (error as Error).message
-              })
-              const retryStartTime = Date.now()
-              try {
-                await this.processTask(task, apiJson, jobId, jobConfig, outputRoot)
-                completedCount++
-                pushDuration(taskDurations, Date.now() - retryStartTime)
-              } catch (retryError) {
-                failedCount++
-                batchTaskRepo.updateStatus(task.id as string, 'failed', {
-                  error_message: (retryError as Error).message
-                })
-              }
-            } else {
-              failedCount++
-              batchTaskRepo.updateStatus(task.id as string, 'failed', {
-                error_message: (error as Error).message
-              })
-            }
-            batchJobRepo.updateProgress(jobId, completedCount, failedCount)
-
-            const remainingTasks = totalTasks - completedCount - failedCount
-            const etaMs = computeEta(taskDurations, remainingTasks)
-
-            this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
-              jobId,
-              taskId: task.id as string,
-              error: (error as Error).message,
-              completed: completedCount,
-              failed: failedCount,
-              total: totalTasks,
-              etaMs
-            })
-          }
+          await executeTrackedTask(task)
         }
 
         if (this._isCancelled) break
@@ -415,11 +394,12 @@ class QueueManager {
     jobId: string,
     taskId: string,
     completedCount: number,
+    failedCount: number,
     totalTasks: number,
     taskDurations: number[]
   ): void {
     const avgDuration = taskDurations.reduce((a, b) => a + b, 0) / taskDurations.length
-    const remainingTasks = totalTasks - completedCount
+    const remainingTasks = totalTasks - completedCount - failedCount
     const etaMs = computeEta(taskDurations, remainingTasks) ?? 0
 
     this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, {
@@ -430,6 +410,53 @@ class QueueManager {
       etaMs,
       avgTaskDurationMs: Math.round(avgDuration)
     })
+  }
+
+  private async processTaskWithRetries(
+    task: Record<string, unknown>,
+    baseApiJson: Record<string, unknown>,
+    jobId: string,
+    jobConfig: BatchConfig,
+    outputRoot: string
+  ): Promise<TaskRunResult> {
+    const taskId = task.id as string
+    let retryCount = Number.isInteger(task.retry_count) ? (task.retry_count as number) : 0
+    const startedAt = Date.now()
+
+    while (true) {
+      try {
+        await this.processTask(task, baseApiJson, jobId, jobConfig, outputRoot)
+        return {
+          success: true,
+          cancelled: false,
+          durationMs: Date.now() - startedAt
+        }
+      } catch (error) {
+        const taskError = error instanceof Error ? error : new Error(String(error))
+        if (this._isCancelled || taskError.message === 'Cancelled') {
+          return {
+            success: false,
+            cancelled: true,
+            durationMs: Date.now() - startedAt,
+            error: taskError
+          }
+        }
+
+        if (retryCount >= this._maxRetries) {
+          batchTaskRepo.updateStatus(taskId, 'failed', { error_message: taskError.message })
+          return {
+            success: false,
+            cancelled: false,
+            durationMs: Date.now() - startedAt,
+            error: taskError
+          }
+        }
+
+        retryCount++
+        task.retry_count = retryCount
+        batchTaskRepo.updateStatus(taskId, 'retrying', { error_message: taskError.message })
+      }
+    }
   }
 
   private async processTask(
@@ -457,7 +484,7 @@ class QueueManager {
 
     // Clone the workflow and inject prompt data
     const workflowJson = structuredClone(baseApiJson)
-    this.injectPromptData(workflowJson, promptData)
+    injectPromptData(workflowJson, promptData)
 
     // Submit to ComfyUI
     const result = await comfyuiManager.restClient.queuePrompt(
@@ -471,181 +498,48 @@ class QueueManager {
     // Wait for completion via polling history
     const historyResult = await this.waitForCompletion(promptId)
 
-    // Download result images
-    const outputDir = this.resolveAndCreateOutputDir(outputRoot, jobConfig, metadata)
-
-    const savedPaths: string[] = []
-    if (historyResult?.outputs) {
-      for (const nodeOutput of Object.values(historyResult.outputs)) {
-        const nodeOut = nodeOutput as {
-          images?: Array<{ filename: string; type: string; subfolder: string }>
-        }
-        if (nodeOut.images) {
-          for (const img of nodeOut.images) {
-            const imageData = await comfyuiManager.restClient.getImage(
-              img.filename,
-              img.subfolder,
-              img.type
-            )
-
-            const fileName = resolveFileName(
-              jobConfig.fileNamePattern || '{character}_{outfit}_{emotion}_{index}',
-              metadata,
-              promptData.seed,
-              img.filename
-            )
-            const savePath = this.getUniquePath(join(outputDir, fileName))
-            writeFileSync(savePath, imageData)
-            savedPaths.push(savePath)
-
-            // Save to DB
-            imageRepo.create({
-              task_id: taskId,
-              job_id: jobId,
-              file_path: savePath,
-              file_size: imageData.byteLength,
-              generation_params: JSON.stringify({
-                seed: promptData.seed,
-                promptId
-              }),
-              prompt_text: promptData.positive,
-              negative_text: promptData.negative,
-              character_name: metadata.characterName,
-              outfit_name: metadata.outfitName,
-              emotion_name: metadata.emotionName,
-              style_name: metadata.styleName
-            })
-          }
-        }
-      }
+    const target: { savedPaths: string[]; imageRecords: TaskImageRecord[] } = {
+      savedPaths: [],
+      imageRecords: []
     }
-
-    batchTaskRepo.updateStatus(taskId, 'completed', {
-      result_path: savedPaths[0] || undefined
-    })
-
-    // Clean up ComfyUI history to free server memory
     try {
-      await comfyuiManager.restClient.deleteFromHistory([promptId])
+      const outputDirectory = createTaskOutputDirectory(outputRoot, jobConfig, metadata)
+      await downloadTaskImages({
+        outputs: historyResult?.outputs,
+        outputRoot,
+        outputDirectory,
+        jobConfig,
+        metadata,
+        promptData,
+        promptId,
+        taskId,
+        jobId,
+        getImage: (filename, subfolder, type) =>
+          comfyuiManager.restClient.getImage(filename, subfolder, type),
+        target
+      })
+
+      if (target.imageRecords.length === 0) {
+        throw new Error(`ComfyUI prompt ${promptId} completed without output images`)
+      }
+
+      withTransaction(() => {
+        for (const imageRecord of target.imageRecords) {
+          imageRepo.create(imageRecord)
+        }
+        batchTaskRepo.updateStatus(taskId, 'completed', { result_path: target.savedPaths[0] })
+      })
     } catch (error) {
-      // Non-critical: history cleanup failure shouldn't block task completion
-      log.debug('[QueueManager] Failed to clear ComfyUI history after task completion:', error)
-    }
-  }
-
-  /**
-   * Inject prompt/seed data into the workflow JSON
-   */
-  private injectPromptData(
-    workflow: Record<string, unknown>,
-    promptData: {
-      positive: string
-      negative: string
-      seed: number
-      extraVariables?: Record<string, string | number>
-      slotMappings?: Array<{
-        nodeId: string
-        fieldName: string
-        role: string
-        action: 'inject' | 'fixed'
-        fixedValue: string
-        assignedModuleIds?: string[]
-        prefixText?: string
-        suffixText?: string
-      }>
-      slotPrompts?: Record<string, string>
-      variableOverrides?: Array<{
-        nodeId: string
-        fieldName: string
-        value: string
-      }>
-    }
-  ): void {
-    // Slot-based injection (new system)
-    if (promptData.slotMappings && promptData.slotMappings.length > 0) {
-      for (const slot of promptData.slotMappings) {
-        const node = workflow[slot.nodeId] as { inputs?: Record<string, unknown> }
-        if (!node?.inputs) continue
-
-        if (slot.action === 'inject') {
-          const slotKey = `${slot.nodeId}:${slot.fieldName}`
-          // Use per-slot prompt if available, fall back to global
-          if (promptData.slotPrompts && promptData.slotPrompts[slotKey]) {
-            node.inputs[slot.fieldName] = promptData.slotPrompts[slotKey]
-          } else {
-            node.inputs[slot.fieldName] =
-              slot.role === 'prompt_positive' ? promptData.positive : promptData.negative
-          }
-        } else if (slot.action === 'fixed') {
-          node.inputs[slot.fieldName] = slot.fixedValue
-        }
+      for (const failure of cleanupPartialOutputFiles(target.savedPaths)) {
+        log.warn(`[QueueManager] Failed to remove partial output ${failure.path}:`, failure.error)
       }
-
-      // Also inject seeds into KSampler nodes
-      for (const [, nodeData] of Object.entries(workflow)) {
-        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
-        if (!node.class_type || !node.inputs) continue
-        if (node.class_type === 'KSampler' || node.class_type === 'KSamplerAdvanced') {
-          if (promptData.seed !== undefined) {
-            node.inputs.seed = promptData.seed
-            if (node.inputs.noise_seed !== undefined) {
-              node.inputs.noise_seed = promptData.seed
-            }
-          }
-        }
-      }
-    } else {
-      // Legacy heuristic injection (backward compatibility)
-      for (const [, nodeData] of Object.entries(workflow)) {
-        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
-        if (!node.class_type || !node.inputs) continue
-
-        switch (node.class_type) {
-          case 'CLIPTextEncode': {
-            const currentText = node.inputs.text as string
-            if (currentText && typeof currentText === 'string') {
-              const isNegative =
-                currentText.toLowerCase().includes('worst quality') ||
-                currentText.toLowerCase().includes('low quality') ||
-                currentText.toLowerCase().includes('bad anatomy')
-              node.inputs.text = isNegative ? promptData.negative : promptData.positive
-            }
-            break
-          }
-          case 'KSampler':
-          case 'KSamplerAdvanced':
-            if (promptData.seed !== undefined) {
-              node.inputs.seed = promptData.seed
-              if (node.inputs.noise_seed !== undefined) {
-                node.inputs.noise_seed = promptData.seed
-              }
-            }
-            break
-        }
-      }
-    }
-
-    // Apply variable overrides
-    if (promptData.variableOverrides && promptData.variableOverrides.length > 0) {
-      for (const override of promptData.variableOverrides) {
-        const node = workflow[override.nodeId] as { inputs?: Record<string, unknown> }
-        if (node && node.inputs) {
-          const numVal = Number(override.value)
-          node.inputs[override.fieldName] = isNaN(numVal) ? override.value : numVal
-        }
-      }
-    }
-
-    // Apply extra variables
-    if (promptData.extraVariables) {
-      for (const [, nodeData] of Object.entries(workflow)) {
-        const node = nodeData as { class_type?: string; inputs?: Record<string, unknown> }
-        if (!node.inputs) continue
-        for (const [key, value] of Object.entries(promptData.extraVariables)) {
-          if (key in node.inputs) {
-            node.inputs[key] = value
-          }
-        }
+      throw error
+    } finally {
+      // Clean up ComfyUI history to free server memory, including failed download/persistence attempts.
+      try {
+        await comfyuiManager.restClient.deleteFromHistory([promptId])
+      } catch (error) {
+        log.debug('[QueueManager] Failed to clear ComfyUI history after task attempt:', error)
       }
     }
   }
@@ -784,46 +678,6 @@ class QueueManager {
     }
 
     throw new Error(`Timeout waiting for prompt ${promptId}`)
-  }
-
-  private resolveAndCreateOutputDir(
-    outputRoot: string,
-    jobConfig: BatchConfig,
-    metadata: TaskMetadata
-  ): string {
-    const pattern = jobConfig.outputFolderPattern || '{job}/{character}/{outfit}/{emotion}'
-    const vars: Record<string, string> = {
-      job: jobConfig.name || 'unnamed',
-      character: metadata.characterName || 'default',
-      outfit: metadata.outfitName || 'default',
-      emotion: metadata.emotionName || 'default',
-      style: metadata.styleName || 'default',
-      date: new Date().toISOString().split('T')[0]
-    }
-
-    const relPath = resolveOutputPath(pattern, vars)
-    const fullPath = join(outputRoot, relPath)
-
-    if (!existsSync(fullPath)) {
-      mkdirSync(fullPath, { recursive: true })
-    }
-
-    return fullPath
-  }
-
-  /** If filePath already exists, append _001, _002, ... until unique */
-  private getUniquePath(filePath: string): string {
-    if (!existsSync(filePath)) return filePath
-
-    const dir = dirname(filePath)
-    const ext = extname(filePath)
-    const name = basename(filePath, ext)
-
-    for (let i = 1; i <= MAX_DUPLICATE_FILE_SUFFIX; i++) {
-      const candidate = join(dir, `${name}_${String(i).padStart(3, '0')}${ext}`)
-      if (!existsSync(candidate)) return candidate
-    }
-    return filePath
   }
 
   private sleep(ms: number): Promise<void> {

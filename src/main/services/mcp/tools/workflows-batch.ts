@@ -1,10 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleItemRepo, workflowRepo, batchJobRepo, batchTaskRepo } from './shared'
-import { expandBatchToTasks } from '../../batch/task-generator'
 import type { BatchConfig } from '../../batch/task-generator'
+import { batchJobService } from '../../batch/batch-job-service'
 import { queueManager } from '../../batch/queue-manager'
-import { validatePromptVariants } from '../../../ipc/validators'
 
 export function registerWorkflowAndBatchTools(server: McpServer): void {
   // === Workflow Management ===
@@ -144,50 +143,10 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
         }))
       }
 
-      // Load module data for expansion
-      const moduleData = config.moduleSelections.map((sel) => {
-        const items = moduleItemRepo.list(sel.moduleId)
-        return {
-          moduleId: sel.moduleId,
-          moduleType: sel.moduleType,
-          items: items.map((item) => ({
-            id: item.id as string,
-            name: item.name as string,
-            prompt: item.prompt as string,
-            negative: (item.negative as string) || '',
-            weight: (item.weight as number) || 1.0,
-            enabled: (item.enabled as number) !== 0,
-            prompt_variants: validatePromptVariants(item.prompt_variants as string)
-          }))
-        }
-      })
-
-      // Expand tasks
-      const tasks = expandBatchToTasks(config, moduleData)
-
-      // Create the job
-      const jobId = batchJobRepo.create({
-        name: config.name,
-        description: config.description,
-        config: JSON.stringify(config),
-        workflow_id: config.workflowId,
-        total_tasks: tasks.length
-      })
-
-      // Create tasks in bulk
-      if (tasks.length > 0) {
-        batchTaskRepo.createBulk(
-          tasks.map((t) => ({
-            job_id: jobId,
-            prompt_data: JSON.stringify(t.promptData),
-            sort_order: t.sortOrder,
-            metadata: JSON.stringify(t.metadata)
-          }))
-        )
-      }
+      const { jobId, totalTasks } = batchJobService.create(config)
 
       return {
-        content: [{ type: 'text', text: JSON.stringify({ jobId, totalTasks: tasks.length, name }) }]
+        content: [{ type: 'text', text: JSON.stringify({ jobId, totalTasks, name }) }]
       }
     }
   )
@@ -197,16 +156,15 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
     'Start executing a batch job. The job must be in draft status and ComfyUI must be connected.',
     { job_id: z.string().describe('Batch job ID') },
     async ({ job_id }) => {
-      try {
-        await queueManager.startJob(job_id)
+      const result = queueManager.requestStart(job_id)
+      if (!result.success) {
         return {
-          content: [{ type: 'text', text: JSON.stringify({ success: true, job_id }) }]
-        }
-      } catch (error) {
-        return {
-          content: [{ type: 'text', text: `Failed to start job: ${(error as Error).message}` }],
+          content: [{ type: 'text', text: `Failed to start job: ${result.error}` }],
           isError: true
         }
+      }
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ success: true, job_id }) }]
       }
     }
   )

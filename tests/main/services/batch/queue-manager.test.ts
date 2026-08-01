@@ -1,5 +1,8 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
+import { existsSync, mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 let mockDb: SqlJsDatabase
 
@@ -67,7 +70,8 @@ vi.mock('../../../../src/main/services/batch/task-generator', () => ({
 import {
   SettingsRepository,
   BatchJobRepository,
-  BatchTaskRepository
+  BatchTaskRepository,
+  GeneratedImageRepository
 } from '../../../../src/main/services/database/repositories/index'
 
 function createTables(db: SqlJsDatabase): void {
@@ -225,6 +229,42 @@ describe('QueueManager Recovery', () => {
   })
 
   describe('start and active lifecycle', () => {
+    it('returns synchronous preflight failures for background starts', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+
+      expect(queueManager.requestStart('missing-job')).toEqual({
+        success: false,
+        error: 'Not connected to ComfyUI server'
+      })
+    })
+
+    it('starts an eligible job in the background after preflight', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
+      const startJob = vi.spyOn(queueManager, 'startJob').mockResolvedValue(undefined)
+
+      expect(queueManager.requestStart(jobId)).toEqual({ success: true })
+      expect(startJob).toHaveBeenCalledWith(jobId)
+    })
+
+    it('rejects background starts for terminal jobs', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      const jobId = jobRepo.create({ name: 'Done Job', config: '{}' })
+      jobRepo.updateStatus(jobId, 'completed')
+
+      expect(queueManager.requestStart(jobId)).toEqual({
+        success: false,
+        error: 'Batch job cannot start from status: completed'
+      })
+      expect(queueManager.preflightStart(jobId, ['completed', 'failed', 'cancelled'])).toEqual({
+        success: true
+      })
+    })
+
     it('rejects start when ComfyUI is disconnected', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
@@ -412,6 +452,23 @@ describe('QueueManager Recovery', () => {
   })
 
   describe('retry settings', () => {
+    it('uses the canonical max_retries setting', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+
+      settingsRepo.set('max_retries', '2')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      vi.spyOn(
+        queueManager as unknown as { processJob: (jobId: string) => Promise<void> },
+        'processJob'
+      ).mockResolvedValue(undefined)
+
+      const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
+      await queueManager.startJob(jobId)
+
+      expect((queueManager as { _maxRetries: number })._maxRetries).toBe(2)
+    })
+
     it('falls back to the default retry count when the stored setting is invalid', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
@@ -427,6 +484,199 @@ describe('QueueManager Recovery', () => {
       await queueManager.startJob(jobId)
 
       expect((queueManager as { _maxRetries: number })._maxRetries).toBe(3)
+    })
+
+    it('stops after the configured number of retries and marks the task failed', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      const task = taskRepo.listByJob(jobId)[0]
+      const processTask = vi
+        .spyOn(
+          queueManager as unknown as {
+            processTask: (...args: unknown[]) => Promise<void>
+          },
+          'processTask'
+        )
+        .mockRejectedValue(new Error('permanent failure'))
+      const manager = queueManager as unknown as {
+        _maxRetries: number
+        processTaskWithRetries: (
+          task: Record<string, unknown>,
+          workflow: Record<string, unknown>,
+          jobId: string,
+          config: Record<string, unknown>,
+          outputRoot: string
+        ) => Promise<{ success: boolean; cancelled: boolean; error?: Error }>
+      }
+      manager._maxRetries = 2
+
+      const result = await manager.processTaskWithRetries(task, {}, jobId, {}, 'C:\\output')
+
+      expect(processTask).toHaveBeenCalledTimes(3)
+      expect(result.success).toBe(false)
+      expect(result.cancelled).toBe(false)
+      expect(result.error?.message).toBe('permanent failure')
+      const updated = taskRepo.listByJob(jobId)[0]
+      expect(updated.status).toBe('failed')
+      expect(updated.retry_count).toBe(2)
+    })
+
+    it('reports success when a retry eventually completes', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
+      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      const task = taskRepo.listByJob(jobId)[0]
+      const processTask = vi
+        .spyOn(
+          queueManager as unknown as {
+            processTask: (...args: unknown[]) => Promise<void>
+          },
+          'processTask'
+        )
+        .mockRejectedValueOnce(new Error('transient failure'))
+        .mockResolvedValueOnce(undefined)
+      const manager = queueManager as unknown as {
+        _maxRetries: number
+        processTaskWithRetries: (
+          task: Record<string, unknown>,
+          workflow: Record<string, unknown>,
+          jobId: string,
+          config: Record<string, unknown>,
+          outputRoot: string
+        ) => Promise<{ success: boolean; cancelled: boolean }>
+      }
+      manager._maxRetries = 2
+
+      const result = await manager.processTaskWithRetries(task, {}, jobId, {}, 'C:\\output')
+
+      expect(processTask).toHaveBeenCalledTimes(2)
+      expect(result.success).toBe(true)
+      expect(taskRepo.listByJob(jobId)[0].retry_count).toBe(1)
+    })
+  })
+
+  describe('task result consistency', () => {
+    function createTaskFixture(): { jobId: string; task: Record<string, unknown> } {
+      const jobId = jobRepo.create({ name: 'Result Job', config: '{}' })
+      taskRepo.createBulk([
+        {
+          job_id: jobId,
+          prompt_data: JSON.stringify({ positive: 'prompt', negative: '', seed: 42 }),
+          sort_order: 0,
+          metadata: JSON.stringify({
+            combinationIndex: 0,
+            imageIndex: 0,
+            totalInCombination: 1
+          })
+        }
+      ])
+      return { jobId, task: taskRepo.listByJob(jobId)[0] }
+    }
+
+    function makeConfig(): Record<string, unknown> {
+      return {
+        name: 'Result Job',
+        workflowId: 'workflow-id',
+        moduleSelections: [],
+        countPerCombination: 1,
+        seedMode: 'random',
+        outputFolderPattern: '{job}',
+        fileNamePattern: '{index}'
+      }
+    }
+
+    it('fails a completed prompt that contains no output images', async () => {
+      const outputRoot = mkdtempSync(join(tmpdir(), 'cam-no-output-'))
+      try {
+        const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+        const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+        const taskGenerator = await import('../../../../src/main/services/batch/task-generator')
+        const { jobId, task } = createTaskFixture()
+        vi.mocked(taskGenerator.resolveOutputPath).mockReturnValue('job')
+        vi.mocked(comfyuiManager.restClient.queuePrompt).mockResolvedValue({
+          prompt_id: 'prompt-1'
+        })
+        vi.mocked(comfyuiManager.restClient.deleteFromHistory).mockResolvedValue(undefined)
+        vi.spyOn(
+          queueManager as unknown as {
+            waitForCompletion: () => Promise<{ outputs: Record<string, unknown> }>
+          },
+          'waitForCompletion'
+        ).mockResolvedValue({ outputs: {} })
+        const manager = queueManager as unknown as {
+          processTask: (
+            task: Record<string, unknown>,
+            workflow: Record<string, unknown>,
+            jobId: string,
+            config: Record<string, unknown>,
+            outputRoot: string
+          ) => Promise<void>
+        }
+
+        await expect(
+          manager.processTask(task, {}, jobId, makeConfig(), outputRoot)
+        ).rejects.toThrow('completed without output images')
+        expect(new GeneratedImageRepository().list({ page: 1, pageSize: 10 }).total).toBe(0)
+        expect(comfyuiManager.restClient.deleteFromHistory).toHaveBeenCalledWith(['prompt-1'])
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true })
+      }
+    })
+
+    it('rolls back gallery rows and files when persistence fails partway through', async () => {
+      const outputRoot = mkdtempSync(join(tmpdir(), 'cam-partial-output-'))
+      try {
+        const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+        const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+        const taskGenerator = await import('../../../../src/main/services/batch/task-generator')
+        const { jobId, task } = createTaskFixture()
+        vi.mocked(taskGenerator.resolveOutputPath).mockReturnValue('job')
+        vi.mocked(comfyuiManager.restClient.queuePrompt).mockResolvedValue({
+          prompt_id: 'prompt-2'
+        })
+        vi.mocked(comfyuiManager.restClient.getImage)
+          .mockResolvedValueOnce(Buffer.from('first'))
+          .mockResolvedValueOnce(Buffer.from('second'))
+        vi.mocked(comfyuiManager.restClient.deleteFromHistory).mockResolvedValue(undefined)
+        vi.spyOn(
+          queueManager as unknown as {
+            waitForCompletion: () => Promise<{ outputs: Record<string, unknown> }>
+          },
+          'waitForCompletion'
+        ).mockResolvedValue({
+          outputs: {
+            node: {
+              images: [
+                { filename: 'first.png', subfolder: '', type: 'output' },
+                { filename: 'second.png', subfolder: '', type: 'output' }
+              ]
+            }
+          }
+        })
+        mockDb.run(`CREATE TRIGGER fail_second_generated_image
+          BEFORE INSERT ON generated_images
+          WHEN NEW.file_path LIKE '%_001.png'
+          BEGIN SELECT RAISE(ABORT, 'simulated persistence failure'); END`)
+        const manager = queueManager as unknown as {
+          processTask: (
+            task: Record<string, unknown>,
+            workflow: Record<string, unknown>,
+            jobId: string,
+            config: Record<string, unknown>,
+            outputRoot: string
+          ) => Promise<void>
+        }
+
+        await expect(
+          manager.processTask(task, {}, jobId, makeConfig(), outputRoot)
+        ).rejects.toThrow('simulated persistence failure')
+        expect(new GeneratedImageRepository().list({ page: 1, pageSize: 10 }).total).toBe(0)
+        expect(existsSync(join(outputRoot, 'job', '0001.png'))).toBe(false)
+        expect(existsSync(join(outputRoot, 'job', '0001_001.png'))).toBe(false)
+      } finally {
+        rmSync(outputRoot, { recursive: true, force: true })
+      }
     })
   })
 

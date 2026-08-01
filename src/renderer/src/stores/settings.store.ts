@@ -12,7 +12,6 @@ export interface AppSettings {
   output_pattern: string
   filename_pattern: string
   max_retries: string
-  auto_save_interval: string
   [key: string]: string
 }
 
@@ -25,7 +24,6 @@ const defaultSettings: AppSettings = {
   output_pattern: '{job}/{character}/{outfit}/{emotion}',
   filename_pattern: '{character}_{outfit}_{emotion}_{index}',
   max_retries: '3',
-  auto_save_interval: '5000',
   mcp_enabled: 'false',
   mcp_port: '39464',
   mcp_auth_required: 'true'

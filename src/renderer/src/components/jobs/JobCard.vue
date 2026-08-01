@@ -30,17 +30,23 @@ const progress = computed(() => {
   return total > 0 ? Math.round((completed / total) * 100) : 0
 })
 
-const actions = computed<OverflowAction[]>(() => [
-  { key: 'edit', label: t('batch.actions.edit'), icon: CreateOutline },
-  { key: 'clone', label: t('batch.actions.clone'), icon: CopyOutline },
-  {
-    key: 'delete',
-    label: t('batch.actions.delete'),
-    icon: TrashOutline,
-    danger: true,
-    confirmText: t('batch.confirmDelete')
+const actions = computed<OverflowAction[]>(() => {
+  const items: OverflowAction[] = []
+  if (props.job.status === 'draft') {
+    items.push({ key: 'edit', label: t('batch.actions.edit'), icon: CreateOutline })
   }
-])
+  items.push(
+    { key: 'clone', label: t('batch.actions.clone'), icon: CopyOutline },
+    {
+      key: 'delete',
+      label: t('batch.actions.delete'),
+      icon: TrashOutline,
+      danger: true,
+      confirmText: t('batch.confirmDelete')
+    }
+  )
+  return items
+})
 
 function handleAction(action: string): void {
   if (action === 'edit') emit('edit')

@@ -602,6 +602,16 @@ export class CharacterRepository {
   }
 }
 
+export interface BatchJobWriteData {
+  name: string
+  description?: string
+  config: string
+  workflow_id?: string
+  total_tasks?: number
+  pipeline_config?: string
+  module_data_snapshot?: string
+}
+
 export class BatchJobRepository {
   list(status?: string): Record<string, unknown>[] {
     const db = getDatabase()
@@ -635,15 +645,7 @@ export class BatchJobRepository {
     return null
   }
 
-  create(data: {
-    name: string
-    description?: string
-    config: string
-    workflow_id?: string
-    total_tasks?: number
-    pipeline_config?: string
-    module_data_snapshot?: string
-  }): string {
+  create(data: BatchJobWriteData): string {
     const db = getDatabase()
     const id = uuidv4()
     db.run(
@@ -662,6 +664,43 @@ export class BatchJobRepository {
     )
     saveDatabase()
     return id
+  }
+
+  updateDraft(id: string, data: BatchJobWriteData): void {
+    const current = this.get(id)
+    if (!current) {
+      throw new Error(`Batch job not found: ${id}`)
+    }
+    if (
+      current.status !== 'draft' ||
+      current.started_at !== null ||
+      Number(current.completed_tasks) > 0 ||
+      Number(current.failed_tasks) > 0
+    ) {
+      throw new Error('Only unstarted draft jobs can be edited')
+    }
+
+    const db = getDatabase()
+    withTransaction(() => {
+      db.run('DELETE FROM batch_tasks WHERE job_id = ?', [id])
+      db.run(
+        `UPDATE batch_jobs
+         SET name = ?, description = ?, config = ?, workflow_id = ?, total_tasks = ?,
+             completed_tasks = 0, failed_tasks = 0, pipeline_config = ?, module_data_snapshot = ?,
+             started_at = NULL, completed_at = NULL
+         WHERE id = ? AND status = 'draft'`,
+        [
+          data.name,
+          data.description ?? '',
+          data.config,
+          data.workflow_id ?? null,
+          data.total_tasks ?? 0,
+          data.pipeline_config ?? null,
+          data.module_data_snapshot ?? null,
+          id
+        ]
+      )
+    })
   }
 
   updateStatus(id: string, status: string): void {
@@ -718,7 +757,7 @@ export class BatchTaskRepository {
   listByJobPending(jobId: string, limit: number): Record<string, unknown>[] {
     const db = getDatabase()
     const stmt = db.prepare(
-      "SELECT * FROM batch_tasks WHERE job_id = ? AND status NOT IN ('completed', 'cancelled') ORDER BY sort_order ASC LIMIT ?"
+      "SELECT * FROM batch_tasks WHERE job_id = ? AND status IN ('pending', 'retrying') ORDER BY sort_order ASC LIMIT ?"
     )
     stmt.bind([jobId, limit])
     const results: Record<string, unknown>[] = []

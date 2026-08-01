@@ -606,6 +606,45 @@ describe('Database Repositories', () => {
       expect(repo.get(id)).toBeNull()
     })
 
+    it('updates an unstarted draft and clears its generated task rows atomically', () => {
+      const taskRepo = new BatchTaskRepository()
+      const id = repo.create({ name: 'Before', config: '{"before":true}', total_tasks: 1 })
+      taskRepo.createBulk([{ job_id: id, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      const runSpy = vi.spyOn(mockDb, 'run')
+
+      repo.updateDraft(id, {
+        name: 'After',
+        description: 'Updated',
+        config: '{"after":true}',
+        total_tasks: 3,
+        module_data_snapshot: '[]'
+      })
+
+      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
+      expect(runSpy).toHaveBeenCalledWith('COMMIT')
+      expect(taskRepo.listByJob(id)).toHaveLength(0)
+      expect(repo.get(id)).toMatchObject({
+        name: 'After',
+        description: 'Updated',
+        config: '{"after":true}',
+        total_tasks: 3,
+        completed_tasks: 0,
+        failed_tasks: 0,
+        status: 'draft'
+      })
+    })
+
+    it('rejects edits after a draft has started and preserves the original job', () => {
+      const id = repo.create({ name: 'Original', config: '{}' })
+      repo.updateStatus(id, 'running')
+
+      expect(() => repo.updateDraft(id, { name: 'Changed', config: '{}' })).toThrow(
+        'Only unstarted draft jobs can be edited'
+      )
+      expect(repo.get(id)?.name).toBe('Original')
+      expect(repo.get(id)?.status).toBe('running')
+    })
+
     it('wraps job reorder updates in a transaction', () => {
       const firstId = repo.create({ name: 'First', config: '{}' })
       const secondId = repo.create({ name: 'Second', config: '{}' })
@@ -679,6 +718,24 @@ describe('Database Repositories', () => {
       taskRepo.updateStatus(taskId, 'retrying')
       const task = taskRepo.listByJob(jobId)[0]
       expect(task.retry_count).toBe(2)
+    })
+
+    it('lists only pending and retrying tasks for execution', () => {
+      taskRepo.createBulk([
+        { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{}', sort_order: 2, metadata: '{}' },
+        { job_id: jobId, prompt_data: '{}', sort_order: 3, metadata: '{}' }
+      ])
+      const tasks = taskRepo.listByJob(jobId)
+      taskRepo.updateStatus(tasks[1].id as string, 'retrying')
+      taskRepo.updateStatus(tasks[2].id as string, 'failed')
+      taskRepo.updateStatus(tasks[3].id as string, 'completed')
+
+      expect(taskRepo.listByJobPending(jobId, 50).map((task) => task.status)).toEqual([
+        'pending',
+        'retrying'
+      ])
     })
 
     it('cascade deletes tasks when job is deleted', () => {

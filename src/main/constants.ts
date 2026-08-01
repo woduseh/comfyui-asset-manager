@@ -19,6 +19,13 @@ export const COMPLETION_POLL_INTERVAL_MS = 5000
 export const MAX_DUPLICATE_FILE_SUFFIX = 999
 export const MAX_DURATION_SAMPLES = 50 // Moving average window for ETA calculation
 export const CLEAR_PROMPT_DATA_CHUNK_INTERVAL = 5 // Clear completed prompt_data every N chunks
+export const MAX_BATCH_COUNT_PER_COMBINATION = 10_000
+export const MAX_BATCH_MODULE_SELECTIONS = 100
+export const MAX_BATCH_SELECTED_ITEMS = 1000
+export const MAX_BATCH_SLOT_MAPPINGS = 100
+export const MAX_BATCH_VARIABLE_OVERRIDES = 500
+export const MAX_BATCH_PIPELINE_STEPS = 20
+export const MAX_BATCH_TOTAL_TASKS = 1_000_000
 
 // === MCP Server ===
 export const DEFAULT_MCP_PORT = 39464
@@ -36,6 +43,8 @@ export const DB_SAVE_RETRY_DELAYS_MS = [250, 1000, 3000] as const
 
 // === Terminal ===
 export const MAX_TERMINAL_INSTANCES = 10
+export const MAX_TERMINAL_INPUT_LENGTH = 1_048_576
+export const MAX_TERMINAL_DIMENSION = 1000
 
 // === Tags ===
 export const DANBOORU_REQUEST_TIMEOUT_MS = 5000
@@ -52,3 +61,4 @@ export const WINDOW_MIN_HEIGHT = 700
 export const MAX_BULK_UPDATE_ITEMS = 200
 export const MAX_LIST_ITEMS_LIMIT = 200
 export const MAX_IMPORT_FILE_SIZE_BYTES = 1_048_576 // 1MB
+export const MAX_WORKFLOW_FILE_SIZE_BYTES = 10_485_760 // 10MB

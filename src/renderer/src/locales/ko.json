@@ -409,7 +409,7 @@
     "rating": "평점",
     "favorite": "즐겨찾기",
     "export": "내보내기",
-    "delete": "삭제",
+    "delete": "갤러리에서 제거",
     "metadata": "메타데이터",
     "compare": "비교",
     "sortOptions": {
@@ -420,10 +420,10 @@
     },
     "all": "전체",
     "msg": {
-      "bulkDeleted": "{count}장 삭제됨",
+      "bulkDeleted": "{count}장이 갤러리에서 제거됨",
       "copiedToClipboard": "클립보드에 복사됨",
       "copyFailed": "복사 실패",
-      "imageDeleted": "이미지 삭제됨"
+      "imageDeleted": "이미지가 갤러리에서 제거됨"
     },
     "ratingPlaceholder": "평점",
     "favoriteOn": "♥ 즐겨찾기",
@@ -433,8 +433,8 @@
     "selectionModeOff": "선택 해제",
     "selectionModeOn": "선택 모드",
     "selectAll": "전체 선택",
-    "deleteCount": "삭제 ({count})",
-    "confirmBulkDelete": "선택한 {count}장을 삭제하시겠습니까?",
+    "deleteCount": "갤러리에서 제거 ({count})",
+    "confirmBulkDelete": "선택한 {count}장을 갤러리에서 제거하시겠습니까? 원본 파일은 유지됩니다.",
     "viewer": {
       "prevImage": "이전 이미지 (←)",
       "nextImage": "다음 이미지 (→)",
@@ -442,8 +442,8 @@
       "openInExplorer": "파일 탐색기에서 열기",
       "removeFavorite": "즐겨찾기 해제",
       "addFavorite": "즐겨찾기 추가",
-      "deleteImage": "이미지 삭제",
-      "confirmDelete": "이 이미지를 삭제하시겠습니까?"
+      "deleteImage": "갤러리에서 제거",
+      "confirmDelete": "이 이미지를 갤러리에서 제거하시겠습니까? 원본 파일은 유지됩니다."
     },
     "meta": {
       "character": "캐릭터",

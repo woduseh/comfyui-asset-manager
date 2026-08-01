@@ -34,7 +34,26 @@ function createTestI18n(): ReturnType<typeof createI18n> {
 beforeEach(() => {
   invokeIpcMock.mockReset()
   invokeIpcMock.mockImplementation((channel: string) => {
-    if (channel === IPC_CHANNELS.MODULE_LIST) return Promise.resolve([])
+    if (channel === IPC_CHANNELS.MODULE_LIST) {
+      return Promise.resolve([
+        { id: 'module-1', name: 'Characters', type: 'character', description: '' }
+      ])
+    }
+    if (channel === IPC_CHANNELS.MODULE_ITEM_LIST) {
+      return Promise.resolve([
+        {
+          id: 'item-1',
+          module_id: 'module-1',
+          name: 'Alice',
+          prompt: 'alice',
+          negative: '',
+          weight: 1,
+          sort_order: 0,
+          enabled: 1,
+          prompt_variants: {}
+        }
+      ])
+    }
     if (channel === IPC_CHANNELS.WORKFLOW_LIST) {
       return Promise.resolve([
         {
@@ -62,6 +81,10 @@ beforeEach(() => {
     if (channel === IPC_CHANNELS.BATCH_CREATE) {
       return Promise.resolve({ jobId: 'job-1', totalTasks: 1 })
     }
+    if (channel === IPC_CHANNELS.BATCH_UPDATE_DRAFT) {
+      return Promise.resolve({ jobId: 'job-1', totalTasks: 1 })
+    }
+    if (channel === IPC_CHANNELS.SETTINGS_GET_ALL) return Promise.resolve({})
     return Promise.resolve(undefined)
   })
 })
@@ -99,6 +122,30 @@ describe('JobCard', () => {
     expect(wrapper.emitted('clone')).toHaveLength(1)
     expect(wrapper.emitted('delete')).toHaveLength(1)
     expect(job.status).toBe('draft')
+  })
+
+  it('offers in-place editing only for draft jobs', () => {
+    const wrapper = mount(JobCard, {
+      props: {
+        job: {
+          id: 'job-1',
+          name: 'Completed',
+          status: 'completed',
+          total_tasks: 1,
+          completed_tasks: 1,
+          failed_tasks: 0
+        },
+        statusLabel: 'Completed',
+        isConnected: true,
+        isProcessing: false
+      },
+      global: { plugins: [createTestI18n()] }
+    })
+
+    const actions = wrapper.findComponent(OverflowActionMenu).props('actions') as Array<{
+      key: string
+    }>
+    expect(actions.map((action) => action.key)).toEqual(['clone', 'delete'])
   })
 })
 
@@ -220,5 +267,74 @@ describe('BatchWizard', () => {
       })
     )
     expect(wizard.emitted('saved')).toHaveLength(1)
+  })
+
+  it('updates an existing draft without deleting it first', async () => {
+    const sourceJob = {
+      id: 'job-1',
+      name: 'Existing batch',
+      status: 'draft',
+      config: JSON.stringify({
+        workflowId: 'workflow-1',
+        moduleSelections: [
+          {
+            moduleId: 'module-1',
+            moduleType: 'character',
+            selectedItemIds: ['item-1']
+          }
+        ],
+        countPerCombination: 1,
+        seedMode: 'random',
+        fixedSeed: 42,
+        outputFolderPattern: '{job}',
+        fileNamePattern: '{index}'
+      })
+    }
+    const Host = defineComponent({
+      components: { BatchWizard, NMessageProvider },
+      setup: () => ({ sourceJob }),
+      template: `
+        <NMessageProvider>
+          <BatchWizard :show="true" mode="edit" :source-job="sourceJob" />
+        </NMessageProvider>
+      `
+    })
+    const wrapper = mount(Host, {
+      global: {
+        plugins: [createPinia(), createTestI18n()],
+        stubs: {
+          NModal: { template: '<div><slot /><slot name="footer" /></div>' },
+          NScrollbar: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    await flushPromises()
+
+    const wizard = wrapper.findComponent(BatchWizard)
+    function nextButton(): VueWrapper {
+      return wizard
+        .findAllComponents(NButton)
+        .find((button) => button.text().includes('wizard.next')) as VueWrapper
+    }
+    await nextButton().trigger('click')
+    await nextButton().trigger('click')
+    const submitButton = wizard
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('wizard.submitEdit'))!
+    await submitButton.trigger('click')
+    await flushPromises()
+
+    expect(invokeIpcMock).toHaveBeenCalledWith(
+      IPC_CHANNELS.BATCH_UPDATE_DRAFT,
+      expect.objectContaining({
+        id: 'job-1',
+        config: expect.objectContaining({ name: 'Existing batch' })
+      })
+    )
+    expect(invokeIpcMock).not.toHaveBeenCalledWith(IPC_CHANNELS.BATCH_DELETE, expect.anything())
+    expect(invokeIpcMock).not.toHaveBeenCalledWith(
+      IPC_CHANNELS.BATCH_DELETE_TASKS,
+      expect.anything()
+    )
   })
 })

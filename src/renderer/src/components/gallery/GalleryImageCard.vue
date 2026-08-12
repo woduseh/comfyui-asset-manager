@@ -15,6 +15,8 @@ defineEmits<{
   open: []
   rate: [value: number]
   favorite: []
+  thumbnailFailed: []
+  thumbnailLoaded: []
 }>()
 
 const { t } = useI18n()
@@ -40,18 +42,24 @@ const { t } = useI18n()
       :alt="image.character_name || image.file_path"
       :error-text="t('gallery.thumbnailLoadFailed')"
       :retry-text="t('common.retry')"
+      @failed="$emit('thumbnailFailed')"
+      @loaded="$emit('thumbnailLoaded')"
     />
     <NSpace justify="space-between" align="center" style="margin-top: 8px">
       <NRate
         :value="image.rating"
         :count="5"
         size="small"
+        :aria-label="t('gallery.rateImage')"
         @update:value="(value: number) => $emit('rate', value)"
       />
       <NButton
         text
         :type="image.is_favorite ? 'warning' : 'default'"
         size="small"
+        :aria-label="
+          image.is_favorite ? t('gallery.viewer.removeFavorite') : t('gallery.viewer.addFavorite')
+        "
         @click.stop="$emit('favorite')"
       >
         {{ image.is_favorite ? '♥' : '♡' }}

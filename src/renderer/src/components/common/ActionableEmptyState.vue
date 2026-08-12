@@ -14,6 +14,9 @@ const emit = defineEmits<{
 
 <template>
   <NEmpty :description="title" class="actionable-empty-state">
+    <template v-if="$slots.icon" #icon>
+      <slot name="icon" />
+    </template>
     <template v-if="description || actionLabel" #extra>
       <div class="actionable-empty-state__extra">
         <p v-if="description">{{ description }}</p>

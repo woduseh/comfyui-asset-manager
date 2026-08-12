@@ -27,6 +27,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
             <NInput
               v-model:value="batchName"
               :placeholder="t('batch.wizard.nameExamplePlaceholder')"
+              :aria-label="t('batch.wizard.jobNameLabel')"
             />
           </NFormItem>
         </NGridItem>
@@ -37,6 +38,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
                 v-model:value="selectedWorkflowId"
                 :options="workflowOptions"
                 :placeholder="t('batch.wizard.workflowPlaceholder')"
+                :aria-label="t('batch.wizard.workflowLabel')"
               />
               <NAlert
                 v-if="generationWorkflowHint"
@@ -55,6 +57,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
         <NInput
           v-model:value="batchDescription"
           :placeholder="t('batch.wizard.optionalPlaceholder')"
+          :aria-label="t('batch.wizard.descriptionLabel')"
         />
       </NFormItem>
       <NGrid :cols="3" :x-gap="16">
@@ -64,13 +67,18 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
               v-model:value="countPerCombination"
               :min="1"
               :max="10000"
+              :aria-label="t('batch.wizard.countLabel')"
               style="width: 100%"
             />
           </NFormItem>
         </NGridItem>
         <NGridItem>
           <NFormItem :label="t('batch.wizard.seedModeLabel')">
-            <NSelect v-model:value="seedMode" :options="seedModeOptions" />
+            <NSelect
+              v-model:value="seedMode"
+              :options="seedModeOptions"
+              :aria-label="t('batch.wizard.seedModeLabel')"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem v-if="seedMode !== 'random'">
@@ -79,6 +87,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
               v-model:value="fixedSeed"
               :min="0"
               :max="2147483647"
+              :aria-label="t('batch.wizard.seedValueLabel')"
               style="width: 100%"
             />
           </NFormItem>

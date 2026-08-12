@@ -267,10 +267,15 @@ onMounted(async () => {
     <NCard :title="t('settings.server.title')" style="margin-top: 16px">
       <NForm label-placement="left" label-width="140">
         <NFormItem :label="t('settings.server.host')">
-          <NInput v-model:value="host" />
+          <NInput v-model:value="host" :aria-label="t('settings.server.host')" />
         </NFormItem>
         <NFormItem :label="t('settings.server.port')">
-          <NInputNumber v-model:value="port" :min="1" :max="65535" />
+          <NInputNumber
+            v-model:value="port"
+            :min="1"
+            :max="65535"
+            :aria-label="t('settings.server.port')"
+          />
         </NFormItem>
         <NFormItem>
           <NSpace>
@@ -290,7 +295,12 @@ onMounted(async () => {
       <NForm label-placement="left" label-width="140">
         <NFormItem :label="t('settings.output.directory')">
           <NSpace>
-            <NInput v-model:value="outputDir" readonly style="flex: 1" />
+            <NInput
+              v-model:value="outputDir"
+              readonly
+              style="flex: 1"
+              :aria-label="t('settings.output.directory')"
+            />
             <NButton @click="handleBrowseOutput">
               {{ t('settings.output.browse') }}
             </NButton>
@@ -300,6 +310,7 @@ onMounted(async () => {
           <NInput
             :value="settingsStore.settings.output_pattern"
             placeholder="{job}/{character}/{outfit}/{emotion}"
+            :aria-label="t('settings.output.folderPattern')"
             @update:value="(v: string) => handleSettingChange('output_pattern', v)"
           />
         </NFormItem>
@@ -307,6 +318,7 @@ onMounted(async () => {
           <NInput
             :value="settingsStore.settings.filename_pattern"
             placeholder="{character}_{outfit}_{emotion}_{index}"
+            :aria-label="t('settings.output.filePattern')"
             @update:value="(v: string) => handleSettingChange('filename_pattern', v)"
           />
         </NFormItem>
@@ -320,6 +332,7 @@ onMounted(async () => {
           <NSelect
             :value="settingsStore.settings.language"
             :options="languageOptions"
+            :aria-label="t('settings.general.language')"
             @update:value="handleLanguageChange"
           />
         </NFormItem>
@@ -327,6 +340,7 @@ onMounted(async () => {
           <NSelect
             :value="settingsStore.settings.theme"
             :options="themeOptions"
+            :aria-label="t('settings.general.theme')"
             @update:value="handleThemeChange"
           />
         </NFormItem>
@@ -343,6 +357,7 @@ onMounted(async () => {
             :value="parseIntegerOrFallback(settingsStore.settings.max_retries, 3)"
             :min="0"
             :max="10"
+            :aria-label="t('settings.batch.maxRetries')"
             @update:value="(v: number | null) => handleSettingChange('max_retries', String(v ?? 3))"
           />
         </NFormItem>
@@ -359,7 +374,11 @@ onMounted(async () => {
 
       <NForm label-placement="left" label-width="200">
         <NFormItem :label="t('settings.mcp.enabled')">
-          <NSwitch :value="mcpEnabled" @update:value="handleMcpEnabledChange" />
+          <NSwitch
+            :value="mcpEnabled"
+            :aria-label="t('settings.mcp.enabled')"
+            @update:value="handleMcpEnabledChange"
+          />
         </NFormItem>
         <NFormItem :label="t('settings.mcp.port')">
           <NInputNumber
@@ -367,12 +386,14 @@ onMounted(async () => {
             :min="1024"
             :max="65535"
             :disabled="terminalStore.mcpStatus.isRunning"
+            :aria-label="t('settings.mcp.port')"
             @update:value="handleMcpPortChange"
           />
         </NFormItem>
         <NFormItem :label="t('settings.mcp.auth.required')">
           <NSwitch
             :value="terminalStore.mcpAuthStatus.required"
+            :aria-label="t('settings.mcp.auth.required')"
             @update:value="handleMcpAuthRequiredChange"
           />
         </NFormItem>
@@ -386,6 +407,7 @@ onMounted(async () => {
               type="password"
               show-password-on="click"
               readonly
+              :aria-label="t('settings.mcp.auth.token')"
             />
             <NSpace :size="8">
               <NButton size="small" @click="handleCopyMcpToken">

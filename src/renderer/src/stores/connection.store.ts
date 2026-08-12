@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { ComfyUIStatus } from '@renderer/types/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { invokeIpc } from '@renderer/utils/ipc'
+import { parseIntegerOrFallback } from '@renderer/utils/number'
 
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ComfyUIStatus>({
@@ -46,6 +47,25 @@ export const useConnectionStore = defineStore('connection', () => {
     }
   }
 
+  async function connectConfigured(): Promise<boolean> {
+    try {
+      const settings = await invokeIpc(IPC_CHANNELS.SETTINGS_GET_ALL)
+      const host =
+        typeof settings?.comfyui_host === 'string' && settings.comfyui_host
+          ? settings.comfyui_host
+          : status.value.host
+      const port = parseIntegerOrFallback(
+        typeof settings?.comfyui_port === 'string' ? settings.comfyui_port : null,
+        status.value.port
+      )
+      return connect(host, port)
+    } catch (error) {
+      connectionState.value = 'disconnected'
+      lastError.value = error instanceof Error ? error.message : String(error)
+      return false
+    }
+  }
+
   async function disconnect(): Promise<void> {
     await invokeIpc(IPC_CHANNELS.COMFYUI_DISCONNECT)
     status.value.connected = false
@@ -76,6 +96,7 @@ export const useConnectionStore = defineStore('connection', () => {
     isConnecting,
     lastError,
     connect,
+    connectConfigured,
     disconnect,
     fetchSystemStats,
     setConnectionChanged

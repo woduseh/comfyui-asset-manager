@@ -10,6 +10,11 @@ const props = defineProps<{
   retryText: string
 }>()
 
+const emit = defineEmits<{
+  failed: []
+  loaded: []
+}>()
+
 const loading = ref(true)
 const failed = ref(false)
 const retryKey = ref(0)
@@ -27,11 +32,13 @@ function reset(): void {
 function handleLoad(): void {
   loading.value = false
   failed.value = false
+  emit('loaded')
 }
 
 function handleError(): void {
   loading.value = false
   failed.value = true
+  emit('failed')
 }
 
 function retry(): void {

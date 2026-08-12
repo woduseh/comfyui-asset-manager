@@ -33,10 +33,7 @@ import { useTerminalStore } from '@renderer/stores/terminal.store'
 import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
 import { NAV_ITEMS } from '@renderer/navigation'
 import type { RouteName } from '@renderer/navigation'
-import { parseIntegerOrFallback } from '@renderer/utils/number'
 import { getServiceStatusType } from '@renderer/utils/status-presentation'
-import { invokeIpc } from '@renderer/utils/ipc'
-import { IPC_CHANNELS } from '@shared/ipc-channels'
 
 const router = useRouter()
 const route = useRoute()
@@ -61,8 +58,8 @@ const ROUTE_ICONS: Record<RouteName, VueComponent> = {
 }
 
 /** NAV_ITEMS without settings — settings lives in the bottom menu slot. */
-const MAIN_ROUTES: RouteName[] = ['workflows', 'modules', 'jobs', 'gallery', 'terminal']
-const SETTINGS_ROUTES: RouteName[] = ['settings']
+const MAIN_ROUTES: RouteName[] = ['jobs', 'workflows', 'modules', 'gallery']
+const SETTINGS_ROUTES: RouteName[] = ['terminal', 'settings']
 
 function buildMenuOption(name: RouteName): MenuOption {
   const item = NAV_ITEMS.find((n) => n.name === name)!
@@ -93,7 +90,7 @@ const mainMenuOptions = computed<MenuOption[]>(() => MAIN_ROUTES.map(buildMenuOp
 const settingsMenuOptions = computed<MenuOption[]>(() => SETTINGS_ROUTES.map(buildMenuOption))
 
 const activeKey = computed(() => {
-  return (route.name as string) || 'workflows'
+  return (route.name as string) || 'jobs'
 })
 
 const connectionLabel = computed(() => {
@@ -127,27 +124,18 @@ async function handleToggleConnection(): Promise<void> {
   if (connectionStore.isConnected) {
     await connectionStore.disconnect()
   } else {
-    const settings = await invokeIpc(IPC_CHANNELS.SETTINGS_GET_ALL)
-    const host =
-      typeof settings?.comfyui_host === 'string' && settings.comfyui_host
-        ? settings.comfyui_host
-        : 'localhost'
-    const port = parseIntegerOrFallback(
-      typeof settings?.comfyui_port === 'string' ? settings.comfyui_port : null,
-      8188
-    )
-    await connectionStore.connect(host, port)
+    await connectionStore.connectConfigured()
   }
 }
 </script>
 
 <template>
-  <NLayout has-sider style="height: 100vh">
+  <NLayout has-sider class="app-frame">
     <NLayoutSider
       v-model:collapsed="sidebarCollapsed"
       bordered
-      :width="200"
-      :collapsed-width="64"
+      :width="168"
+      :collapsed-width="56"
       collapse-mode="width"
       show-trigger
       content-style="display: flex; flex-direction: column; height: 100%;"
@@ -157,7 +145,10 @@ async function handleToggleConnection(): Promise<void> {
           <NIcon v-if="sidebarCollapsed" :size="24" class="logo-icon">
             <DiamondOutline />
           </NIcon>
-          <span v-else class="logo-text">ComfyUI AM</span>
+          <span v-else class="logo-text">
+            <NIcon :size="18"><DiamondOutline /></NIcon>
+            <span>ComfyUI <strong>Asset Manager</strong></span>
+          </span>
         </Transition>
       </div>
 
@@ -223,7 +214,8 @@ async function handleToggleConnection(): Promise<void> {
       </NLayoutHeader>
 
       <NLayout
-        content-style="padding: 20px; overflow: auto;"
+        content-style="padding: 20px 22px 24px; overflow: auto;"
+        class="app-content"
         :style="{
           height: terminalStore.panelVisible
             ? `calc(100vh - 48px - ${terminalStore.panelHeight}px)`
@@ -240,27 +232,36 @@ async function handleToggleConnection(): Promise<void> {
 
 <style scoped>
 .app-logo {
-  padding: 14px;
-  text-align: center;
-  font-weight: bold;
-  font-size: 17px;
-  border-bottom: 1px solid var(--n-border-color);
   display: flex;
+  min-height: 58px;
   align-items: center;
   justify-content: center;
-  min-height: 22px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--app-border);
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .logo-text {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--app-text-primary);
   white-space: nowrap;
 }
 
+.logo-text strong {
+  color: var(--app-text-subtle);
+  font-weight: 600;
+}
+
+.logo-text > span {
+  display: inline-flex;
+  gap: 3px;
+}
+
 .logo-icon {
-  color: #8b5cf6;
+  color: var(--app-accent-blue);
 }
 
 .logo-fade-enter-active,
@@ -291,6 +292,7 @@ async function handleToggleConnection(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  background: var(--app-surface-raised);
 }
 
 .service-status :deep(.n-tag__content) {
@@ -314,7 +316,22 @@ async function handleToggleConnection(): Promise<void> {
   transition:
     background 0.2s ease,
     color 0.2s ease !important;
-  border-radius: 8px !important;
-  margin: 2px 6px !important;
+  min-height: 38px;
+  border-radius: 6px !important;
+  margin: 3px 8px !important;
+  font-size: 12px;
+}
+
+:deep(.n-menu-item-content--selected) {
+  box-shadow: inset 2px 0 0 var(--app-accent-blue);
+}
+
+.app-frame {
+  height: 100vh;
+  background: var(--app-bg);
+}
+
+.app-content {
+  background: var(--app-bg);
 }
 </style>

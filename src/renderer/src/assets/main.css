@@ -44,15 +44,52 @@ h2 {
 
 /* Unified border-radius */
 :root {
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
   --page-max-width: 1440px;
   --page-compact-max-width: 960px;
-  --app-text-muted: rgba(128, 128, 128, 0.78);
-  --app-text-subtle: rgba(128, 128, 128, 0.58);
-  --app-surface-muted: rgba(128, 128, 128, 0.08);
-  --app-surface-hover: rgba(128, 128, 128, 0.12);
+  --app-bg: #0d1118;
+  --app-surface: #111721;
+  --app-surface-raised: #151b24;
+  --app-surface-muted: rgba(255, 255, 255, 0.025);
+  --app-surface-hover: rgba(105, 174, 248, 0.06);
+  --app-border: rgba(255, 255, 255, 0.1);
+  --app-border-subtle: rgba(255, 255, 255, 0.065);
+  --app-text-primary: rgba(255, 255, 255, 0.93);
+  --app-text-muted: rgba(255, 255, 255, 0.62);
+  --app-text-subtle: rgba(255, 255, 255, 0.42);
+  --app-accent-blue: #69aef8;
+  --app-success: #62d6a7;
+  --app-warning: #e7b566;
+  --app-danger: #ff737d;
+  --app-shadow-panel: 0 18px 48px rgba(0, 0, 0, 0.18);
+}
+
+.app-theme-light {
+  --app-bg: #eef2f6;
+  --app-surface: #f7f9fb;
+  --app-surface-raised: #ffffff;
+  --app-surface-muted: rgba(15, 23, 42, 0.025);
+  --app-surface-hover: rgba(37, 99, 235, 0.055);
+  --app-border: rgba(15, 23, 42, 0.12);
+  --app-border-subtle: rgba(15, 23, 42, 0.075);
+  --app-text-primary: rgba(15, 23, 42, 0.93);
+  --app-text-muted: rgba(15, 23, 42, 0.64);
+  --app-text-subtle: rgba(15, 23, 42, 0.46);
+  --app-accent-blue: #2563eb;
+  --app-success: #16845f;
+  --app-warning: #9a5b00;
+  --app-danger: #d83b4c;
+  --app-shadow-panel: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+
+.section-eyebrow {
+  color: var(--app-accent-blue);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 /* Smooth transitions for interactive elements */
@@ -79,9 +116,9 @@ h2 {
   padding: 40px 20px !important;
 }
 
-/* Tag rounded by default */
+/* Compact status tags */
 .n-tag {
-  border-radius: 999px !important;
+  border-radius: 5px !important;
 }
 
 /* Modal improvements */

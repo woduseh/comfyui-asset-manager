@@ -10,6 +10,7 @@ import { IPC_CHANNELS } from '@shared/ipc-channels'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
 import JobCard from '@renderer/components/jobs/JobCard.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
+import ProductionJobTable from '@renderer/components/jobs/ProductionJobTable.vue'
 import WizardStepWorkflow from '@renderer/components/jobs/WizardStepWorkflow.vue'
 import WizardStepModules from '@renderer/components/jobs/WizardStepModules.vue'
 import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
@@ -155,6 +156,7 @@ describe('JobStatusBar', () => {
       props: {
         job: { name: 'Running', completed_tasks: 1, total_tasks: 4 },
         isPaused: false,
+        isConnected: true,
         eta: '3s'
       },
       global: { plugins: [createTestI18n()] }
@@ -175,6 +177,7 @@ describe('JobStatusBar', () => {
       props: {
         job: { name: 'Paused', completed_tasks: 1, total_tasks: 4 },
         isPaused: true,
+        isConnected: true,
         eta: null
       },
       global: { plugins: [createTestI18n()] }
@@ -186,6 +189,112 @@ describe('JobStatusBar', () => {
     await resumeButton!.trigger('click')
 
     expect(wrapper.emitted('resume')).toHaveLength(1)
+  })
+
+  it('does not mark preparation stages complete before progress starts', () => {
+    const wrapper = mount(JobStatusBar, {
+      props: {
+        job: { name: 'Starting', completed_tasks: 0, total_tasks: 4 },
+        isPaused: false,
+        isConnected: true,
+        eta: null
+      },
+      global: { plugins: [createTestI18n()] }
+    })
+
+    expect(wrapper.findAll('.active-run__stage--complete')).toHaveLength(0)
+    expect(wrapper.findAll('.active-run__stage--active')).toHaveLength(1)
+  })
+
+  it('marks a persisted run as interrupted and offers reconnection', async () => {
+    const wrapper = mount(JobStatusBar, {
+      props: {
+        job: { name: 'Disconnected', completed_tasks: 1, total_tasks: 4 },
+        isPaused: false,
+        isConnected: false,
+        eta: null
+      },
+      global: { plugins: [createTestI18n()] }
+    })
+
+    expect(wrapper.findAll('.active-run__stage--interrupted')).toHaveLength(1)
+    const reconnectButton = wrapper
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('production.reconnect'))
+    await reconnectButton!.trigger('click')
+
+    expect(wrapper.emitted('reconnect')).toHaveLength(1)
+    expect(
+      wrapper
+        .findAllComponents(NButton)
+        .find((button) => button.text().includes('pause'))
+        ?.props('disabled')
+    ).toBe(true)
+  })
+})
+
+describe('ProductionJobTable', () => {
+  it('keeps the production queue actions wired to the existing job payload', async () => {
+    const job = {
+      id: 'job-queue-1',
+      name: 'Portrait variants',
+      status: 'draft',
+      total_tasks: 12,
+      completed_tasks: 0,
+      failed_tasks: 0,
+      created_at: '2026-08-12 10:00:00'
+    }
+    const wrapper = mount(ProductionJobTable, {
+      props: {
+        jobs: [job],
+        statusLabels: { draft: 'Draft' },
+        isConnected: true,
+        isProcessing: false
+      },
+      global: { plugins: [createTestI18n()] }
+    })
+
+    const startButton = wrapper
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('start'))
+    await startButton!.trigger('click')
+    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'edit')
+    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'clone')
+    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'delete')
+
+    expect(wrapper.emitted('start')).toEqual([['job-queue-1']])
+    expect(wrapper.emitted('edit')).toEqual([[job]])
+    expect(wrapper.emitted('clone')).toEqual([[job]])
+    expect(wrapper.emitted('delete')).toEqual([['job-queue-1']])
+  })
+
+  it('emits bounded queue move actions', async () => {
+    const jobs = [
+      { id: 'job-1', name: 'First', status: 'draft', total_tasks: 1, completed_tasks: 0 },
+      { id: 'job-2', name: 'Second', status: 'draft', total_tasks: 1, completed_tasks: 0 }
+    ]
+    const wrapper = mount(ProductionJobTable, {
+      props: {
+        jobs,
+        statusLabels: { draft: 'Draft' },
+        isConnected: true,
+        isProcessing: false,
+        reorderable: true
+      },
+      global: { plugins: [createTestI18n()] }
+    })
+
+    const moveButtons = wrapper.findAll('.production-table__reorder .n-button')
+    expect(moveButtons[0].attributes('disabled')).toBeDefined()
+    expect(moveButtons[3].attributes('disabled')).toBeDefined()
+
+    await moveButtons[1].trigger('click')
+    await moveButtons[2].trigger('click')
+
+    expect(wrapper.emitted('move')).toEqual([
+      ['job-1', 'down'],
+      ['job-2', 'up']
+    ])
   })
 })
 

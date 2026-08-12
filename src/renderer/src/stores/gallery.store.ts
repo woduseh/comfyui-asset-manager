@@ -7,6 +7,7 @@ import { DEFAULT_GALLERY_PAGE_SIZE } from '@renderer/constants'
 
 export interface GalleryImage {
   id: string
+  job_id?: string | null
   file_path: string
   thumbnail_path: string | null
   width: number | null

@@ -15,7 +15,7 @@ export default defineComponent({
     }
   },
   emits: ['confirm'],
-  setup(props, { attrs, emit }) {
+  setup(props, { attrs, emit, slots }) {
     return () =>
       h(
         NPopconfirm,
@@ -25,7 +25,8 @@ export default defineComponent({
         {
           trigger: () =>
             h(NButton, attrs, {
-              default: () => props.label
+              default: () => props.label,
+              ...(slots.icon ? { icon: () => slots.icon?.() } : {})
             }),
           default: () => props.confirmText
         }

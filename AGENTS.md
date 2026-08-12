@@ -124,6 +124,9 @@ const result = await invokeIpc(IPC_CHANNELS.MY_FEATURE, args)
 ```bash
 npm run dev              # 개발 모드 (HMR)
 npm run build            # 타입체크 + 전체 빌드 (검증 시 사용)
+npm run dist:portable    # Windows 포터블 실행 파일
+npm run dist:installer   # Windows NSIS 설치 파일
+npm run dist:all         # Windows 포터블 + 설치 파일
 npx electron-vite build  # 빌드만 (타입체크 스킵, 빠른 반복)
 npm test                 # Vitest 테스트 실행
 npm run test:watch       # 감시 모드 테스트
@@ -131,6 +134,9 @@ npm run test:coverage    # 커버리지 리포트
 npm run lint             # ESLint
 npm run format           # Prettier
 ```
+
+배포 스크립트는 `dist:*` 네임스페이스를 사용합니다. `dist:all`의 `all`은 지원 운영체제
+전체가 아니라 Windows의 포터블·NSIS 설치 형식 전체를 의미합니다.
 
 **테스트 프레임워크: Vitest** — 현재 규모와 통과 여부는 `npm test`로 확인.
 
@@ -155,14 +161,14 @@ npm run format           # Prettier
 
 v0.7.0에서 4+1 → 5+1 (터미널 추가):
 
-| 페이지     | 뷰             | 설명                                                                                                                      |
-| ---------- | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 워크플로우 | `WorkflowView` | 워크플로우 가져오기·관리, 역할 설정 (변수 값 편집 제거됨)                                                                 |
-| 모듈       | `ModuleView`   | 프롬프트 모듈 카드 그리드, 필 스타일 필터, 아이템별 프롬프트 변형 편집                                                    |
-| 작업       | `JobsView`     | 배치 생성(3단계 위자드) + 큐 관리 통합, 슬롯별 변형 선택, 실행 상태 바 + 작업 카드 그리드                                 |
-| 갤러리     | `GalleryView`  | 생성 이미지 그리드, 상세 뷰어 (좌우 분할 Lightroom 스타일, 좌우 네비게이션, 클립보드 복사, 프롬프트 표시), 콤팩트 필터 바 |
-| 터미널     | `TerminalView` | 내장 터미널 (xterm.js + node-pty), 멀티 탭, MCP 서버 상태                                                                 |
-| 설정       | `SettingsView` | 서버 연결, 출력 경로, 테마, 언어, MCP 서버 설정                                                                           |
+| 페이지     | 뷰             | 설명                                                                                          |
+| ---------- | -------------- | --------------------------------------------------------------------------------------------- |
+| 워크플로우 | `WorkflowView` | 워크플로우 가져오기·관리, 역할 설정 (변수 값 편집 제거됨)                                     |
+| 모듈       | `ModuleView`   | 프롬프트 모듈 카드 그리드, 유형 필터·검색·정렬, 아이템별 프롬프트 변형 편집                   |
+| 작업       | `JobsView`     | 배치 생성(3단계 위자드) + 큐 관리 통합, 연결 중단 상태·재연결, 슬롯별 변형 선택, 실행 상태 바 |
+| 갤러리     | `GalleryView`  | 생성 이미지 그리드, 누락 썸네일 페이지 단위 선택, 상세 뷰어, 콤팩트 필터 바                   |
+| 터미널     | `TerminalView` | 내장 터미널 (xterm.js + node-pty), 초기화·실패 상태, 멀티 탭, MCP 서버 상태                   |
+| 설정       | `SettingsView` | 서버 연결, 출력 경로, 테마, 언어, MCP 서버 설정                                               |
 
 > **제거된 뷰**: `DashboardView` (연결 상태는 헤더 바로 이동), `BatchView`·`QueueView` (JobsView로 통합)
 

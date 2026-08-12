@@ -12,7 +12,7 @@ const VIEW_COMPONENTS: Record<RouteName, () => Promise<unknown>> = {
 }
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/workflows' },
+  { path: '/', redirect: '/jobs' },
   ...NAV_ITEMS.map((item) => ({
     path: item.path,
     name: item.name,

@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NTabs, NTabPane, NTooltip, NIcon } from 'naive-ui'
+import { NButton, NTabs, NTabPane, NTooltip, NIcon, NSpin } from 'naive-ui'
 import { AddOutline, CopyOutline, ServerOutline } from '@vicons/ionicons5'
 import TerminalInstance from '@renderer/components/terminal/TerminalInstance.vue'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
+import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
 
 const { t } = useI18n()
 const terminalStore = useTerminalStore()
+const initializing = ref(true)
+const initializationFailed = ref(false)
 
 function handleTabChange(value: string): void {
   terminalStore.setActiveTab(value)
@@ -35,11 +38,23 @@ function handleCopyUrl(): void {
   navigator.clipboard.writeText(terminalStore.mcpStatus.url)
 }
 
-onMounted(async () => {
-  await terminalStore.fetchMcpStatus()
-  if (terminalStore.tabs.length === 0) {
-    await terminalStore.createTab()
+async function initializeTerminal(): Promise<void> {
+  initializing.value = true
+  initializationFailed.value = false
+  try {
+    await terminalStore.fetchMcpStatus()
+    if (terminalStore.tabs.length === 0) {
+      await terminalStore.createTab()
+    }
+  } catch {
+    initializationFailed.value = true
+  } finally {
+    initializing.value = false
   }
+}
+
+onMounted(() => {
+  void initializeTerminal()
 })
 </script>
 
@@ -93,18 +108,39 @@ onMounted(async () => {
       >
         <NTabPane v-for="tab in terminalStore.tabs" :key="tab.id" :name="tab.id" :tab="tab.title" />
       </NTabs>
-      <NButton size="small" quaternary style="margin-left: 4px" @click="handleNewTab">
+      <NButton
+        size="small"
+        quaternary
+        style="margin-left: 4px"
+        :aria-label="t('terminal.newTab')"
+        :disabled="initializing"
+        @click="handleNewTab"
+      >
         <template #icon><NIcon :component="AddOutline" /></template>
       </NButton>
     </div>
 
     <div class="terminal-content">
-      <TerminalInstance
-        v-for="tab in terminalStore.tabs"
-        :key="tab.id"
-        :terminal-id="tab.id"
-        :active="tab.id === terminalStore.activeTabId"
+      <div v-if="initializing" class="terminal-initializing" role="status" aria-live="polite">
+        <NSpin size="small" />
+        <span>{{ t('terminal.initializing') }}</span>
+      </div>
+      <ActionableEmptyState
+        v-else-if="initializationFailed"
+        class="terminal-initialization-error"
+        :title="t('terminal.initializationFailed')"
+        :description="t('terminal.initializationFailedHint')"
+        :action-label="t('common.retry')"
+        @action="initializeTerminal"
       />
+      <template v-else>
+        <TerminalInstance
+          v-for="tab in terminalStore.tabs"
+          :key="tab.id"
+          :terminal-id="tab.id"
+          :active="tab.id === terminalStore.activeTabId"
+        />
+      </template>
     </div>
   </PageShell>
 </template>
@@ -159,5 +195,20 @@ onMounted(async () => {
   overflow: hidden;
   background: #1e1e2e;
   min-height: 200px;
+}
+
+.terminal-initializing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--app-text-muted);
+  font-size: 13px;
+}
+
+.terminal-initialization-error {
+  height: 100%;
 }
 </style>

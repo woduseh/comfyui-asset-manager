@@ -2,12 +2,17 @@ import type { GlobalThemeOverrides } from 'naive-ui'
 
 export const darkThemeOverrides: GlobalThemeOverrides = {
   common: {
-    bodyColor: '#111318',
-    cardColor: '#191c22',
-    modalColor: '#191c22',
-    popoverColor: '#20242b',
-    tableColor: '#191c22',
-    tableHeaderColor: '#1f232a',
+    primaryColor: '#69aef8',
+    primaryColorHover: '#87bdf8',
+    primaryColorPressed: '#4f98ea',
+    primaryColorSuppl: '#69aef8',
+    infoColor: '#69aef8',
+    bodyColor: '#0d1118',
+    cardColor: '#151b24',
+    modalColor: '#151b24',
+    popoverColor: '#1a222d',
+    tableColor: '#151b24',
+    tableHeaderColor: '#111721',
     borderColor: 'rgba(255, 255, 255, 0.09)',
     dividerColor: 'rgba(255, 255, 255, 0.08)',
     textColor1: 'rgba(255, 255, 255, 0.92)',
@@ -18,6 +23,11 @@ export const darkThemeOverrides: GlobalThemeOverrides = {
 
 export const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
+    primaryColor: '#2563eb',
+    primaryColorHover: '#3b72ec',
+    primaryColorPressed: '#1d4ed8',
+    primaryColorSuppl: '#2563eb',
+    infoColor: '#2563eb',
     bodyColor: '#f4f6f8',
     cardColor: '#ffffff',
     modalColor: '#ffffff',

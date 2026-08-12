@@ -84,7 +84,11 @@ function updateTheme(value: string): void {
 </script>
 
 <template>
-  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides">
+  <NConfigProvider
+    :theme="theme"
+    :theme-overrides="themeOverrides"
+    :class="{ 'app-theme-light': settingsStore.settings.theme === 'light' }"
+  >
     <NMessageProvider>
       <NDialogProvider>
         <AppLayout />

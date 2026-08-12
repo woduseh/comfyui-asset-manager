@@ -21,7 +21,13 @@ import {
   NTooltip,
   useMessage
 } from 'naive-ui'
-import { ArrowBackOutline, CreateOutline, PencilOutline, TrashOutline } from '@vicons/ionicons5'
+import {
+  ArrowBackOutline,
+  CreateOutline,
+  PencilOutline,
+  SearchOutline,
+  TrashOutline
+} from '@vicons/ionicons5'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
 import { buildModulePromptPreviewLabels } from '@renderer/utils/view-labels'
@@ -35,7 +41,7 @@ import { IPC_CHANNELS } from '@shared/ipc-channels'
 import ModuleTypeFilter from '@renderer/components/modules/ModuleTypeFilter.vue'
 import ModuleBrowser from '@renderer/components/modules/ModuleBrowser.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const message = useMessage()
 const moduleStore = useModuleStore()
 
@@ -72,9 +78,34 @@ const moduleTypeOptions = computed(() => [
 const promptPreviewLabels = computed(() => buildModulePromptPreviewLabels(t))
 
 const filterType = ref<string | null>(null)
+const searchQuery = ref('')
+const sortMode = ref<'nameAsc' | 'nameDesc' | 'type'>('nameAsc')
+const moduleSortOptions = computed(() => [
+  { label: t('module.sort.nameAsc'), value: 'nameAsc' },
+  { label: t('module.sort.nameDesc'), value: 'nameDesc' },
+  { label: t('module.sort.type'), value: 'type' }
+])
 const filteredModules = computed(() => {
-  if (!filterType.value) return moduleStore.modules
-  return moduleStore.modules.filter((m) => m.type === filterType.value)
+  const query = searchQuery.value.trim().toLocaleLowerCase(locale.value)
+  const modules = moduleStore.modules.filter((module) => {
+    if (filterType.value && module.type !== filterType.value) return false
+    if (!query) return true
+    return [module.name, module.description, t(`module.type.${module.type}`)].some((value) =>
+      (value || '').toLocaleLowerCase(locale.value).includes(query)
+    )
+  })
+
+  return [...modules].sort((left, right) => {
+    if (sortMode.value === 'type') {
+      const typeOrder = t(`module.type.${left.type}`).localeCompare(
+        t(`module.type.${right.type}`),
+        locale.value
+      )
+      if (typeOrder !== 0) return typeOrder
+    }
+    const nameOrder = left.name.localeCompare(right.name, locale.value)
+    return sortMode.value === 'nameDesc' ? -nameOrder : nameOrder
+  })
 })
 
 // Watch selected module to load items
@@ -351,6 +382,25 @@ onMounted(() => {
     </PageHeader>
 
     <ModuleTypeFilter v-model="filterType" :options="moduleTypeOptions" />
+
+    <div class="module-toolbar">
+      <NInput
+        v-model:value="searchQuery"
+        clearable
+        :placeholder="t('module.searchPlaceholder')"
+        :aria-label="t('module.searchPlaceholder')"
+      >
+        <template #prefix><NIcon :component="SearchOutline" /></template>
+      </NInput>
+      <NSelect
+        v-model:value="sortMode"
+        :options="moduleSortOptions"
+        :aria-label="t('module.sortLabel')"
+      />
+      <NTag size="small" round>
+        {{ t('module.resultsCount', { count: filteredModules.length }) }}
+      </NTag>
+    </div>
 
     <div
       class="module-workspace"
@@ -635,6 +685,14 @@ onMounted(() => {
   margin-top: 16px;
 }
 
+.module-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 180px auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .module-workspace--selected {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -728,6 +786,10 @@ onMounted(() => {
 }
 
 @media (max-width: 720px) {
+  .module-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .module-grid {
     grid-template-columns: 1fr;
   }

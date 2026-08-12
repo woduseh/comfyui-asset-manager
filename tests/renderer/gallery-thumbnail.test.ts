@@ -23,6 +23,7 @@ describe('GalleryThumbnail', () => {
     expect(image.classes()).toContain('gallery-thumbnail__image--loading')
     await image.trigger('load')
     expect(image.classes()).not.toContain('gallery-thumbnail__image--loading')
+    expect(wrapper.emitted('loaded')).toHaveLength(1)
   })
 
   it('shows an error state and resets when retrying', async () => {
@@ -30,6 +31,7 @@ describe('GalleryThumbnail', () => {
     await wrapper.get('img').trigger('error')
 
     expect(wrapper.text()).toContain('Could not load image')
+    expect(wrapper.emitted('failed')).toHaveLength(1)
     await wrapper.get('button').trigger('click')
 
     expect(wrapper.text()).not.toContain('Could not load image')

@@ -18,9 +18,10 @@ import {
   NTooltip,
   NCollapse,
   NCollapseItem,
-  NSkeleton
+  NSkeleton,
+  NAlert
 } from 'naive-ui'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
@@ -36,6 +37,7 @@ import GalleryImageCard from '@renderer/components/gallery/GalleryImageCard.vue'
 const { t, locale } = useI18n()
 const message = useMessage()
 const router = useRouter()
+const route = useRoute()
 const galleryStore = useGalleryStore()
 const queueStore = useQueueStore()
 
@@ -66,6 +68,8 @@ const positionLabel = computed(() => {
 // Selection mode
 const selectionMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
+const failedImageIds = ref<Set<string>>(new Set())
+const failedImageCount = computed(() => failedImageIds.value.size)
 
 function toFileUrl(path: string | undefined): string {
   if (!path) return ''
@@ -94,7 +98,8 @@ function goToJobs(): void {
 }
 
 // Apply filters
-function applyFilters(): void {
+async function applyFilters(): Promise<void> {
+  failedImageIds.value = new Set()
   galleryStore.setFilters({
     searchText: searchText.value || undefined,
     minRating: filterRating.value || undefined,
@@ -102,7 +107,7 @@ function applyFilters(): void {
     sortBy: sortBy.value,
     sortOrder: sortOrder.value
   })
-  galleryStore.loadImages()
+  await galleryStore.loadImages()
 }
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -168,10 +173,27 @@ function selectAll(): void {
   selectedIds.value = new Set(selectedIds.value)
 }
 
+function markThumbnailFailed(id: string): void {
+  failedImageIds.value.add(id)
+  failedImageIds.value = new Set(failedImageIds.value)
+}
+
+function markThumbnailLoaded(id: string): void {
+  if (!failedImageIds.value.delete(id)) return
+  failedImageIds.value = new Set(failedImageIds.value)
+}
+
+function selectFailedImages(): void {
+  selectionMode.value = true
+  selectedIds.value = new Set(failedImageIds.value)
+}
+
 async function deleteSelected(): Promise<void> {
   const ids = Array.from(selectedIds.value)
   if (ids.length === 0) return
   await galleryStore.deleteImages(ids)
+  for (const id of ids) failedImageIds.value.delete(id)
+  failedImageIds.value = new Set(failedImageIds.value)
   selectedIds.value = new Set()
   message.success(t('gallery.msg.bulkDeleted', { count: ids.length }))
 }
@@ -232,11 +254,21 @@ function handleKeydown(e: KeyboardEvent): void {
 }
 
 function handlePageChange(p: number): void {
+  failedImageIds.value = new Set()
   galleryStore.setPage(p)
   galleryStore.loadImages()
 }
 
 watch(filterFavorite, () => applyFilters())
+
+watch(
+  () => galleryStore.images.map((image) => image.id),
+  (visibleIds) => {
+    const visible = new Set(visibleIds)
+    const nextFailed = new Set([...failedImageIds.value].filter((id) => visible.has(id)))
+    if (nextFailed.size !== failedImageIds.value.size) failedImageIds.value = nextFailed
+  }
+)
 
 // Register keyboard handler when detail modal opens
 watch(showDetail, (val) => {
@@ -260,8 +292,20 @@ watch(
   }
 )
 
-onMounted(() => {
-  galleryStore.loadImages()
+onMounted(async () => {
+  await applyFilters()
+
+  const requestedImageId = typeof route.query.imageId === 'string' ? route.query.imageId : undefined
+  if (!requestedImageId) return
+
+  let requestedImage = galleryStore.images.find((image) => image.id === requestedImageId)
+  if (!requestedImage && typeof route.query.fileName === 'string') {
+    searchText.value = route.query.fileName
+    await applyFilters()
+    requestedImage = galleryStore.images.find((image) => image.id === requestedImageId)
+  }
+
+  if (requestedImage) openDetail(requestedImage)
 })
 
 onUnmounted(() => {
@@ -299,6 +343,21 @@ onUnmounted(() => {
       @select-all="selectAll"
       @delete-selected="deleteSelected"
     />
+
+    <NAlert
+      v-if="failedImageCount > 0"
+      class="gallery-missing-alert"
+      type="warning"
+      :title="t('gallery.missingOnPage', { count: failedImageCount })"
+      :bordered="false"
+    >
+      <div class="gallery-missing-alert__content">
+        <span>{{ t('gallery.missingOnPageHint') }}</span>
+        <NButton size="small" type="warning" secondary @click="selectFailedImages">
+          {{ t('gallery.selectMissing') }}
+        </NButton>
+      </div>
+    </NAlert>
 
     <!-- Image grid -->
     <NCard style="margin-top: 0">
@@ -340,6 +399,8 @@ onUnmounted(() => {
               @open="openDetail(image)"
               @rate="(value) => galleryStore.rateImage(image.id, value)"
               @favorite="handleToggleFavorite(image)"
+              @thumbnail-failed="markThumbnailFailed(image.id)"
+              @thumbnail-loaded="markThumbnailLoaded(image.id)"
             />
           </NGridItem>
         </NGrid>
@@ -781,7 +842,23 @@ onUnmounted(() => {
   padding: 6px 8px;
 }
 
+.gallery-missing-alert {
+  margin-bottom: 16px;
+}
+
+.gallery-missing-alert__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 @media (max-width: 768px) {
+  .gallery-missing-alert__content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .detail-body {
     flex-direction: column;
   }

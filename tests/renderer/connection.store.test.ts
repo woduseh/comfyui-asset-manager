@@ -40,4 +40,29 @@ describe('connection.store', () => {
     expect(store.connectionState).toBe('disconnected')
     expect(store.lastError).toBe('Unable to reach ComfyUI server')
   })
+
+  it('connects with the configured host and port', async () => {
+    invoke
+      .mockResolvedValueOnce({ comfyui_host: '192.168.0.12', comfyui_port: '8288' })
+      .mockResolvedValueOnce(true)
+    const store = useConnectionStore()
+
+    await expect(store.connectConfigured()).resolves.toBe(true)
+
+    expect(invoke).toHaveBeenNthCalledWith(2, 'comfyui:connect', {
+      host: '192.168.0.12',
+      port: 8288
+    })
+    expect(store.isConnected).toBe(true)
+  })
+
+  it('exposes settings lookup failures without rejecting the UI event', async () => {
+    invoke.mockRejectedValueOnce(new Error('Settings unavailable'))
+    const store = useConnectionStore()
+
+    await expect(store.connectConfigured()).resolves.toBe(false)
+
+    expect(store.connectionState).toBe('disconnected')
+    expect(store.lastError).toBe('Settings unavailable')
+  })
 })

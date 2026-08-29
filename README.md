@@ -266,12 +266,15 @@ src/
 ### 보안
 
 - Electron 샌드박스 (`sandbox: true`, `webSecurity: true`, `bypassCSP: false`)
+- 단일 앱 인스턴스만 허용해 여러 sql.js 메모리 스냅샷이 같은 DB 파일을 덮어쓰는 상황 차단
+- 새 창 링크는 `http:`·`https:`만 운영체제 기본 브라우저로 전달하고 그 외 URL 스킴 차단
 - `local-asset://`는 현재 출력 디렉터리 내부 파일과 DB에 등록된 갤러리 이미지 경로만 허용, 경로 순회·realpath escape 차단
 - 워크플로우 가져오기는 main process가 파일 선택과 읽기를 한 번에 처리해 renderer가 임의 경로를 제출하지 못하도록 제한
 - 갤러리 파일 액션(클립보드/탐색기)은 현재 출력 경로 또는 DB 등록 자산인지 확인한 뒤 실행
 - 갤러리 조회 IPC 검증 + SQL `ORDER BY` 화이트리스트로 정렬 입력 하드닝
 - MCP HTTP 표면은 loopback origin과 기본 Bearer 인증을 요구하며, Settings opt-in일 때만 자동 시작
 - 구조화 로깅 (`electron-log`, 5MB 로테이션)
+- 운영·개발 의존성은 `npm audit` 0건을 유지하며 Electron 보안 패치 계열을 사용
 
 ### 테스트 현황
 

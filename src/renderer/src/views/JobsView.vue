@@ -177,7 +177,8 @@ async function handlePause(): Promise<void> {
 }
 
 async function handleResume(): Promise<void> {
-  await invokeIpc(IPC_CHANNELS.BATCH_RESUME)
+  if (!runningJob.value) return
+  await invokeIpc(IPC_CHANNELS.BATCH_RESUME, { id: runningJob.value.id as string })
   message.info(t('batch.msg.resumed'))
   await refreshJobs()
 }
@@ -191,7 +192,8 @@ async function handleReconnect(): Promise<void> {
 }
 
 async function handleCancel(): Promise<void> {
-  await invokeIpc(IPC_CHANNELS.BATCH_CANCEL)
+  if (!runningJob.value) return
+  await invokeIpc(IPC_CHANNELS.BATCH_CANCEL, { id: runningJob.value.id as string })
   message.warning(t('batch.msg.cancelled'))
   await refreshJobs()
 }

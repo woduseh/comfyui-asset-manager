@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => {
     batchServiceUpdateDraft: vi.fn((id: string) => ({ jobId: id, totalTasks: 1 })),
     queuePreflight: vi.fn(() => ({ success: true })),
     queueRequestStart: vi.fn(() => ({ success: true })),
+    queueResume: vi.fn(),
+    queueCancel: vi.fn(),
     withTransaction: vi.fn(<T>(operation: () => T) => operation()),
     terminalWrite: vi.fn()
   }
@@ -125,8 +127,8 @@ vi.mock('../../../src/main/services/batch/queue-manager', () => ({
     preflightStart: mocks.queuePreflight,
     requestStart: mocks.queueRequestStart,
     pause: vi.fn(),
-    resume: vi.fn(),
-    cancel: vi.fn()
+    resume: mocks.queueResume,
+    cancel: mocks.queueCancel
   }
 }))
 
@@ -306,6 +308,21 @@ describe('registerIpcHandlers validation boundary', () => {
     expect(mocks.batchUpdateProgress).toHaveBeenCalledWith('job-id', 0, 0)
     expect(mocks.batchUpdateStatus).toHaveBeenCalledWith('job-id', 'draft')
     expect(mocks.queueRequestStart).toHaveBeenCalledWith('job-id')
+  })
+
+  it('validates and forwards the selected job for resume and cancel', async () => {
+    const resumeHandler = getHandler(IPC_CHANNELS.BATCH_RESUME)
+    const cancelHandler = getHandler(IPC_CHANNELS.BATCH_CANCEL)
+
+    await expect(resumeHandler({}, { id: '../job' })).rejects.toThrow('Invalid ID')
+    expect(() => cancelHandler({}, { id: '../job' })).toThrow('Invalid ID')
+    expect(mocks.queueResume).not.toHaveBeenCalled()
+    expect(mocks.queueCancel).not.toHaveBeenCalled()
+
+    await expect(resumeHandler({}, { id: 'job-id' })).resolves.toBe(true)
+    expect(cancelHandler({}, { id: 'job-id' })).toBe(true)
+    expect(mocks.queueResume).toHaveBeenCalledWith('job-id')
+    expect(mocks.queueCancel).toHaveBeenCalledWith('job-id')
   })
 
   it('rejects malformed terminal input before writing to the PTY', () => {

@@ -400,8 +400,8 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.BATCH_GET]: IpcCall<{ id: string }, BatchJobRecord | null>
   [IPC_CHANNELS.BATCH_START]: IpcCall<{ id: string }, ActionResult>
   [IPC_CHANNELS.BATCH_PAUSE]: IpcCall<undefined, boolean>
-  [IPC_CHANNELS.BATCH_RESUME]: IpcCall<undefined, boolean>
-  [IPC_CHANNELS.BATCH_CANCEL]: IpcCall<undefined, boolean>
+  [IPC_CHANNELS.BATCH_RESUME]: IpcCall<{ id: string }, boolean>
+  [IPC_CHANNELS.BATCH_CANCEL]: IpcCall<{ id: string }, boolean>
   [IPC_CHANNELS.BATCH_DELETE]: IpcCall<{ id: string }, boolean>
   [IPC_CHANNELS.BATCH_RERUN]: IpcCall<{ id: string }, ActionResult>
   [IPC_CHANNELS.BATCH_REORDER]: IpcCall<{ jobIds: string[] }, boolean>

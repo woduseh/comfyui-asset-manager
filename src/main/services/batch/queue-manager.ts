@@ -189,24 +189,27 @@ class QueueManager {
    * Resume processing.
    * Supports "hot resume" (active loop paused) and "cold resume" (restart after crash).
    */
-  async resume(): Promise<void> {
+  async resume(jobId: string): Promise<void> {
     // Hot resume: currently paused in an active processing loop
     if (this._currentJobId && this._isPaused) {
+      if (this._currentJobId !== jobId) {
+        throw new Error(`Batch job is not the active paused job: ${jobId}`)
+      }
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'running')
       return
     }
 
-    // Cold resume: no active loop, find a paused job and restart processing
+    // Cold resume: no active loop, restart the explicitly selected paused job.
     if (!this._isProcessing) {
-      const pausedJobs = batchJobRepo.list('paused')
-      if (pausedJobs.length > 0) {
-        const jobId = pausedJobs[0].id as string
-        log.info(`[QueueManager] Cold resuming job: ${jobId}`)
-        this.startJob(jobId).catch((err) => {
-          log.error('[QueueManager] Cold resume failed:', err)
-        })
+      const job = batchJobRepo.get(jobId)
+      if (!job || job.status !== 'paused') {
+        throw new Error(`Batch job is not paused: ${jobId}`)
       }
+      log.info(`[QueueManager] Cold resuming job: ${jobId}`)
+      void this.startJob(jobId).catch((error) => {
+        log.error('[QueueManager] Cold resume failed:', error)
+      })
     }
   }
 
@@ -214,9 +217,12 @@ class QueueManager {
    * Cancel the current job.
    * Supports "hot cancel" (active loop running) and "cold cancel" (stale state after crash).
    */
-  cancel(): void {
+  cancel(jobId: string): void {
     // Hot cancel: QueueManager is actively processing
     if (this._currentJobId) {
+      if (this._currentJobId !== jobId) {
+        throw new Error(`Batch job is not the active job: ${jobId}`)
+      }
       this._isCancelled = true
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'cancelled')
@@ -227,15 +233,15 @@ class QueueManager {
       return
     }
 
-    // Cold cancel: no active loop, find running/paused job and cancel directly in DB
+    // Cold cancel: no active loop, cancel only the explicitly selected stale job.
     if (!this._isProcessing) {
-      const staleJobs = [...batchJobRepo.list('running'), ...batchJobRepo.list('paused')]
-      for (const job of staleJobs) {
-        const jobId = job.id as string
-        log.info(`[QueueManager] Cold cancelling job: ${jobId}`)
-        batchTaskRepo.cancelRemainingTasksByJob(jobId)
-        batchJobRepo.updateStatus(jobId, 'cancelled')
+      const job = batchJobRepo.get(jobId)
+      if (!job || (job.status !== 'running' && job.status !== 'paused')) {
+        throw new Error(`Batch job cannot be cancelled from status: ${String(job?.status)}`)
       }
+      log.info(`[QueueManager] Cold cancelling job: ${jobId}`)
+      batchTaskRepo.cancelRemainingTasksByJob(jobId)
+      batchJobRepo.updateStatus(jobId, 'cancelled')
     }
   }
 

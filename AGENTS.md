@@ -65,6 +65,8 @@ const result = await invokeIpc(IPC_CHANNELS.MY_FEATURE, args)
 ### 데이터베이스
 
 - sql.js (WASM SQLite, in-memory)
+- 앱은 `requestSingleInstanceLock()`으로 단일 인스턴스만 허용. 여러 프로세스가 같은 DB
+  스냅샷을 열고 저장하는 구성을 만들지 않음
 - Repository mutation 메서드가 내부에서 `saveDatabase()`를 예약. handler/service에서 중복 호출 금지
 - 여러 mutation을 하나로 묶을 때는 `withTransaction()` 사용. 중첩은 SAVEPOINT로 처리하며
   최외곽 커밋 후 저장을 한 번만 예약
@@ -266,6 +268,8 @@ v0.12.0 보안 감사에서 도출한 필수 규칙. 상세 패턴과 예시 코
 ### 보안
 
 - Electron 렌더러: `sandbox: true`, `webSecurity: true`, `bypassCSP: false` — 절대 변경 금지
+- renderer의 새 창 요청은 `http:`·`https:` 외 URL 스킴을 `shell.openExternal()`에 전달하지 않음
+- `local-asset` 프로토콜은 이미지 표시 용도만 유지하고 불필요한 `supportFetchAPI` 권한을 추가하지 않음
 - Preload 번들링: `externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })` — sandbox 모드에서 preload가 정상 로드되려면 `@electron-toolkit/preload`를 반드시 인라인 번들링
 - 자산 경로 접근: `src/main/services/assets/local-asset.ts` helper로 `output_directory` 내부 실경로와 DB에 등록된 gallery 자산 경로만 허용. URL 인코딩 traversal, 절대 경로 우회, realpath escape 차단
 - 외부 파일 가져오기: 파일 선택과 읽기를 같은 main-process IPC에서 완료. renderer에 선택 경로를 반환한 뒤 별도 읽기 IPC로 다시 받는 패턴 금지

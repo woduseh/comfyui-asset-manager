@@ -348,7 +348,7 @@ describe('QueueManager Recovery', () => {
       expect(queueManager.isPaused).toBe(true)
       expect(jobRepo.get(jobId)?.status).toBe('paused')
 
-      await queueManager.resume()
+      await queueManager.resume(jobId)
       expect(queueManager.isPaused).toBe(false)
       expect(jobRepo.get(jobId)?.status).toBe('running')
     })
@@ -368,7 +368,7 @@ describe('QueueManager Recovery', () => {
         new Error('interrupt unavailable')
       )
 
-      expect(() => queueManager.cancel()).not.toThrow()
+      expect(() => queueManager.cancel(jobId)).not.toThrow()
       await Promise.resolve()
 
       expect(queueManager.isPaused).toBe(false)
@@ -391,7 +391,7 @@ describe('QueueManager Recovery', () => {
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[0].id as string, 'completed')
 
-      queueManager.cancel()
+      queueManager.cancel(jobId)
 
       const job = jobRepo.get(jobId)
       expect(job?.status).toBe('cancelled')
@@ -410,18 +410,31 @@ describe('QueueManager Recovery', () => {
         { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' }
       ])
 
-      queueManager.cancel()
+      queueManager.cancel(jobId)
 
       expect(jobRepo.get(jobId)?.status).toBe('cancelled')
       const tasks = taskRepo.listByJob(jobId)
       expect(tasks.every((t) => t.status === 'cancelled')).toBe(true)
     })
 
+    it('cancels only the selected paused job when multiple jobs were recovered', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const firstId = jobRepo.create({ name: 'Paused Job 1', config: '{}' })
+      const secondId = jobRepo.create({ name: 'Paused Job 2', config: '{}' })
+      jobRepo.updateStatus(firstId, 'paused')
+      jobRepo.updateStatus(secondId, 'paused')
+
+      queueManager.cancel(secondId)
+
+      expect(jobRepo.get(firstId)?.status).toBe('paused')
+      expect(jobRepo.get(secondId)?.status).toBe('cancelled')
+    })
+
     it('does nothing when no active or stale jobs exist', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
-      queueManager.cancel()
+      expect(() => queueManager.cancel(jobId)).toThrow('cannot be cancelled')
       expect(jobRepo.get(jobId)?.status).toBe('draft')
     })
   })
@@ -431,23 +444,23 @@ describe('QueueManager Recovery', () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Draft Job', config: '{}' })
-      await queueManager.resume()
+      await expect(queueManager.resume(jobId)).rejects.toThrow('is not paused')
       expect(jobRepo.get(jobId)?.status).toBe('draft')
     })
 
-    it('starts the first paused job when no loop is active', async () => {
+    it('starts only the selected paused job when no loop is active', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const firstId = jobRepo.create({ name: 'Paused Job 1', config: '{}' })
       const secondId = jobRepo.create({ name: 'Paused Job 2', config: '{}' })
       jobRepo.updateStatus(firstId, 'paused')
       jobRepo.updateStatus(secondId, 'paused')
-      const selectedId = jobRepo.list('paused')[0].id as string
       const startJob = vi.spyOn(queueManager, 'startJob').mockResolvedValue(undefined)
 
-      await queueManager.resume()
+      await queueManager.resume(secondId)
 
       expect(startJob).toHaveBeenCalledOnce()
-      expect(startJob).toHaveBeenCalledWith(selectedId)
+      expect(startJob).toHaveBeenCalledWith(secondId)
+      expect(jobRepo.get(firstId)?.status).toBe('paused')
     })
   })
 

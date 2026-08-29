@@ -105,13 +105,15 @@ export function registerBatchHandlers(): void {
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.BATCH_RESUME, async () => {
-    await queueManager.resume()
+  ipcMain.handle(IPC_CHANNELS.BATCH_RESUME, async (_event, { id }: { id: string }) => {
+    validateId(id)
+    await queueManager.resume(id)
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.BATCH_CANCEL, () => {
-    queueManager.cancel()
+  ipcMain.handle(IPC_CHANNELS.BATCH_CANCEL, (_event, { id }: { id: string }) => {
+    validateId(id)
+    queueManager.cancel(id)
     return true
   })
 

@@ -27,11 +27,25 @@ import {
 import { installCrashHandlers } from './crash-handler'
 import { parseIntegerOrFallback } from './utils/number'
 import { getOrCreateMcpAuthConfig } from './services/mcp/auth'
+import { isAllowedExternalUrl } from './utils/external-url'
 
 installCrashHandlers(process, log, (code) => app.exit(code))
 
 let shutdownStarted = false
 let shutdownComplete = false
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0]
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
 
 // Register custom protocol for serving local images
 protocol.registerSchemesAsPrivileged([
@@ -39,8 +53,7 @@ protocol.registerSchemesAsPrivileged([
     scheme: 'local-asset',
     privileges: {
       bypassCSP: false,
-      stream: true,
-      supportFetchAPI: true
+      stream: true
     }
   }
 ])
@@ -66,7 +79,13 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (isAllowedExternalUrl(details.url)) {
+      void shell.openExternal(details.url).catch((error) => {
+        log.warn('[Window] Failed to open external URL:', error)
+      })
+    } else {
+      log.warn('[Window] Blocked unsupported external URL:', details.url)
+    }
     return { action: 'deny' }
   })
 
@@ -78,6 +97,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return
+
   electronApp.setAppUserModelId('com.comfyui-asset-manager')
 
   app.on('browser-window-created', (_, window) => {

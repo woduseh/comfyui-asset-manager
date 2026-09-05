@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import {
   existsSync,
@@ -83,8 +83,14 @@ function evidence(phase: 'create' | 'reopen'): {
   }
 }
 
-function bootstrapDriver(cwd: string): {
-  app: EventEmitter
+function bootstrapDriver(
+  cwd: string,
+  timers: {
+    setTimeout: (callback: () => void, delay: number) => ReturnType<typeof setTimeout> | number
+    clearTimeout: (timer: ReturnType<typeof setTimeout> | number) => void
+  } = { setTimeout: () => 0, clearTimeout: () => {} }
+): {
+  app: EventEmitter & { quit: () => void }
   config: { profileDir: string; reportPath: string }
   bootstrapPaths: Record<string, string>
 } {
@@ -102,6 +108,7 @@ function bootstrapDriver(cwd: string): {
   const paths: Record<string, string> = {}
   const bootstrapPaths: Record<string, string> = {}
   const app = Object.assign(new EventEmitter(), {
+    quit: vi.fn(),
     setPath: (name: string, path: string): void => {
       paths[name] = path
     },
@@ -123,8 +130,7 @@ function bootstrapDriver(cwd: string): {
         return require(id)
       },
       process: { argv: ['electron', driverPath, configPath] },
-      setTimeout: (): number => 0,
-      clearTimeout: (): void => {}
+      ...timers
     },
     { filename: driverPath }
   )
@@ -132,6 +138,7 @@ function bootstrapDriver(cwd: string): {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   for (const directory of directories.splice(0)) {
     expect(dirname(realpathSync(directory))).toBe(realpathSync(tmpdir()))
     rmSync(directory, { recursive: true, force: true })
@@ -309,6 +316,64 @@ describe('Electron smoke bootstrap contracts', () => {
       quitObserved: false,
       errors: ['renderer diagnostic']
     })
+  })
+
+  it('persists the original failure before a stalled capture and quits after its deadline', async () => {
+    vi.useFakeTimers()
+    const { app, config } = bootstrapDriver(workspace(), { setTimeout, clearTimeout })
+    const webContents = Object.assign(new EventEmitter(), {
+      executeJavaScript: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('original renderer failure'))
+        .mockResolvedValue(undefined),
+      capturePage: vi.fn(() => new Promise<never>(() => {}))
+    })
+    const window = Object.assign(new EventEmitter(), { webContents, isDestroyed: () => false })
+    app.emit('browser-window-created', {}, window)
+    webContents.emit('did-finish-load')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(JSON.parse(readFileSync(config.reportPath, 'utf8'))).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('original renderer failure')
+    })
+    expect(webContents.capturePage).toHaveBeenCalledTimes(1)
+    expect(app.quit).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(2999)
+    expect(app.quit).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(app.quit).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(config.reportPath, 'utf8'))).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('original renderer failure'),
+      screenshotError: expect.stringContaining('screenshot timed out')
+    })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps a rejected failure capture separate from the original error and clears its timer', async () => {
+    vi.useFakeTimers()
+    const { app, config } = bootstrapDriver(workspace(), { setTimeout, clearTimeout })
+    const webContents = Object.assign(new EventEmitter(), {
+      executeJavaScript: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('original renderer failure'))
+        .mockResolvedValue(undefined),
+      capturePage: vi.fn().mockRejectedValue(new Error('capture unavailable'))
+    })
+    const window = Object.assign(new EventEmitter(), { webContents, isDestroyed: () => false })
+    app.emit('browser-window-created', {}, window)
+    webContents.emit('did-finish-load')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(app.quit).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(readFileSync(config.reportPath, 'utf8'))).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('original renderer failure'),
+      screenshotError: expect.stringContaining('capture unavailable')
+    })
+    expect(vi.getTimerCount()).toBe(0)
   })
 })
 

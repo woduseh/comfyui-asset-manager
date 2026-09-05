@@ -18,6 +18,12 @@ Node 버전, 로컬 검증 도구, sql.js WASM, Electron 실행 파일, Vite가 
 `spawn EPERM`/`EACCES`는 프로세스 실행 권한 문제일 수 있으므로 의존성 재설치에 앞서
 샌드박스 권한을 확인합니다. Electron GUI와 네이티브 PTY의 실제 동작은 별도 확인이 필요합니다.
 
+Windows에서 아래 검증을 실행하는 최소 조건은 지정된 Node.js·설치된 의존성과 자식
+프로세스 생성, Chromium IPC, 자신이 실행한 프로세스 트리 종료가 허용되는 데스크톱
+세션입니다. 도구가 설치되어 있는데 샌드박스에서만 접근이 거부되면, 해당 실행 도구의
+명령별 승인 절차로 `doctor`, `verify:coverage`, `smoke`를 실행해 확인합니다. 보안 설정을
+완화하거나 의존성을 재설치하는 절차는 아닙니다.
+
 ## 수정 중 빠른 피드백
 
 ```bash
@@ -103,6 +109,9 @@ ComfyUI/GPU는 필요하지 않습니다. 기존 `FakeComfyUIServer`를 loopback
 
 실행마다 `.reports/smoke/run-*/`에 `result.json`, 단계별 로그, Electron 단계 JSON과 화면 PNG를
 남깁니다. 보고서의 `inputSha256`은 빌드 입력을 식별하며 빌드 중 입력이 바뀌면 실패합니다.
+숨긴 검사 창에서도 렌더링을 유지하고 DOM 변경 이후의 프레임을 기다려 화면을 캡처합니다.
+캡처는 프레임 대기를 포함해 3초로 제한하며, 실패 진단용 캡처가 막혀도 원래 오류를
+즉시 기록하고 정상 종료를 시도합니다. 추가 캡처 오류는 `screenshotError`에 분리합니다.
 빌드·DB·Chromium 프로필은 그 실행의 `runtime/`에만 생성하고 종료 후 제거합니다.
 서로 다른 실행/작업 트리가 프로필·포트·번들을 공유하지 않습니다. `npm run dev`와
 `npm start`는 기존 사용자 프로필을 사용하므로 격리 검사를 대신하지 않습니다.
@@ -113,15 +122,17 @@ ComfyUI/GPU는 필요하지 않습니다. 기존 `FakeComfyUIServer`를 loopback
 `create.json`의 `injected-assertion` 실패까지 확인해야 하며, 준비/빌드 실패를 주입 성공으로
 해석하면 안 됩니다.
 
-현재와 같은 제한된 Windows 환경에서 esbuild `spawn EPERM` 또는 Electron의
+제한된 Windows 환경에서 esbuild `spawn EPERM` 또는 Electron의
 `platform_channel.cc` 접근 거부가 발생하면 앱 검사는 실행되지 않은 것입니다.
 보안 플래그를 끄지 말고 로그로 환경 오류와 코드 실패를 구분하세요. 기존 번들의 시작만
 진단하려면 `npm run smoke -- --existing-build`를 사용합니다. 이 모드는 검사가 모두 끝나도
 `status: limited`, **exit 2**이며 현재 소스 빌드의 성공으로 간주하지 않습니다.
 
-현재 환경에서 확인된 것은 실행/실패 보고와 격리·정리 경로입니다. Electron GUI의 정상
-흐름은 권한 제한으로 아직 확인하지 못했으므로 CI의 필수 게이트에는 추가하지 않았습니다.
-일반 데스크톱 세션에서 `smoke`와 실패 주입을 모두 확인한 뒤 CI에 연결하세요.
+2026-09-05 Windows x64 데스크톱에서 명령별 승인 실행으로 `doctor`, `verify:coverage`,
+`smoke`를 확인했습니다. 실제 Electron의 정상 생성·재연결·재시작 검사는 exit 0,
+`smoke -- --inject-failure`는 지정한 assertion에서 exit 1이며 양쪽 모두 정상 종료와
+임시 폴더 정리를 확인했습니다. Linux GUI는 확인하지 않았으며 CI의 필수 게이트는
+현재 `verify:coverage`입니다.
 
 ## 코드와 검증 위치
 

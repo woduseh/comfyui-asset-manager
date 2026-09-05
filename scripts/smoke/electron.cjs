@@ -31,9 +31,25 @@ const deadline = setTimeout(
 
 async function screenshot(name) {
   if (!window || window.isDestroyed()) return
-  const image = await window.webContents.capturePage(undefined, { stayHidden: true })
-  assert(!image.isEmpty(), 'Electron returned an empty screenshot')
-  writeFileSync(join(config.runDir, `${config.phase}-${name}.png`), image.toPNG())
+  let timer
+  try {
+    const image = await Promise.race([
+      (async () => {
+        // Let DOM changes reach the compositor before capturing a hidden window.
+        await window.webContents.executeJavaScript(
+          'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+        )
+        return window.webContents.capturePage(undefined, { stayHidden: true })
+      })(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Electron screenshot timed out')), 3000)
+      })
+    ])
+    assert(!image.isEmpty(), 'Electron returned an empty screenshot')
+    writeFileSync(join(config.runDir, `${config.phase}-${name}.png`), image.toPNG())
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function finish(error) {
@@ -43,14 +59,20 @@ async function finish(error) {
   if (error) {
     report.status = 'failed'
     report.error = String(error.stack ?? error)
+    save()
     try {
       await screenshot('failure')
-    } catch {
-      /* Preserve the original failure. */
+    } catch (captureError) {
+      report.screenshotError = String(captureError)
+    } finally {
+      save()
+      app.quit()
     }
-  } else report.status = 'passed'
-  save()
-  app.quit()
+  } else {
+    report.status = 'passed'
+    save()
+    app.quit()
+  }
 }
 
 app.on('will-quit', () => {
@@ -136,7 +158,7 @@ async function fill(placeholder, value) {
 async function run() {
   await step('renderer-preload-security', async () => {
     await waitFor(
-      () => !!window.electron?.ipcRenderer?.invoke && !!document.querySelector('.page-header')
+      () => !!window.electron?.ipcRenderer?.invoke && !!document.querySelector('.production-header')
     )
     assert.equal(await evaluate(() => location.protocol), 'file:')
     assert.deepEqual(
@@ -243,6 +265,7 @@ async function run() {
 app.on('browser-window-created', (_, created) => {
   window = created
   // Capture the real Chromium UI without leaving an interactive window behind.
+  window.webContents.backgroundThrottling = false
   window.on('show', () => window.hide())
   window.webContents.on('preload-error', (_event, _path, error) => {
     report.errors.push(`preload: ${error.message}`)

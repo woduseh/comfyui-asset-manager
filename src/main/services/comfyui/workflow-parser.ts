@@ -23,7 +23,20 @@ export interface ParsedWorkflow {
  * Parse a ComfyUI API-format workflow JSON and extract configurable variables.
  */
 export function parseWorkflow(apiJson: string, name?: string): ParsedWorkflow {
-  const nodes = parseWorkflowNodes(apiJson)
+  const parsed = safeJsonParse<Record<string, ComfyUINode>>(apiJson, {
+    context: 'Workflow JSON',
+    validate: isWorkflowNodeMap,
+    invalidShapeMessage: 'Workflow JSON must be a ComfyUI API-format node map'
+  })
+  if (!parsed.ok) throw new Error(parsed.error)
+  return analyzeWorkflowNodes(parsed.value, name)
+}
+
+/** Infer variables and roles after the caller has validated and updated the node map. */
+export function analyzeWorkflowNodes(
+  nodes: Record<string, ComfyUINode>,
+  name?: string
+): ParsedWorkflow {
   const variables: ParsedVariable[] = []
 
   for (const [nodeId, node] of Object.entries(nodes)) {
@@ -156,22 +169,8 @@ function isComfyUINode(value: unknown): value is ComfyUINode {
   )
 }
 
-function isWorkflowNodeMap(value: unknown): value is Record<string, ComfyUINode> {
+export function isWorkflowNodeMap(value: unknown): value is Record<string, ComfyUINode> {
   return isJsonObject(value) && Object.values(value).every(isComfyUINode)
-}
-
-function parseWorkflowNodes(apiJson: string): Record<string, ComfyUINode> {
-  const parsed = safeJsonParse<Record<string, ComfyUINode>>(apiJson, {
-    context: 'Workflow JSON',
-    validate: isWorkflowNodeMap,
-    invalidShapeMessage: 'Workflow JSON must be a ComfyUI API-format node map'
-  })
-
-  if (!parsed.ok) {
-    throw new Error(parsed.error)
-  }
-
-  return parsed.value
 }
 
 /**

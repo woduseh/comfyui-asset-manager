@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- This standalone Node entrypoint is JavaScript. */
-import { spawn } from 'node:child_process'
-import { appendFileSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { rename } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
+import { runLoggedProcess } from './lib/process.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -73,62 +73,13 @@ export function createPlan({ cwd = projectRoot, coverage = false } = {}) {
   ]
 }
 
-function stopProcessTree(child) {
-  if (!child.pid) return
-  if (process.platform === 'win32') {
-    const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
-      shell: false,
-      windowsHide: true,
-      stdio: 'ignore'
-    })
-    killer.on('error', () => child.kill('SIGKILL'))
-    killer.on('close', (code) => {
-      if (code !== 0) child.kill('SIGKILL')
-    })
-  } else {
-    try {
-      process.kill(-child.pid, 'SIGKILL')
-    } catch {
-      child.kill('SIGKILL')
-    }
-  }
-}
-
-function runCommand(command, { cwd, signal, logPath, output, errorOutput }) {
-  return new Promise((resolveResult) => {
-    if (signal?.aborted) return resolveResult({ exitCode: 130, signal: 'aborted' })
-    const child = spawn(command.executable, command.args, {
-      cwd,
-      shell: false,
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-    const abort = () => stopProcessTree(child)
-    signal?.addEventListener('abort', abort, { once: true })
-    if (signal?.aborted) abort()
-    let spawnError
-    child.stdout.on('data', (chunk) => {
-      appendFileSync(logPath, chunk)
-      output.write(chunk)
-    })
-    child.stderr.on('data', (chunk) => {
-      appendFileSync(logPath, chunk)
-      errorOutput.write(chunk)
-    })
-    child.on('error', (error) => {
-      spawnError = error.message
-      appendFileSync(logPath, `${error.message}\n`)
-      errorOutput.write(`${error.message}\n`)
-    })
-    child.on('close', (code, exitSignal) => {
-      signal?.removeEventListener('abort', abort)
-      resolveResult({
-        exitCode: code ?? 1,
-        signal: exitSignal,
-        ...(spawnError && { error: spawnError })
-      })
-    })
+function runCommand(command, { cwd, signal, logPath, output }) {
+  return runLoggedProcess(command.executable, command.args, {
+    cwd,
+    signal,
+    logPath,
+    output,
+    append: true
   })
 }
 

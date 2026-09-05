@@ -233,6 +233,63 @@ describe('Task Generator', () => {
       expect(tasks[3].metadata.imageIndex).toBe(0)
     })
 
+    it('keeps slot routing aligned when dimensions are skipped or share a module', () => {
+      const data = structuredClone(moduleData)
+      data[0].items.push({
+        ...data[0].items[0],
+        id: 'char-2',
+        name: 'Bob',
+        prompt: '1boy, bob'
+      })
+      data[1].items.forEach((item) => (item.enabled = false))
+      const slotMappings: NonNullable<BatchConfig['slotMappings']> = [
+        { nodeId: 'global', assignedModuleIds: [] },
+        { nodeId: 'characters', assignedModuleIds: ['mod-char'] },
+        { nodeId: 'disabled', assignedModuleIds: ['mod-emo'] },
+        { nodeId: 'missing', assignedModuleIds: ['missing'] }
+      ].map((slot) => ({
+        ...slot,
+        variableId: `${slot.nodeId}-variable`,
+        fieldName: 'text',
+        role: 'prompt_positive',
+        action: 'inject',
+        fixedValue: '',
+        prefixModuleIds: [],
+        prefixText: '  prefix  ',
+        suffixText: '  suffix  '
+      }))
+      slotMappings.push({
+        ...slotMappings[0],
+        nodeId: 'fixed',
+        action: 'fixed',
+        fixedValue: 'kept'
+      })
+      const config = makeConfig({
+        moduleSelections: [
+          { moduleId: 'missing', moduleType: 'style', selectedItemIds: ['missing-item'] },
+          { moduleId: 'mod-emo', moduleType: 'emotion', selectedItemIds: ['emo-1'] },
+          { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] },
+          { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-2'] }
+        ],
+        slotMappings,
+        countPerCombination: 1
+      })
+
+      const [task] = expandBatchToTasksChunk(config, data, 0, 1)
+      expect(countTotalTasksFromData(config, data)).toBe(1)
+      expect(task.promptData.positive).toBe('1girl, alice, 1boy, bob')
+      expect(task.promptData.slotPrompts).toEqual({
+        'global:text': 'prefix, 1girl, alice, 1boy, bob, suffix',
+        'characters:text': 'prefix, 1girl, alice, 1boy, bob, suffix',
+        'disabled:text': 'prefix, suffix',
+        'missing:text': 'prefix, suffix'
+      })
+      expect(task.promptData.slotMappings?.find((slot) => slot.nodeId === 'fixed')).toMatchObject({
+        action: 'fixed',
+        fixedValue: 'kept'
+      })
+    })
+
     describe('prompt variants', () => {
       const variantModuleData = [
         {

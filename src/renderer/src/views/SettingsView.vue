@@ -235,9 +235,17 @@ async function handleRotateMcpToken(): Promise<void> {
 }
 
 async function handleSetupCli(): Promise<void> {
-  const result = await terminalStore.setupMcpForCli()
-  if (result.success) {
-    await terminalStore.fetchMcpConfigStatus()
+  try {
+    const result = await terminalStore.setupMcpForCli()
+    if (!result.success) {
+      message.error(
+        t('settings.mcp.msg.cliSetupFailed', {
+          error: result.error ?? t('settings.mcp.msg.unknownError')
+        })
+      )
+    }
+  } catch (error) {
+    message.error(t('settings.mcp.msg.cliSetupFailed', { error: getErrorMessage(error) }))
   }
 }
 

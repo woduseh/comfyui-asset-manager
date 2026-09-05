@@ -1,18 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
-
-vi.mock('../../../../src/main/logger', () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
-}))
-
-vi.mock('electron-log/main', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    transports: { file: { level: 'info', maxSize: 0 }, console: { level: 'debug' } }
-  }
-}))
+import { describe, it, expect } from 'vitest'
 
 import { serializeModuleItems } from '../../../../src/main/services/mcp/file-serializer'
 import { parseModuleItemsContent } from '../../../../src/main/services/mcp/file-parser'

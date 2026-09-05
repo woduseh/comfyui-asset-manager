@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { AddOutline, FlashOutline, TimeOutline } from '@vicons/ionicons5'
 import { NButton, NCollapse, NCollapseItem, NIcon, useMessage } from 'naive-ui'
@@ -15,6 +16,7 @@ import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.sto
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
+import type { QueueStatus } from '@shared/ipc-contract'
 import { JOBS_REFRESH_INTERVAL_MS, PRODUCTION_RECENT_RESULTS_LIMIT } from '@renderer/constants'
 import { buildBatchStatusLabels } from '@renderer/utils/view-labels'
 
@@ -23,12 +25,11 @@ const message = useMessage()
 const connectionStore = useConnectionStore()
 const galleryStore = useGalleryStore()
 const queueStore = useQueueStore()
-const batchJobs = ref<Record<string, unknown>[]>([])
-const loadingJobs = ref(false)
+const { jobs: batchJobs, loading: loadingJobs } = storeToRefs(queueStore)
 const recentImages = ref<GalleryImage[]>([])
 const loadingRecentImages = ref(false)
 const recentImagesLoadError = ref(false)
-const queueStatus = ref<{ isProcessing: boolean; isPaused: boolean; currentJobId: string | null }>({
+const queueStatus = ref<QueueStatus>({
   isProcessing: false,
   isPaused: false,
   currentJobId: null
@@ -47,11 +48,6 @@ const runningJob = computed(
     batchJobs.value.find((job) => job.status === 'paused') ||
     null
 )
-const runningQueueJob = computed(() =>
-  runningJob.value
-    ? queueStore.activeJobs.find((job) => job.id === runningJob.value?.id) || null
-    : null
-)
 const queuedJobs = computed(() =>
   batchJobs.value.filter(
     (job) =>
@@ -66,7 +62,7 @@ const completedJobs = computed(() =>
   )
 )
 const runningJobEta = computed(() => {
-  const etaMs = runningQueueJob.value?.etaMs
+  const etaMs = runningJob.value?.etaMs
   if (!etaMs || etaMs <= 0) return null
 
   const totalSeconds = Math.ceil(etaMs / 1000)
@@ -78,15 +74,6 @@ const runningJobEta = computed(() => {
   return t('jobs.time.seconds', { secs: seconds })
 })
 
-async function loadBatchJobs(): Promise<void> {
-  loadingJobs.value = true
-  try {
-    batchJobs.value = (await invokeIpc(IPC_CHANNELS.BATCH_LIST)) || []
-  } finally {
-    loadingJobs.value = false
-  }
-}
-
 async function loadQueueStatus(): Promise<void> {
   try {
     queueStatus.value = await invokeIpc(IPC_CHANNELS.QUEUE_STATUS)
@@ -97,7 +84,7 @@ async function loadQueueStatus(): Promise<void> {
 }
 
 async function refreshJobs(): Promise<void> {
-  await Promise.all([loadBatchJobs(), loadQueueStatus()])
+  await Promise.all([queueStore.loadJobs(), loadQueueStatus()])
 }
 
 async function loadRecentImages(): Promise<void> {
@@ -175,7 +162,6 @@ async function handleStartJob(jobId: string): Promise<void> {
   message.success(t('batch.msg.started'))
   await new Promise((resolve) => setTimeout(resolve, 300))
   await refreshJobs()
-  await queueStore.loadActiveJobs()
 }
 
 async function handlePause(): Promise<void> {
@@ -195,7 +181,7 @@ async function handleReconnect(): Promise<void> {
   const connected = await connectionStore.connectConfigured()
   if (connected) {
     message.success(t('jobs.production.reconnected'))
-    await Promise.all([refreshJobs(), queueStore.loadActiveJobs()])
+    await refreshJobs()
   }
 }
 
@@ -208,7 +194,7 @@ async function handleCancel(): Promise<void> {
 
 async function handleDeleteJob(jobId: string): Promise<void> {
   await invokeIpc(IPC_CHANNELS.BATCH_DELETE, { id: jobId })
-  await loadBatchJobs()
+  await queueStore.loadJobs()
   message.success(t('batch.msg.deleted'))
 }
 
@@ -222,7 +208,6 @@ async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
     message.success(t('batch.msg.rerunStartedShort'))
     await new Promise((resolve) => setTimeout(resolve, 300))
     await refreshJobs()
-    await queueStore.loadActiveJobs()
   } catch (error) {
     message.error(
       t('batch.msg.rerunFailed', {
@@ -239,7 +224,7 @@ function openWizard(mode: BatchWizardMode, job: Record<string, unknown> | null =
 }
 
 onMounted(() => {
-  void Promise.all([refreshJobs(), queueStore.loadActiveJobs(), loadRecentImages()])
+  void Promise.all([refreshJobs(), loadRecentImages()])
   refreshInterval = setInterval(async () => {
     if (queueStatus.value.isProcessing || runningJob.value) {
       await Promise.all([refreshJobs(), loadRecentImages()])
@@ -288,7 +273,7 @@ onUnmounted(() => {
           :is-paused="queueStatus.isPaused || runningJob.status === 'paused'"
           :is-connected="connectionStore.isConnected"
           :eta="runningJobEta"
-          :avg-task-duration-ms="runningQueueJob?.avgTaskDurationMs"
+          :avg-task-duration-ms="runningJob.avgTaskDurationMs"
           @pause="handlePause"
           @resume="handleResume"
           @reconnect="handleReconnect"
@@ -377,7 +362,7 @@ onUnmounted(() => {
       v-model:show="showWizard"
       :mode="wizardMode"
       :source-job="wizardSourceJob"
-      @saved="loadBatchJobs"
+      @saved="queueStore.loadJobs"
     />
   </PageShell>
 </template>

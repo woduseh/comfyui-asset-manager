@@ -925,9 +925,10 @@ export class BatchTaskRepository {
 
   clearPromptDataForCompleted(jobId: string): void {
     const db = getDatabase()
-    db.run("UPDATE batch_tasks SET prompt_data = '{}' WHERE job_id = ? AND status = 'completed'", [
-      jobId
-    ])
+    db.run(
+      "UPDATE batch_tasks SET prompt_data = '{}' WHERE job_id = ? AND status = 'completed' AND prompt_data != '{}'",
+      [jobId]
+    )
     saveDatabase()
   }
 

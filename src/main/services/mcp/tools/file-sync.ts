@@ -24,7 +24,7 @@ export function registerFileSyncTools(server: McpServer): void {
 
   server.tool(
     'export_module_items_to_file',
-    'Export module items to a file (JSON/CSV/Markdown), overwriting an existing destination file. Format auto-detected from extension if omitted.',
+    'Export module items to a new file (JSON/CSV/Markdown). Existing destination files are preserved; choose a different path if one already exists. Format auto-detected from extension if omitted.',
     {
       module_id: z.string().describe('Module ID'),
       file_path: z.string().describe('Absolute path for the output file'),

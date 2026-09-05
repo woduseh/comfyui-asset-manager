@@ -13,14 +13,15 @@ import {
   NTag
 } from 'naive-ui'
 import { VueDraggable } from 'vue-draggable-plus'
-import { useModuleStore, type PromptModule } from '@renderer/stores/module.store'
+import type { ModuleItem, PromptModule } from '@renderer/stores/module.store'
+import { invokeIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { ModuleSelectionUI, SlotMapping } from './types'
 
 const props = defineProps<{ availableModules: PromptModule[] }>()
 const moduleSelections = defineModel<ModuleSelectionUI[]>('moduleSelections', { required: true })
 const moduleToAdd = defineModel<string | null>('moduleToAdd', { required: true })
 const slotMappings = defineModel<SlotMapping[]>('slotMappings', { required: true })
-const moduleStore = useModuleStore()
 const { t } = useI18n()
 
 async function addModuleToMatrix(moduleId: string): Promise<void> {
@@ -30,8 +31,7 @@ async function addModuleToMatrix(moduleId: string): Promise<void> {
   const module = props.availableModules.find((candidate) => candidate.id === moduleId)
   if (!module) return
 
-  await moduleStore.loadItems(moduleId)
-  const items = [...moduleStore.currentItems]
+  const items = (await invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, { moduleId })) as ModuleItem[]
   moduleSelections.value.push({
     moduleId,
     moduleName: module.name,

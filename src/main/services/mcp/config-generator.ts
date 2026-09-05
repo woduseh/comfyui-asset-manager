@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import log from '../../logger'
-import { safeJsonParse } from '@shared/safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
 const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`
@@ -72,20 +72,18 @@ function writeDotMcpJson(url: string, token: string | undefined, homeDir: string
   let config: McpJsonConfig = { mcpServers: {} }
 
   if (existsSync(filePath)) {
-    try {
-      const raw = readFileSync(filePath, 'utf-8')
-      const parsed = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
-      if (parsed) {
-        config = parsed
-        if (!config.mcpServers) config.mcpServers = {}
-      }
-    } catch (error) {
-      logConfigDebug(
-        'Failed to read existing .mcp.json config, falling back to a new config',
-        error
+    const raw = readFileSync(filePath, 'utf-8')
+    const parsed = parseJsonConfigText<McpJsonConfig>(raw, '.mcp.json config')
+    if (
+      !isJsonObject(parsed) ||
+      (parsed.mcpServers !== undefined && !isJsonObject(parsed.mcpServers))
+    ) {
+      throw new Error(
+        `Cannot update ${filePath}: expected a JSON object with an object-valued mcpServers field when present. The existing file was left unchanged.`
       )
-      config = { mcpServers: {} }
     }
+    config = parsed
+    config.mcpServers ??= {}
   }
 
   config.mcpServers[MCP_SERVER_NAME] = {

@@ -65,6 +65,23 @@ describe('MCP tool registration contract', () => {
       expect(
         listed.tools.every((tool) => tool.inputSchema.type === 'object' && tool.annotations)
       ).toBe(true)
+      expect(listed.tools.every((tool) => tool.description && tool.description.length > 0)).toBe(
+        true
+      )
+      const prompts = await client.listPrompts()
+      expect(
+        prompts.prompts.map((prompt) => ({
+          name: prompt.name,
+          description: prompt.description,
+          inputKeys: prompt.arguments?.map((argument) => argument.name)
+        }))
+      ).toEqual([
+        {
+          name: 'danbooru_tag_guide',
+          description: expect.stringContaining('Danbooru'),
+          inputKeys: ['character_description']
+        }
+      ])
       expect(client.getInstructions()).toContain('get_generation_guide')
       const guide = await client.callTool({ name: 'get_generation_guide', arguments: {} })
       expect(guide.isError).not.toBe(true)
@@ -106,43 +123,5 @@ describe('MCP tool registration contract', () => {
       await client.close()
       await server.close()
     }
-  })
-  it('registers the stable tool and prompt surface in order', () => {
-    const tools: Array<{ name: string; description: string; inputKeys: string[] }> = []
-    const prompts: Array<{ name: string; description: string; inputKeys: string[] }> = []
-    const server = {
-      registerTool: (...args: unknown[]) => {
-        const [name, config] = args as [
-          string,
-          { description: string; inputSchema: Record<string, unknown> }
-        ]
-        tools.push({
-          name,
-          description: config.description,
-          inputKeys: Object.keys(config.inputSchema)
-        })
-      },
-      prompt: (...args: unknown[]) => {
-        const [name, description, schema] = args as [
-          string,
-          string,
-          Record<string, unknown> | undefined
-        ]
-        prompts.push({ name, description, inputKeys: Object.keys(schema ?? {}) })
-      }
-    } as unknown as McpServer
-
-    registerMcpTools(server)
-
-    expect(tools.map((tool) => tool.name)).toEqual(EXPECTED_TOOL_NAMES)
-    expect(tools).toHaveLength(40)
-    expect(tools.every((tool) => tool.description.length > 0)).toBe(true)
-    expect(prompts).toEqual([
-      {
-        name: 'danbooru_tag_guide',
-        description: expect.stringContaining('Danbooru'),
-        inputKeys: ['character_description']
-      }
-    ])
   })
 })

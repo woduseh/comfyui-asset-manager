@@ -99,16 +99,18 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 ### 필수 조건
 
 - [Node.js](https://nodejs.org/) 버전은 `.node-version` 참조 (로컬·CI·릴리스 공통)
-- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) Portable 서버 실행 중 (기본: `localhost:8188`)
+- 실제 이미지 생성에는 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) 서버가 필요합니다 (기본: `localhost:8188`). 단위 테스트와 격리 smoke 검사는 GPU 없이 실행합니다.
 
 ### 설치 & 실행
 
 ```bash
 git clone https://github.com/woduseh/comfyui-asset-manager.git
 cd comfyui-asset-manager
-npm install
+npm ci
 npm run dev        # 개발 모드 (HMR)
 ```
+
+격리 실행과 실패 진단, 빠른 검사·전체 검증은 [개발과 검증 루프](docs/development.md)를 참고하세요.
 
 ---
 

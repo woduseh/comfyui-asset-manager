@@ -1,6 +1,5 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../../logger'
 import type { ParsedModuleItem } from './file-parser'
 
 export type SerializeFormat = 'json' | 'csv' | 'md'
@@ -109,24 +108,25 @@ export function writeModuleItemsFile(
   format?: SerializeFormat
 ): { filePath: string; format: SerializeFormat; size: number } {
   const resolved = path.resolve(filePath)
-  const normalized = path.normalize(resolved)
-  if (normalized !== resolved) {
-    log.warn(`Path traversal attempt blocked: ${filePath}`)
-    throw new Error('Invalid file path')
-  }
 
   const dir = path.dirname(resolved)
   if (!fs.existsSync(dir)) {
     throw new Error(`Directory does not exist: ${dir}`)
   }
 
-  if (fs.existsSync(resolved)) {
-    throw new Error(`File already exists: ${resolved}. Remove it first or choose a different path.`)
-  }
+  const existsMessage = `File already exists: ${resolved}. Remove it first or choose a different path.`
+  if (fs.existsSync(resolved)) throw new Error(existsMessage)
 
   const detectedFormat = format || detectFormat(resolved)
   const content = serializeModuleItems(items, detectedFormat)
-  fs.writeFileSync(resolved, content, 'utf-8')
+  try {
+    fs.writeFileSync(resolved, content, { encoding: 'utf-8', flag: 'wx' })
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+      throw new Error(existsMessage)
+    }
+    throw error
+  }
 
   const stats = fs.statSync(resolved)
   return { filePath: resolved, format: detectedFormat, size: stats.size }

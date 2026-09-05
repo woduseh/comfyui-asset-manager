@@ -121,4 +121,22 @@ describe('importWorkflowFromSelectedPath', () => {
 
     expect(repository.create).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ['[]', 'JSON object'],
+    ['{}', 'at least one API node'],
+    ['{"1":null}', 'API-format node map'],
+    ['{"1":{"class_type":"Custom","inputs":[]}}', 'API-format node map'],
+    ['{"1":{"class_type":"Custom","inputs":{},"_meta":"title"}}', 'API-format node map']
+  ])('rejects invalid node-map content without persisting: %s', (content, message) => {
+    const repository = makeRepository()
+    expect(() =>
+      importWorkflowFromSelectedPath(resolve('fixtures', 'workflow.json'), repository, {
+        getFileSize: () => Buffer.byteLength(content),
+        readTextFile: () => content
+      })
+    ).toThrow(message)
+    expect(repository.create).not.toHaveBeenCalled()
+    expect(repository.setVariables).not.toHaveBeenCalled()
+  })
 })

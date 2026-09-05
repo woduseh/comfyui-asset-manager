@@ -227,6 +227,101 @@ describe('installed-catalog workflow preparation', () => {
     ).toThrow(/Duplicate/)
   })
 
+  it('infers roles and persists variable defaults from the updated graph', () => {
+    const graph = prepareWorkflow(recipe, catalog()).prepared.parsed.nodes
+    graph['2']._meta = { title: 'Unconnected text' }
+    graph['5'].inputs.positive = ['3', 0]
+    const source = JSON.stringify(graph)
+    const text = 'worst quality, low quality'
+    const result = prepareWorkflow(
+      {
+        name: 'Updated text',
+        source: { kind: 'api_json', content: source },
+        input_updates: [{ node_id: '2', field: 'text', value: text }]
+      },
+      catalog()
+    )
+
+    expect(result.prepared.parsed.variables).toContainEqual(
+      expect.objectContaining({
+        nodeId: '2',
+        fieldName: 'text',
+        currentValue: text,
+        role: 'prompt_negative'
+      })
+    )
+    expect(JSON.parse(result.prepared.content)).toEqual(result.prepared.parsed.nodes)
+    expect(JSON.parse(source)['2'].inputs.text).toBe('')
+    expect(
+      prepareWorkflow(
+        { name: 'Updated text', source: { kind: 'api_json', content: result.prepared.content } },
+        catalog()
+      ).token
+    ).toBe(result.token)
+
+    const create = vi.fn(() => 'updated-workflow')
+    const setVariables = vi.fn()
+    persistPreparedWorkflowImport(result.prepared, { create, setVariables }, (operation) =>
+      operation()
+    )
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ api_json: result.prepared.content })
+    )
+    expect(setVariables).toHaveBeenCalledWith(
+      'updated-workflow',
+      expect.arrayContaining([
+        expect.objectContaining({
+          node_id: '2',
+          field_name: 'text',
+          default_val: text,
+          role: 'prompt_negative'
+        })
+      ])
+    )
+  })
+
+  it('rejects updates that expand a small source beyond the UTF-8 byte limit', () => {
+    const graph = Object.fromEntries(
+      Array.from({ length: 36 }, (_, index) => [
+        String(index),
+        { class_type: 'CustomText', inputs: { text: '' } }
+      ])
+    )
+    expect(() =>
+      prepareWorkflow(
+        {
+          name: 'Expanded graph',
+          source: { kind: 'api_json', content: JSON.stringify(graph) },
+          input_updates: Object.keys(graph).map((nodeId) => ({
+            node_id: nodeId,
+            field: 'text',
+            value: '한'.repeat(100_000)
+          }))
+        },
+        catalog()
+      )
+    ).toThrow('10MB')
+  })
+
+  it('keeps inferred variables and returned nodes consistent with JSON number normalization', () => {
+    const content =
+      '{"1":{"class_type":"CustomImage","inputs":{"value":1e400,"offset":-0}},' +
+      '"2":{"class_type":"SaveImage","inputs":{"images":["1",0],"filename_prefix":"preview"}}}'
+    const result = prepareWorkflow(
+      { name: 'JSON numbers', source: { kind: 'api_json', content } },
+      {
+        ...catalog(),
+        CustomImage: node({ value: ['*'], offset: ['FLOAT'] }, ['IMAGE'])
+      }
+    )
+    expect(result.validation.valid).toBe(true)
+    expect(result.prepared.parsed.nodes['1'].inputs).toEqual({ value: null, offset: 0 })
+    expect(result.prepared.parsed.nodes).toEqual(JSON.parse(result.prepared.content))
+    expect(result.prepared.parsed.variables.filter((variable) => variable.nodeId === '1')).toEqual([
+      expect.objectContaining({ fieldName: 'offset', varType: 'number', currentValue: 0 })
+    ])
+  })
+
   it('preserves saved workflow roles and source data while persisting a clone', () => {
     const original = prepareWorkflow(recipe, catalog()).prepared
     const saved = {

@@ -77,6 +77,9 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
   main·renderer·tests 타입 검사를 포함하며 `.reports/verify/latest.json`과 단계별 로그를 남긴다.
   이전 성공을 재사용하지 말고 이번 실행의 상태와 종료 코드를 확인한다.
   `incomplete.json`이 있으면 미완료이며, 같은 체크아웃에서 통합 검증을 동시에 실행하지 않는다.
+- 앱 수준의 격리 검사는 `npm run smoke`다. 준비·빌드·Electron 실행 실패와 실제 UI 검사 결과를
+  구분하고 `.reports/smoke/run-*/result.json`의 상태·종료·정리 결과를 확인한다. 범위와 전제는
+  `docs/development.md`를 따른다. `--existing-build` 결과는 현재 소스의 검증 성공이 아니다.
 - 환경 문제는 `npm run doctor`로 진단한다. Node 버전은 `.node-version`을 사용하며
   CI는 Ubuntu·Windows에서 같은 검증을 수행한다. 상세 사용법은 `docs/development.md`에 있다.
   CI의 전체 품질 게이트는 `.github/workflows/ci.yml`, 배포 검증은 `.github/workflows/release.yml`에 정의되어 있다.

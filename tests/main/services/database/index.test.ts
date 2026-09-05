@@ -197,6 +197,91 @@ describe('database query indexes', () => {
   })
 })
 
+describe('database schema upgrades', () => {
+  function removeUpgradeColumns(): void {
+    const db = databaseModule.getDatabase()
+    db.run('ALTER TABLE workflow_variables DROP COLUMN role')
+    db.run('ALTER TABLE module_items DROP COLUMN prompt_variants')
+    db.run('ALTER TABLE batch_jobs DROP COLUMN module_data_snapshot')
+    db.run('ALTER TABLE batch_jobs DROP COLUMN sort_order')
+  }
+
+  it('upgrades legacy rows and preserves migrated values on subsequent opens', async () => {
+    const db = databaseModule.getDatabase()
+    db.run("INSERT INTO workflows (id, name, api_json) VALUES ('workflow', 'Legacy', '{}')")
+    db.run(
+      "INSERT INTO workflow_variables (id, workflow_id, node_id, field_name, display_name) VALUES ('variable', 'workflow', '1', 'text', 'Prompt')"
+    )
+    db.run("INSERT INTO prompt_modules (id, name, type) VALUES ('module', 'Legacy', 'custom')")
+    db.run(
+      "INSERT INTO module_items (id, module_id, name, prompt) VALUES ('item', 'module', 'Item', 'retained prompt')"
+    )
+    db.run("INSERT INTO batch_jobs (id, name, config) VALUES ('job', 'Legacy', '{}')")
+    removeUpgradeColumns()
+    await databaseModule.closeDatabase()
+
+    await databaseModule.initDatabase()
+    const upgraded = databaseModule.getDatabase()
+    expect(upgraded.exec('SELECT field_name, role FROM workflow_variables')[0].values).toEqual([
+      ['text', 'custom']
+    ])
+    expect(upgraded.exec('SELECT prompt, prompt_variants FROM module_items')[0].values).toEqual([
+      ['retained prompt', '{}']
+    ])
+    expect(
+      upgraded.exec('SELECT config, module_data_snapshot, sort_order FROM batch_jobs')[0].values
+    ).toEqual([['{}', null, 0]])
+
+    upgraded.run("UPDATE workflow_variables SET role = 'prompt_positive'")
+    upgraded.run('UPDATE module_items SET prompt_variants = ?', [
+      '{"alternate":{"prompt":"kept","negative":""}}'
+    ])
+    upgraded.run("UPDATE batch_jobs SET module_data_snapshot = '[]', sort_order = 7")
+    await databaseModule.closeDatabase()
+    await databaseModule.initDatabase()
+    const reopened = databaseModule.getDatabase()
+    expect(reopened.exec('SELECT role FROM workflow_variables')[0].values).toEqual([
+      ['prompt_positive']
+    ])
+    expect(reopened.exec('SELECT prompt_variants FROM module_items')[0].values).toEqual([
+      ['{"alternate":{"prompt":"kept","negative":""}}']
+    ])
+    expect(
+      reopened.exec('SELECT module_data_snapshot, sort_order FROM batch_jobs')[0].values
+    ).toEqual([['[]', 7]])
+  })
+
+  it('rejects a failed migration without exposing or saving the partially upgraded database', async () => {
+    const db = databaseModule.getDatabase()
+    db.run("INSERT INTO transaction_test VALUES ('retained')")
+    removeUpgradeColumns()
+    const databasePrototype = Object.getPrototypeOf(db) as typeof db
+    await databaseModule.closeDatabase()
+    const databasePath = join(testDirectory, 'data', 'comfyui_asset_manager.db')
+    const before = readFileSync(databasePath)
+    const originalRun = databasePrototype.run
+    const migrationFailure = vi.spyOn(databasePrototype, 'run').mockImplementation(function (
+      this: typeof db,
+      sql,
+      ...args
+    ) {
+      if (sql === 'ALTER TABLE batch_jobs ADD COLUMN module_data_snapshot TEXT') {
+        throw new Error('Injected migration failure')
+      }
+      return originalRun.call(this, sql, ...args)
+    })
+
+    await expect(databaseModule.initDatabase()).rejects.toThrow('Injected migration failure')
+    expect(() => databaseModule.getDatabase()).toThrow('Database not initialized')
+    await databaseModule.closeDatabase()
+    expect(readFileSync(databasePath)).toEqual(before)
+
+    migrationFailure.mockRestore()
+    await databaseModule.initDatabase()
+    expect(getRows()).toEqual(['retained'])
+  })
+})
+
 describe('database persistence queue', () => {
   it('serializes writes and persists a newer revision after an in-flight write', async () => {
     const originalRename = fsPromises.rename.bind(fsPromises)

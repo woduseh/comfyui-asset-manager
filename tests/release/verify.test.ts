@@ -183,6 +183,31 @@ describe('verification runner', () => {
     expect(report.steps[1].status).toBe('passed')
   })
 
+  it('records synchronous spawn failures and publishes a finished report after remaining checks', async () => {
+    const cwd = workspace()
+    const report = await runVerification({
+      cwd,
+      output: silent,
+      errorOutput: silent,
+      plan: [
+        { name: 'invalid', commands: [{ executable: '', args: [] }] },
+        { name: 'next', commands: [command('console.log("remaining check ran")')] }
+      ]
+    })
+    expect(report.exitCode).toBe(1)
+    expect(report.status).toBe('failed')
+    expect(report.finishedAt).toEqual(expect.any(String))
+    expect(report.steps[0]).toMatchObject({ status: 'failed', exitCode: 1 })
+    expect(report.steps[0].results[0].error).toContain('cannot be empty')
+    expect(readFileSync(report.steps[0].logPath, 'utf8')).toContain('cannot be empty')
+    expect(report.steps[1].status).toBe('passed')
+    expect(readFileSync(report.steps[1].logPath, 'utf8')).toContain('remaining check ran')
+    expect(JSON.parse(readFileSync(join(cwd, '.reports/verify/latest.json'), 'utf8'))).toEqual(
+      report
+    )
+    expect(existsSync(join(cwd, '.reports/verify/incomplete.json'))).toBe(false)
+  })
+
   it('terminates an active child on cancellation and skips remaining checks', async () => {
     const cwd = workspace()
     const controller = new AbortController()

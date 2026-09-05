@@ -86,6 +86,7 @@
       "msg": {
         "startFailed": "Failed to start MCP server: {error}",
         "stopFailed": "Failed to stop MCP server: {error}",
+        "cliSetupFailed": "Failed to generate CLI configuration: {error}",
         "enablePersistFailed": "Failed to persist MCP settings, so the start was rolled back: {error}",
         "disablePersistFailed": "Failed to persist MCP settings, so the stop was rolled back: {error}",
         "rollbackFailed": "Rollback failed: {error}",

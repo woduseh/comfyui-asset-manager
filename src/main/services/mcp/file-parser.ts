@@ -1,6 +1,5 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../../logger'
 import { MAX_IMPORT_FILE_SIZE_BYTES } from '../../constants'
 import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
@@ -314,18 +313,7 @@ function parseMarkdown(content: string): ParseResult {
 }
 
 export function parseModuleItemsFile(filePath: string, format?: FileFormat): ParseResult {
-  // Validate path
   const resolved = path.resolve(filePath)
-  if (!path.isAbsolute(resolved)) {
-    throw new Error('File path must be absolute')
-  }
-
-  // Security: block path traversal
-  const normalized = path.normalize(resolved)
-  if (normalized !== resolved) {
-    log.warn(`Path traversal attempt blocked: ${filePath}`)
-    throw new Error('Invalid file path')
-  }
 
   if (!fs.existsSync(resolved)) {
     throw new Error(`File not found: ${resolved}`)

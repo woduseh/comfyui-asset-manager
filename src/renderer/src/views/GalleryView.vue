@@ -282,7 +282,7 @@ watch(showDetail, (val) => {
 // Auto-refresh gallery when tasks complete (debounced to avoid excessive reloads)
 let galleryRefreshTimer: ReturnType<typeof setTimeout> | null = null
 watch(
-  () => queueStore.activeJobs.reduce((sum, j) => sum + j.completedTasks, 0),
+  () => queueStore.activeJobs.reduce((sum, j) => sum + j.completed_tasks, 0),
   () => {
     if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
     galleryRefreshTimer = setTimeout(

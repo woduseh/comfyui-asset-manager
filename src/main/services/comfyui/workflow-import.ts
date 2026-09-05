@@ -3,7 +3,8 @@ import { basename, extname, isAbsolute } from 'path'
 import { MAX_WORKFLOW_FILE_SIZE_BYTES } from '../../constants'
 import { withTransaction } from '../database'
 import { isJsonObject, safeJsonParse } from '@shared/safe-json'
-import { parseWorkflow, type ParsedWorkflow } from './workflow-parser'
+import { analyzeWorkflowNodes, isWorkflowNodeMap, type ParsedWorkflow } from './workflow-parser'
+import type { ComfyUINode } from './types'
 
 interface WorkflowImportRepository {
   create(data: {
@@ -54,10 +55,8 @@ export interface PreparedWorkflowImport {
   description?: string
 }
 
-export function prepareWorkflowImport(
-  content: string,
-  options: WorkflowImportOptions = {}
-): PreparedWorkflowImport {
+/** Validate import content before traversing graph links or modifying primitive inputs. */
+export function readWorkflowImportNodes(content: string): Record<string, ComfyUINode> {
   if (Buffer.byteLength(content, 'utf-8') > MAX_WORKFLOW_FILE_SIZE_BYTES) {
     throw new Error('Workflow file exceeds the 10MB size limit')
   }
@@ -70,10 +69,20 @@ export function prepareWorkflowImport(
   if (workflowJson.value.nodes && workflowJson.value.links) {
     throw new Error('UI format workflow detected. Please export in API format (Save API Format).')
   }
-  const parsed = parseWorkflow(content, options.name)
-  if (Object.keys(parsed.nodes).length === 0) {
+  if (!isWorkflowNodeMap(workflowJson.value)) {
+    throw new Error('Workflow JSON must be a ComfyUI API-format node map')
+  }
+  if (Object.keys(workflowJson.value).length === 0) {
     throw new Error('Workflow must contain at least one API node')
   }
+  return workflowJson.value
+}
+
+export function prepareWorkflowImport(
+  content: string,
+  options: WorkflowImportOptions = {}
+): PreparedWorkflowImport {
+  const parsed = analyzeWorkflowNodes(readWorkflowImportNodes(content), options.name)
   return {
     content,
     parsed,

@@ -191,7 +191,8 @@ export function validateModuleItemData(val: unknown, update = false): void {
       'weight',
       'sort_order',
       'metadata',
-      'prompt_variants'
+      'prompt_variants',
+      ...(update ? ['enabled'] : [])
     ],
     'module item'
   )
@@ -207,6 +208,7 @@ export function validateModuleItemData(val: unknown, update = false): void {
   }
   if (data.sort_order !== undefined) validatePositiveInt(data.sort_order)
   if (data.metadata !== undefined) validateString(data.metadata, 100_000)
+  if (data.enabled !== undefined) validateIntegerRange(data.enabled, 0, 1, 'Module item enabled')
   if (data.prompt_variants !== undefined) validatePromptVariantsPayload(data.prompt_variants)
 }
 

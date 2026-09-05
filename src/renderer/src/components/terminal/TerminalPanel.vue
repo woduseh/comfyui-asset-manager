@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { NIcon, NButton, NSpace } from 'naive-ui'
 import { AddOutline, CloseOutline, RemoveOutline, ExpandOutline } from '@vicons/ionicons5'
 import TerminalInstance from './TerminalInstance.vue'
@@ -50,12 +50,6 @@ function handleMinimize(): void {
 function handleMaximize(): void {
   terminalStore.panelHeight = terminalStore.panelHeight >= 500 ? 300 : 600
 }
-
-onMounted(() => {
-  if (terminalStore.tabs.length === 0) {
-    terminalStore.createTab()
-  }
-})
 </script>
 
 <template>

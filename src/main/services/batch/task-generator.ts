@@ -77,6 +77,12 @@ export type ModuleDataSnapshot = Array<{
   }>
 }>
 
+interface SelectedModuleItem {
+  moduleId: string
+  moduleType: string
+  item: ModuleDataSnapshot[number]['items'][number]
+}
+
 /**
  * Count total tasks from resolved module data (accurate — accounts for enabled items)
  */
@@ -85,10 +91,10 @@ export function countTotalTasksFromData(
   moduleData: ModuleDataSnapshot
 ): number {
   const dimensions = buildDimensions(config, moduleData)
-  if (dimensions.dimensions.length === 0) return 0
+  if (dimensions.length === 0) return 0
 
   let totalCombos = 1
-  for (const dim of dimensions.dimensions) {
+  for (const dim of dimensions) {
     totalCombos *= dim.length
   }
   return totalCombos * config.countPerCombination
@@ -104,7 +110,7 @@ export function expandBatchToTasksChunk(
   startIndex: number,
   count: number
 ): GeneratedTask[] {
-  const { dimensions, dimensionModuleIds } = buildDimensions(config, moduleData)
+  const dimensions = buildDimensions(config, moduleData)
   if (dimensions.length === 0) return []
 
   const totalTasks = dimensions.reduce(
@@ -128,7 +134,7 @@ export function expandBatchToTasksChunk(
       remainder = Math.floor(remainder / dimension.length)
     }
 
-    const task = generateSingleTask(config, combo, dimensionModuleIds, comboIdx, imgIdx, taskIdx)
+    const task = generateSingleTask(config, combo, comboIdx, imgIdx, taskIdx)
     tasks.push(task)
   }
 
@@ -138,22 +144,8 @@ export function expandBatchToTasksChunk(
 function buildDimensions(
   config: BatchConfig,
   moduleData: ModuleDataSnapshot
-): {
-  dimensions: Array<
-    Array<{
-      moduleType: string
-      item: ModuleDataSnapshot[number]['items'][number]
-    }>
-  >
-  dimensionModuleIds: string[]
-} {
-  const dimensions: Array<
-    Array<{
-      moduleType: string
-      item: ModuleDataSnapshot[number]['items'][number]
-    }>
-  > = []
-  const dimensionModuleIds: string[] = []
+): SelectedModuleItem[][] {
+  const dimensions: SelectedModuleItem[][] = []
   const modulesById = new Map<string, ModuleDataSnapshot[number]>()
   for (const module of moduleData) {
     if (!modulesById.has(module.moduleId)) modulesById.set(module.moduleId, module)
@@ -170,22 +162,21 @@ function buildDimensions(
 
     if (selectedItems.length === 0) continue
 
-    dimensionModuleIds.push(selection.moduleId)
     dimensions.push(
       selectedItems.map((item) => ({
+        moduleId: selection.moduleId,
         moduleType: selection.moduleType,
         item
       }))
     )
   }
 
-  return { dimensions, dimensionModuleIds }
+  return dimensions
 }
 
 function generateSingleTask(
   config: BatchConfig,
-  combo: Array<{ moduleType: string; item: ModuleDataSnapshot[number]['items'][number] }>,
-  dimensionModuleIds: string[],
+  combo: SelectedModuleItem[],
   comboIdx: number,
   imgIdx: number,
   sortOrder: number
@@ -254,12 +245,12 @@ function generateSingleTask(
       if (slot.action !== 'inject') continue
 
       const slotKey = `${slot.nodeId}:${slot.fieldName}`
+      let slotComposed = composed
 
-      if (slot.assignedModuleIds && slot.assignedModuleIds.length > 0) {
+      if (slot.assignedModuleIds?.length) {
         const assignedModules = combo
-          .map((entry, idx) => ({ entry, moduleId: dimensionModuleIds[idx] }))
           .filter(({ moduleId }) => slot.assignedModuleIds.includes(moduleId))
-          .map(({ entry }) => {
+          .map((entry) => {
             const variant = slot.promptVariant
               ? entry.item.prompt_variants?.[slot.promptVariant]
               : undefined
@@ -276,34 +267,19 @@ function generateSingleTask(
             }
           })
 
-        if (assignedModules.length > 0) {
-          const slotComposed = buildPrompt(
-            assignedModules,
-            config.extraVariables as Record<string, string>,
-            seed
-          )
-          const promptText =
-            slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
-
-          const parts: string[] = []
-          if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
-          if (promptText.trim()) parts.push(promptText.trim())
-          if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
-          slotPrompts[slotKey] = parts.join(', ')
-        } else {
-          const parts: string[] = []
-          if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
-          if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
-          slotPrompts[slotKey] = parts.join(', ')
-        }
-      } else {
-        const globalPrompt = slot.role === 'prompt_positive' ? composed.positive : composed.negative
-        const parts: string[] = []
-        if (slot.prefixText?.trim()) parts.push(slot.prefixText.trim())
-        if (globalPrompt.trim()) parts.push(globalPrompt.trim())
-        if (slot.suffixText?.trim()) parts.push(slot.suffixText.trim())
-        slotPrompts[slotKey] = parts.join(', ')
+        slotComposed = buildPrompt(
+          assignedModules,
+          config.extraVariables as Record<string, string>,
+          seed
+        )
       }
+
+      const promptText =
+        slot.role === 'prompt_positive' ? slotComposed.positive : slotComposed.negative
+      slotPrompts[slotKey] = [slot.prefixText, promptText, slot.suffixText]
+        .map((part) => part?.trim())
+        .filter(Boolean)
+        .join(', ')
     }
   }
 

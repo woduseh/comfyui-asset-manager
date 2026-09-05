@@ -60,54 +60,47 @@ const characterRepo = new CharacterRepository()
 const imageRepo = new GeneratedImageRepository()
 
 interface ModuleImportPayload {
-  module: {
-    name: string
-    type: string
-    description?: string
-    parent_id?: string | null
-  }
-  items: Array<{
-    name: string
-    prompt: string
-    negative?: string
-    weight?: number
-    sort_order?: number
-    metadata?: string
-  }>
+  module: Parameters<ModuleRepository['create']>[0]
+  items: Array<
+    Omit<Parameters<ModuleItemRepository['create']>[0], 'module_id'> & { enabled?: number }
+  >
 }
 
-function isModuleImportPayload(value: unknown): value is ModuleImportPayload {
-  if (!isJsonObject(value)) {
-    return false
+function validateModuleImportPayload(value: unknown): ModuleImportPayload {
+  if (!isJsonObject(value) || !isJsonObject(value.module) || !Array.isArray(value.items)) {
+    throw new Error('Invalid module export format')
   }
 
-  const { module, items } = value
-  if (
-    !isJsonObject(module) ||
-    typeof module.name !== 'string' ||
-    typeof module.type !== 'string' ||
-    (module.description !== undefined && typeof module.description !== 'string') ||
-    (module.parent_id !== undefined &&
-      module.parent_id !== null &&
-      typeof module.parent_id !== 'string')
-  ) {
-    return false
+  // Exported records contain database-owned columns; import only editable content into new IDs.
+  const module = {
+    name: value.module.name,
+    type: value.module.type,
+    description: value.module.description ?? '',
+    parent_id: value.module.parent_id ?? undefined
   }
+  validateModuleData(module)
 
-  if (!Array.isArray(items)) {
-    return false
-  }
-
-  return items.every(
-    (item) =>
-      isJsonObject(item) &&
-      typeof item.name === 'string' &&
-      typeof item.prompt === 'string' &&
-      (item.negative === undefined || typeof item.negative === 'string') &&
-      (item.weight === undefined || typeof item.weight === 'number') &&
-      (item.sort_order === undefined || typeof item.sort_order === 'number') &&
-      (item.metadata === undefined || typeof item.metadata === 'string')
-  )
+  const items = value.items.map((raw) => {
+    if (!isJsonObject(raw) || raw.name === undefined || raw.prompt === undefined) {
+      throw new Error('Invalid module export item')
+    }
+    const item = {
+      name: raw.name,
+      prompt: raw.prompt,
+      negative: raw.negative,
+      weight: raw.weight,
+      sort_order: raw.sort_order,
+      metadata: raw.metadata,
+      enabled: raw.enabled,
+      prompt_variants:
+        typeof raw.prompt_variants === 'string'
+          ? raw.prompt_variants
+          : JSON.stringify(raw.prompt_variants)
+    }
+    validateModuleItemData(item, true)
+    return item
+  })
+  return { module, items } as ModuleImportPayload
 }
 
 export function registerIpcHandlers(): void {
@@ -519,36 +512,21 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.MODULE_IMPORT_DATA, (_event, { jsonData }: { jsonData: string }) => {
     try {
       validateString(jsonData, 1_048_576)
-      const dataResult = safeJsonParse<ModuleImportPayload>(jsonData, {
-        context: 'Module import data',
-        validate: isModuleImportPayload,
-        invalidShapeMessage: 'Invalid module export format'
-      })
+      const dataResult = safeJsonParse(jsonData, { context: 'Module import data' })
       if (!dataResult.ok) {
         throw new Error(dataResult.error)
       }
 
-      const data = dataResult.value
-      validateModuleData(data.module)
-      for (const item of data.items) validateModuleItemData(item, true)
+      const data = validateModuleImportPayload(dataResult.value)
 
       return withTransaction(() => {
         const modId = moduleRepo.create({
-          name: data.module.name + ' (imported)',
-          type: data.module.type,
-          description: data.module.description || '',
-          parent_id: data.module.parent_id || undefined
+          ...data.module,
+          name: data.module.name + ' (imported)'
         })
-        for (const item of data.items) {
-          moduleItemRepo.create({
-            module_id: modId,
-            name: item.name,
-            prompt: item.prompt,
-            negative: item.negative || '',
-            weight: item.weight ?? 1.0,
-            sort_order: item.sort_order ?? 0,
-            metadata: item.metadata || '{}'
-          })
+        for (const { enabled, ...item } of data.items) {
+          const itemId = moduleItemRepo.create({ ...item, module_id: modId })
+          if (enabled === 0) moduleItemRepo.update(itemId, { enabled })
         }
         return { id: modId, name: data.module.name }
       })

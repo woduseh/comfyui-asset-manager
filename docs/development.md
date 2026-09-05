@@ -41,6 +41,19 @@ npm run typecheck:test
 지정하거나 전체 검증을 실행합니다. 테스트를 찾지 못하면 실패하며 성공으로 처리하지 않습니다.
 `typecheck:test`는 테스트와 fixture, Vitest 설정 및 참조하는 Vue 컴포넌트까지 검사합니다.
 
+검증 도구를 수정했거나 esbuild 시작이 막힌 환경에서는 도구 자체의 실행 계약을 별도로
+확인할 수 있습니다. Node와 설치된 의존성을 사용하며 제품 테스트·빌드·GUI 검사를 대신하지 않습니다.
+
+```bash
+npm run verify:tooling
+npm run verify:tooling -- --inject-failure  # 의도한 assertion 실패, exit 1
+```
+
+실제 자식 실패와 후속 검사·로그, 취소 분류, 준비 실패, 입력 해시, 임시 서버의 포트 분리와
+해제를 확인하고 `.reports/tooling/run-*/`에 결과와 로그를 보존합니다. 취소 시 프로세스
+트리 종료가 거부되면 `processTree: permission-denied`로 표시합니다. 도구 계약 통과는 그
+환경에서 정상적인 트리 종료나 앱 실행이 가능하다는 뜻이 아닙니다.
+
 ## 전체 검증과 실패 분석
 
 ```bash
@@ -52,6 +65,8 @@ npm run verify:coverage  # 같은 순서 + 기존 커버리지 임계값 검증 
 종료 코드가 0이 아니며, 중단하면 실행 중인 자식 프로세스를 종료하고 나머지를 건너뜁니다.
 타입 검사는 main·renderer·tests 세 설정을 모두 확인합니다. 번들 단계는 타입 검사를
 반복하지 않습니다. 단독 `npm run build`는 타입 검사도 실행합니다.
+자식 프로세스 출력은 파일에 직접 기록하고 콘솔로 중계합니다. 실행 파일 누락이나
+동기 `spawn` 예외도 해당 단계의 실패로 기록한 뒤 나머지 검사를 계속합니다.
 
 콘솔에 실시간 출력과 단계별 소요 시간·종료 코드를 표시하며 다음 결과를 남깁니다.
 
@@ -71,6 +86,42 @@ artifact로 보존합니다. CI는 Ubuntu와 Windows에서 실행됩니다.
 문서만 수정했다면 링크·참조·diff·서식 확인으로 마칠 수 있습니다. 화면이나 네이티브 기능의
 동작을 바꿨다면 자동 검사 외에 관련 UI/실행 확인이 필요합니다. 이 검증 명령은 실제 ComfyUI
 서버에 이미지를 생성하거나 Windows 설치 패키지를 검증하지 않습니다.
+
+## 격리된 Electron 앱 검사
+
+```bash
+npm run smoke                         # 새 격리 빌드 → 앱 검사 → 재시작 → 정리
+npm run smoke -- --inject-failure      # 의도한 assertion 실패: exit 1과 실패 단계 확인
+```
+
+Node·Electron 설치와 GUI/자식 프로세스 실행 권한이 필요합니다. 추가 브라우저 설치나
+ComfyUI/GPU는 필요하지 않습니다. 기존 `FakeComfyUIServer`를 loopback의 임의 포트로 띄우고,
+실제 main·preload·renderer·IPC·sql.js를 사용합니다. UI의 라이브러리 모듈·아이템 생성,
+프롬프트 조회, 잘못된 IPC 입력 거부, 연결 해제·재연결, 정상 종료 후 DB 저장과 재시작 시
+표시를 검사하도록 구성되어 있습니다. 입력은 renderer DOM 이벤트이며 OS 입력·파일 선택기·
+네이티브 PTY·실제 이미지 생성은 이 검사의 범위에 포함하지 않습니다.
+
+실행마다 `.reports/smoke/run-*/`에 `result.json`, 단계별 로그, Electron 단계 JSON과 화면 PNG를
+남깁니다. 보고서의 `inputSha256`은 빌드 입력을 식별하며 빌드 중 입력이 바뀌면 실패합니다.
+빌드·DB·Chromium 프로필은 그 실행의 `runtime/`에만 생성하고 종료 후 제거합니다.
+서로 다른 실행/작업 트리가 프로필·포트·번들을 공유하지 않습니다. `npm run dev`와
+`npm start`는 기존 사용자 프로필을 사용하므로 격리 검사를 대신하지 않습니다.
+
+중단은 `Ctrl+C`이며 단계 제한 시간은 기본 45초(빌드 120초)입니다. 프로세스 트리 종료나
+폴더 제거를 확인하지 못하면 `cleanup: failed`와 해당 PID/오류를 남기고 성공 처리하지
+않습니다. 강제 종료로 `running`이 남은 보고서도 완료 증거가 아닙니다. `--inject-failure`는
+`create.json`의 `injected-assertion` 실패까지 확인해야 하며, 준비/빌드 실패를 주입 성공으로
+해석하면 안 됩니다.
+
+현재와 같은 제한된 Windows 환경에서 esbuild `spawn EPERM` 또는 Electron의
+`platform_channel.cc` 접근 거부가 발생하면 앱 검사는 실행되지 않은 것입니다.
+보안 플래그를 끄지 말고 로그로 환경 오류와 코드 실패를 구분하세요. 기존 번들의 시작만
+진단하려면 `npm run smoke -- --existing-build`를 사용합니다. 이 모드는 검사가 모두 끝나도
+`status: limited`, **exit 2**이며 현재 소스 빌드의 성공으로 간주하지 않습니다.
+
+현재 환경에서 확인된 것은 실행/실패 보고와 격리·정리 경로입니다. Electron GUI의 정상
+흐름은 권한 제한으로 아직 확인하지 못했으므로 CI의 필수 게이트에는 추가하지 않았습니다.
+일반 데스크톱 세션에서 `smoke`와 실패 주입을 모두 확인한 뒤 CI에 연결하세요.
 
 ## 코드와 검증 위치
 

@@ -69,7 +69,7 @@ async function renameDatabaseFile(tempPath: string): Promise<void> {
   }
 }
 
-async function writeDatabaseSnapshot(buffer: Buffer): Promise<void> {
+async function writeDatabaseSnapshot(buffer: Uint8Array): Promise<void> {
   const tempPath = getTempDbPath()
   const file = await fs.open(tempPath, 'w')
   try {
@@ -81,7 +81,7 @@ async function writeDatabaseSnapshot(buffer: Buffer): Promise<void> {
   await renameDatabaseFile(tempPath)
 }
 
-function writeDatabaseSnapshotSync(buffer: Buffer): void {
+function writeDatabaseSnapshotSync(buffer: Uint8Array): void {
   const tempPath = getTempDbPath()
   const descriptor = openSync(tempPath, 'w')
   try {
@@ -149,17 +149,18 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
 
   recoverTemporaryDatabase(SQL)
 
-  if (existsSync(dbPath)) {
-    const fileBuffer = readFileSync(dbPath)
-    db = new SQL.Database(fileBuffer)
-  } else {
-    db = new SQL.Database()
+  const database = existsSync(dbPath) ? new SQL.Database(readFileSync(dbPath)) : new SQL.Database()
+
+  try {
+    database.run('PRAGMA journal_mode = WAL;')
+    database.run('PRAGMA foreign_keys = ON;')
+    createTables(database)
+  } catch (error) {
+    database.close()
+    throw error
   }
 
-  db.run('PRAGMA journal_mode = WAL;')
-  db.run('PRAGMA foreign_keys = ON;')
-
-  createTables(db)
+  db = database
   saveDatabase()
 
   return db
@@ -222,7 +223,8 @@ function ensureSaveLoop(): Promise<void> {
     while (db && persistedSaveRevision < requestedSaveRevision) {
       const snapshotRevision = requestedSaveRevision
       try {
-        const buffer = Buffer.from(db.export())
+        // sql.js exports an owned byte array; fs can write it without copying the entire DB.
+        const buffer = db.export()
         await writeDatabaseSnapshot(buffer)
         persistedSaveRevision = snapshotRevision
         consecutiveSaveFailures = 0
@@ -265,7 +267,7 @@ export function saveDatabaseSync(): void {
     saveTimer = null
   }
   const snapshotRevision = ++requestedSaveRevision
-  writeDatabaseSnapshotSync(Buffer.from(db.export()))
+  writeDatabaseSnapshotSync(db.export())
   persistedSaveRevision = snapshotRevision
   consecutiveSaveFailures = 0
   lastSaveError = undefined
@@ -336,6 +338,18 @@ export function withTransaction<T>(fn: () => T): T {
   }
 }
 
+function addColumnIfMissing(
+  database: SqlJsDatabase,
+  table: string,
+  column: string,
+  definition: string
+): void {
+  const columns = database.exec(`PRAGMA table_info(${table})`)[0].values
+  if (!columns.some(([, name]) => name === column)) {
+    database.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+}
+
 function createTables(database: SqlJsDatabase): void {
   database.run(`
     CREATE TABLE IF NOT EXISTS workflows (
@@ -366,13 +380,7 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
-  // Migration: add role column for existing databases
-  try {
-    database.run(`ALTER TABLE workflow_variables ADD COLUMN role TEXT NOT NULL DEFAULT 'custom'`)
-  } catch (error) {
-    void error
-    /* Existing databases may already have this column from an earlier app version. */
-  }
+  addColumnIfMissing(database, 'workflow_variables', 'role', "TEXT NOT NULL DEFAULT 'custom'")
 
   database.run(`
     CREATE TABLE IF NOT EXISTS prompt_modules (
@@ -403,13 +411,7 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
-  // Migration: add prompt_variants column for existing databases
-  try {
-    database.run(`ALTER TABLE module_items ADD COLUMN prompt_variants TEXT DEFAULT '{}'`)
-  } catch (error) {
-    void error
-    /* Existing databases may already have this column from an earlier app version. */
-  }
+  addColumnIfMissing(database, 'module_items', 'prompt_variants', "TEXT DEFAULT '{}'")
 
   database.run(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -441,21 +443,8 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
-  // Migration: add module_data_snapshot column for lazy task expansion
-  try {
-    database.run(`ALTER TABLE batch_jobs ADD COLUMN module_data_snapshot TEXT`)
-  } catch (error) {
-    void error
-    /* Existing databases may already have this column from an earlier app version. */
-  }
-
-  // Migration: add sort_order column for batch_jobs
-  try {
-    database.run(`ALTER TABLE batch_jobs ADD COLUMN sort_order INTEGER DEFAULT 0`)
-  } catch (error) {
-    void error
-    /* Existing databases may already have this column from an earlier app version. */
-  }
+  addColumnIfMissing(database, 'batch_jobs', 'module_data_snapshot', 'TEXT')
+  addColumnIfMissing(database, 'batch_jobs', 'sort_order', 'INTEGER DEFAULT 0')
 
   database.run(`
     CREATE TABLE IF NOT EXISTS batch_tasks (
@@ -542,6 +531,11 @@ function createTables(database: SqlJsDatabase): void {
   database.run('CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id);')
   database.run(
     'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job_status ON batch_tasks(job_id, status);'
+  )
+  // Periodic cleanup should visit only completed tasks that still retain prompt data.
+  database.run(
+    `CREATE INDEX IF NOT EXISTS idx_batch_tasks_prompt_cleanup ON batch_tasks(job_id, status)
+     WHERE status = 'completed' AND prompt_data != '{}';`
   )
   database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);')
   // Asset authorization runs for every image request, including paths outside the output root.

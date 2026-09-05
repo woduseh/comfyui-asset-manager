@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { isJsonObject, safeJsonParse } from '@shared/safe-json'
+import { isJsonObject } from '@shared/safe-json'
 import { MAX_WORKFLOW_FILE_SIZE_BYTES } from '../../constants'
 import type { ComfyUINode, ComfyUIObjectInfo } from './types'
-import { prepareWorkflowImport, type PreparedWorkflowImport } from './workflow-import'
+import { readWorkflowImportNodes, type PreparedWorkflowImport } from './workflow-import'
+import { analyzeWorkflowNodes } from './workflow-parser'
 import { validateWorkflowGraph } from './workflow-validation'
 
 const scalar = z.union([z.string().max(100_000), z.number().finite(), z.boolean()])
@@ -202,24 +203,11 @@ export function prepareWorkflow(
     if (!saved) throw new Error('Saved workflow not found')
     content = saved.content
   }
-  // Bound work before parseWorkflow traverses links to infer variable roles.
-  if (Buffer.byteLength(content, 'utf-8') > MAX_WORKFLOW_FILE_SIZE_BYTES) {
-    throw new Error('Workflow file exceeds the 10MB size limit')
-  }
-  const rawGraph = safeJsonParse<Record<string, unknown>>(content, {
-    context: 'Workflow file',
-    validate: isJsonObject,
-    invalidShapeMessage: 'Workflow file must contain a JSON object'
-  })
-  if (!rawGraph.ok) throw new Error(rawGraph.error)
-  if (rawGraph.value.nodes && rawGraph.value.links) {
-    throw new Error('UI format workflow detected. Please export in API format (Save API Format).')
-  }
-  if (Object.keys(rawGraph.value).length > 500) {
+  let nodes = readWorkflowImportNodes(content)
+  // Bound work before role inference traverses graph links.
+  if (Object.keys(nodes).length > 500) {
     throw new Error('Workflow preparation supports at most 500 workflow nodes')
   }
-  const imported = prepareWorkflowImport(content, { name: input.name })
-  const nodes = structuredClone(imported.parsed.nodes)
   const updated = new Set<string>()
   for (const update of input.input_updates) {
     const key = `${update.node_id}:${update.field}`
@@ -232,10 +220,16 @@ export function prepareWorkflow(
       throw new Error(`Input type must remain ${typeof original}: ${key}`)
     nodes[update.node_id].inputs[update.field] = update.value
   }
-  const prepared = prepareWorkflowImport(JSON.stringify(nodes), {
-    name: input.name,
+  content = JSON.stringify(nodes)
+  // Re-read the stored JSON to enforce the final byte limit and its number normalization.
+  nodes = readWorkflowImportNodes(content)
+  const parsed = analyzeWorkflowNodes(nodes, input.name)
+  const prepared: PreparedWorkflowImport = {
+    content,
+    parsed,
+    category: parsed.suggestedCategory,
     description: 'Prepared against installed ComfyUI node schemas'
-  })
+  }
   const applyRole = (mapping: { node_id: string; field: string; role: string }): void => {
     const key = `${mapping.node_id}:${mapping.field}`
     const variable = prepared.parsed.variables.find(

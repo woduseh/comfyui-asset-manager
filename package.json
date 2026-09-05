@@ -14,8 +14,10 @@
   },
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "verify": "node scripts/verify.mjs",
     "verify:coverage": "node scripts/verify.mjs --coverage",
+    "verify:tooling": "node scripts/check-tooling.mjs",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -48,7 +50,8 @@
     "node-pty": "^1.1.0",
     "ofetch": "^1.4.1",
     "sql.js": "^1.12.0",
-    "ws": "^8.18.2"
+    "ws": "^8.18.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.0",

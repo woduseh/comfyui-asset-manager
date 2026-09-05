@@ -44,6 +44,7 @@ async function loadConfigGenerator(homeDir: string): Promise<
 afterEach(() => {
   vi.resetModules()
   vi.doUnmock('os')
+  vi.doUnmock('fs')
   vi.doUnmock('../../../../src/main/logger')
 
   while (tempDirs.length > 0) {
@@ -125,6 +126,78 @@ describe('writeMcpJsonConfig', () => {
         }
       }
     })
+  })
+
+  it('preserves unrelated settings when adding a missing server map', async () => {
+    const homeDir = createTempHome()
+    const filePath = join(homeDir, '.mcp.json')
+    const original = { preferences: { theme: 'dark' }, allowedDirectories: ['project'] }
+    writeFileSync(filePath, JSON.stringify(original), 'utf-8')
+    const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+    expect(writeMcpJsonConfig('http://localhost:39464/mcp', TEST_TOKEN, homeDir)).toBe(filePath)
+    expect(JSON.parse(readFileSync(filePath, 'utf-8'))).toEqual({
+      ...original,
+      mcpServers: {
+        'comfyui-asset-manager': {
+          type: 'http',
+          url: 'http://localhost:39464/mcp',
+          headers: { Authorization: `Bearer ${TEST_TOKEN}` }
+        }
+      }
+    })
+  })
+
+  it.each([
+    '{',
+    '   ',
+    'null',
+    'false',
+    '3',
+    '"settings"',
+    '[{"keep":"this"}]',
+    '{"mcpServers":null,"keep":"this"}',
+    '{"mcpServers":[],"keep":"this"}',
+    '{"mcpServers":"invalid","keep":"this"}'
+  ])('rejects malformed existing .mcp.json without replacing it: %s', async (original) => {
+    const homeDir = createTempHome()
+    const filePath = join(homeDir, '.mcp.json')
+    writeFileSync(filePath, original, 'utf-8')
+    const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+    expect(() => writeMcpJsonConfig('http://localhost:39464/mcp', TEST_TOKEN, homeDir)).toThrow()
+    expect(readFileSync(filePath, 'utf-8')).toBe(original)
+  })
+
+  it('propagates an existing config read failure without replacing it or other client settings', async () => {
+    const homeDir = createTempHome()
+    const filePath = join(homeDir, '.mcp.json')
+    const original = '{"mcpServers":{"existing":{"command":"keep-me"}}}'
+    writeFileSync(filePath, original, 'utf-8')
+    mkdirSync(join(homeDir, '.gemini'))
+    mkdirSync(join(homeDir, '.copilot'))
+    const geminiPath = join(homeDir, '.gemini', 'settings.json')
+    const copilotPath = join(homeDir, '.copilot', 'mcp-config.json')
+    writeFileSync(geminiPath, original, 'utf-8')
+    writeFileSync(copilotPath, original, 'utf-8')
+    const failure = Object.assign(new Error('Cannot read .mcp.json'), { code: 'EACCES' })
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+      return {
+        ...actual,
+        readFileSync: vi.fn(() => {
+          throw failure
+        })
+      }
+    })
+    const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+    expect(() => writeMcpJsonConfig('http://localhost:39464/mcp', TEST_TOKEN, homeDir)).toThrow(
+      failure
+    )
+    expect(readFileSync(filePath, 'utf-8')).toBe(original)
+    expect(readFileSync(geminiPath, 'utf-8')).toBe(original)
+    expect(readFileSync(copilotPath, 'utf-8')).toBe(original)
   })
 
   it('does not modify Codex config.toml', async () => {

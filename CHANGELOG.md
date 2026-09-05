@@ -26,6 +26,7 @@
 
 ### Changed
 
+- 에이전트 지침의 검토·구현 범위, 필수 질문과 선택적 선호, 기존 승인 재사용 및 앱 UI 확인의 적용 범위를 명확화
 - **Breaking**: 항목 생성·수정을 `create_module_items`/`update_module_items` 배열 입력으로 통합하고 단건·bulk 별칭 제거. 검색은 `list_module_items(query)`, 일시정지·재개·취소는 `control_batch_job(action)`으로 통합
 - **Breaking**: `import_workflow`를 `prepare_workflow(source.kind=api_json)`로 대체. 기존 저장과 달리 설치 스키마 확인·dry-run 검토 후 `preparation_token`을 전달해야 저장 가능
 - MCP 도구를 40개로 정리하고 구조화된 결과·읽기/변경 annotations·변경 후 저장 완료 확인을 적용

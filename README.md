@@ -221,6 +221,7 @@ npm run dev        # 개발 모드 (HMR)
 과거 계획은 [개선 작업 회고](docs/history/2026-07-hardening.md), 작업·감사 증거는
 `work/`와 `docs/`에 보존하며 현재 실행 지침으로 사용하지 않습니다.
 앱의 MCP 클라이언트 연동 지원과 저장소의 에이전트 지침 지원은 별개입니다.
+환경 진단·빠른 관련 테스트·전체 검증·실패 로그 확인은 [개발과 검증 루프](docs/development.md)를 참고하세요.
 
 ### 기술 스택
 
@@ -241,6 +242,9 @@ npm run dev        # 개발 모드 (HMR)
 ### 빌드 & 테스트
 
 ```bash
+npm run doctor          # Node·의존성·esbuild 실행 환경 진단
+npm run verify          # lint + main/renderer/tests 타입 검사 + 전체 테스트 + 빌드
+npm run verify:coverage # CI와 같은 검증 + 커버리지 임계값
 npm run build           # 타입 체크 + Electron Vite 빌드
 npm run dist:portable   # Windows 포터블 실행 파일
 npm run dist:installer  # Windows NSIS 설치 파일
@@ -250,6 +254,7 @@ npm run test:coverage   # 커버리지 리포트
 npm run lint            # ESLint
 ```
 
+- 통합 검증은 실패 이후의 단계도 실행하고 `.reports/verify/latest.json`과 단계별 로그를 남깁니다.
 - `dist:all`은 모든 운영체제가 아니라 Windows용 포터블·설치 파일을 모두 만든다는 뜻이며,
   산출물은 `dist/`에 생성됩니다.
 - Git은 `.gitattributes` 기준으로 추적 텍스트 파일을 LF로 정규화합니다. 대규모 줄바꿈 diff가 보이면 먼저 정책 파일과 체크아웃 설정을 확인하세요.

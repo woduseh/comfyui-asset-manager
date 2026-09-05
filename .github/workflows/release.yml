@@ -14,6 +14,7 @@ env:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
@@ -29,14 +30,19 @@ jobs:
       - name: Verify release metadata
         run: npm run verify:release -- "${GITHUB_REF_NAME}"
 
-      - name: Lint
-        run: npm run lint
+      - name: Verify
+        run: npm run verify:coverage
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm run test:coverage
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-verification
+          path: |
+            .reports/verify/
+            coverage/
+          include-hidden-files: true
+          retention-days: 7
 
   build-windows:
     needs: lint-and-test

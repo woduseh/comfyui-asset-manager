@@ -154,13 +154,18 @@ function buildDimensions(
     }>
   > = []
   const dimensionModuleIds: string[] = []
+  const modulesById = new Map<string, ModuleDataSnapshot[number]>()
+  for (const module of moduleData) {
+    if (!modulesById.has(module.moduleId)) modulesById.set(module.moduleId, module)
+  }
 
   for (const selection of config.moduleSelections) {
-    const modData = moduleData.find((m) => m.moduleId === selection.moduleId)
+    const modData = modulesById.get(selection.moduleId)
     if (!modData) continue
 
+    const selectedItemIds = new Set(selection.selectedItemIds)
     const selectedItems = modData.items.filter(
-      (item) => selection.selectedItemIds.includes(item.id) && item.enabled
+      (item) => selectedItemIds.has(item.id) && item.enabled
     )
 
     if (selectedItems.length === 0) continue

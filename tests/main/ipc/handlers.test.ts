@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '../../../src/shared/ipc-channels'
+import type { queueManager } from '../../../src/main/services/batch/queue-manager'
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
@@ -20,8 +21,8 @@ const mocks = vi.hoisted(() => {
     batchUpdateStatus: vi.fn(),
     batchServiceCreate: vi.fn(() => ({ jobId: 'batch-id', totalTasks: 1 })),
     batchServiceUpdateDraft: vi.fn((id: string) => ({ jobId: id, totalTasks: 1 })),
-    queuePreflight: vi.fn(() => ({ success: true })),
-    queueRequestStart: vi.fn(() => ({ success: true })),
+    queuePreflight: vi.fn<typeof queueManager.preflightStart>(() => ({ success: true })),
+    queueRequestStart: vi.fn<typeof queueManager.requestStart>(() => ({ success: true })),
     queueResume: vi.fn(),
     queueCancel: vi.fn(),
     withTransaction: vi.fn(<T>(operation: () => T) => operation()),

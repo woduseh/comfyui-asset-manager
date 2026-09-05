@@ -524,7 +524,7 @@ describe('QueueManager Recovery', () => {
       const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
       await queueManager.startJob(jobId)
 
-      expect((queueManager as { _maxRetries: number })._maxRetries).toBe(2)
+      expect((queueManager as unknown as { _maxRetries: number })._maxRetries).toBe(2)
     })
 
     it('falls back to the default retry count when the stored setting is invalid', async () => {
@@ -541,7 +541,7 @@ describe('QueueManager Recovery', () => {
       const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
       await queueManager.startJob(jobId)
 
-      expect((queueManager as { _maxRetries: number })._maxRetries).toBe(3)
+      expect((queueManager as unknown as { _maxRetries: number })._maxRetries).toBe(3)
     })
 
     it('stops after the configured number of retries and marks the task failed', async () => {
@@ -774,7 +774,9 @@ describe('QueueManager Recovery', () => {
         const { jobId, task } = createTaskFixture()
         vi.mocked(taskGenerator.resolveOutputPath).mockReturnValue('job')
         vi.mocked(comfyuiManager.restClient.queuePrompt).mockResolvedValue({
-          prompt_id: 'prompt-1'
+          prompt_id: 'prompt-1',
+          number: 1,
+          node_errors: {}
         })
         vi.mocked(comfyuiManager.restClient.deleteFromHistory).mockResolvedValue(undefined)
         vi.spyOn(
@@ -812,7 +814,9 @@ describe('QueueManager Recovery', () => {
         const { jobId, task } = createTaskFixture()
         vi.mocked(taskGenerator.resolveOutputPath).mockReturnValue('job')
         vi.mocked(comfyuiManager.restClient.queuePrompt).mockResolvedValue({
-          prompt_id: 'prompt-2'
+          prompt_id: 'prompt-2',
+          number: 2,
+          node_errors: {}
         })
         vi.mocked(comfyuiManager.restClient.getImage)
           .mockResolvedValueOnce(Buffer.from('first'))

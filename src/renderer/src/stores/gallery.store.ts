@@ -37,23 +37,39 @@ export const useGalleryStore = defineStore('gallery', () => {
     sortOrder: 'desc'
   })
 
-  async function loadImages(): Promise<void> {
-    loading.value = true
-    try {
-      const query: GalleryQuery = {
-        page: page.value,
-        pageSize: pageSize.value,
-        ...filters.value
-      }
+  let pendingQuery: GalleryQuery | null = null
+  let loadPromise: Promise<void> | null = null
 
-      const result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, query)
-      if (result) {
-        images.value = result.items as GalleryImage[]
-        total.value = result.total
+  async function drainImageRequests(): Promise<void> {
+    try {
+      while (pendingQuery) {
+        const query = pendingQuery
+        pendingQuery = null
+        try {
+          const result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, query)
+          // A newer request supersedes this result, including refreshes of the same page.
+          if (!pendingQuery && result) {
+            images.value = result.items as GalleryImage[]
+            total.value = result.total
+          }
+        } catch (error) {
+          if (!pendingQuery) throw error
+        }
       }
     } finally {
       loading.value = false
+      loadPromise = null
     }
+  }
+
+  function loadImages(): Promise<void> {
+    // Bound IPC work to one active query and the latest pending query.
+    pendingQuery = { page: page.value, pageSize: pageSize.value, ...filters.value }
+    if (!loadPromise) {
+      loading.value = true
+      loadPromise = Promise.resolve().then(drainImageRequests)
+    }
+    return loadPromise
   }
 
   async function rateImage(id: string, rating: number): Promise<void> {

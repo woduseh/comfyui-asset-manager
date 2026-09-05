@@ -129,11 +129,8 @@ class QueueManager {
   }
 
   private syncProgress(jobId: string): void {
-    batchJobRepo.updateProgress(
-      jobId,
-      batchTaskRepo.countByJobStatus(jobId).completed ?? 0,
-      batchTaskRepo.countByJobStatus(jobId).failed ?? 0
-    )
+    const counts = batchTaskRepo.countByJobStatus(jobId)
+    batchJobRepo.updateProgress(jobId, counts.completed ?? 0, counts.failed ?? 0)
   }
 
   async shutdown(): Promise<void> {
@@ -324,8 +321,9 @@ class QueueManager {
       'Batch job config has an invalid shape'
     )
 
-    let completedCount = batchTaskRepo.countByJobStatus(jobId).completed ?? 0
-    let failedCount = batchTaskRepo.countByJobStatus(jobId).failed ?? 0
+    const initialCounts = batchTaskRepo.countByJobStatus(jobId)
+    let completedCount = initialCounts.completed ?? 0
+    let failedCount = initialCounts.failed ?? 0
     const totalTasks = (job.total_tasks as number) || 0
 
     // ETA tracking — limited to moving average window to avoid O(n²) accumulation

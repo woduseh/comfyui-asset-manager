@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { queueManager } from '../../../../src/main/services/batch/queue-manager'
 
 const mocks = vi.hoisted(() => ({
   workflowGet: vi.fn(() => ({ id: 'workflow-id' })),
   moduleItemList: vi.fn(() => [{ id: 'item-id' }]),
   createBatch: vi.fn(() => ({ jobId: 'job-id', totalTasks: 3 })),
-  requestStart: vi.fn(() => ({ success: true })),
+  requestStart: vi.fn<typeof queueManager.requestStart>(() => ({ success: true })),
   batchList: vi.fn(() => []),
   batchGet: vi.fn(() => null),
   taskList: vi.fn(() => [])

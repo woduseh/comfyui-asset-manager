@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 import { MAX_WORKFLOW_FILE_SIZE_BYTES } from '../../../../src/main/constants'
 import { importWorkflowFromSelectedPath } from '../../../../src/main/services/comfyui/workflow-import'
 
@@ -15,26 +15,31 @@ function makeWorkflow(): string {
   })
 }
 
+type WorkflowImportRepository = Parameters<typeof importWorkflowFromSelectedPath>[1]
+
 function makeRepository(): {
-  create: ReturnType<typeof vi.fn>
-  setVariables: ReturnType<typeof vi.fn>
+  create: Mock<WorkflowImportRepository['create']>
+  setVariables: Mock<WorkflowImportRepository['setVariables']>
 } {
   return {
-    create: vi.fn(() => 'workflow-id'),
-    setVariables: vi.fn()
+    create: vi.fn<WorkflowImportRepository['create']>(() => 'workflow-id'),
+    setVariables: vi.fn<WorkflowImportRepository['setVariables']>()
   }
 }
 
 describe('importWorkflowFromSelectedPath', () => {
   it('imports a selected API workflow atomically', () => {
     const repository = makeRepository()
-    const runInTransaction = vi.fn(<T>(operation: () => T) => operation())
+    const transactionStarted = vi.fn()
     const filePath = resolve('fixtures', 'workflow.json')
 
     const result = importWorkflowFromSelectedPath(filePath, repository, {
       getFileSize: () => makeWorkflow().length,
       readTextFile: () => makeWorkflow(),
-      runInTransaction
+      runInTransaction: (operation) => {
+        transactionStarted()
+        return operation()
+      }
     })
 
     expect(result).toMatchObject({
@@ -42,7 +47,7 @@ describe('importWorkflowFromSelectedPath', () => {
       name: 'workflow',
       category: 'generation'
     })
-    expect(runInTransaction).toHaveBeenCalledOnce()
+    expect(transactionStarted).toHaveBeenCalledOnce()
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'workflow',

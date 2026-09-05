@@ -4,6 +4,7 @@ import {
   type PreparedBatchJob
 } from '../../../../src/main/services/batch/batch-job-service'
 import type { BatchConfig } from '@shared/ipc-contract'
+import { expandBatchToTasksChunk } from '../../../../src/main/services/batch/task-generator'
 
 function makeConfig(overrides: Partial<BatchConfig> = {}): BatchConfig {
   return {
@@ -25,7 +26,7 @@ function makeConfig(overrides: Partial<BatchConfig> = {}): BatchConfig {
 }
 
 describe('BatchJobService', () => {
-  const create = vi.fn(() => 'job-id')
+  const create = vi.fn<(_data: PreparedBatchJob['data']) => string>(() => 'job-id')
   const updateDraft = vi.fn()
   const moduleGet = vi.fn(() => ({ id: 'module-id', type: 'character' }))
   const moduleItemList = vi.fn(() => [
@@ -92,6 +93,60 @@ describe('BatchJobService', () => {
         prefixText: 'tag prompt, manual prefix'
       })
     )
+  })
+
+  it('omits unselected snapshot items while preserving their resolved prefix contribution', () => {
+    const items = moduleItemList()
+    items.push({ ...items[0], id: 'unselected', prompt: 'prefix only', prompt_variants: '{}' })
+    moduleItemList.mockReturnValueOnce(items).mockReturnValueOnce(items)
+    const prepared = service.prepare(
+      makeConfig({
+        slotMappings: [
+          {
+            variableId: 'variable-id',
+            nodeId: '1',
+            fieldName: 'text',
+            role: 'prompt_positive',
+            action: 'inject',
+            fixedValue: '',
+            assignedModuleIds: ['module-id'],
+            prefixModuleIds: ['module-id'],
+            prefixText: '',
+            suffixText: ''
+          }
+        ]
+      })
+    )
+    const snapshot = JSON.parse(prepared.data.module_data_snapshot!)
+    const config = JSON.parse(prepared.data.config)
+
+    expect(snapshot[0].items.map((item: { id: string }) => item.id)).toEqual(['item-id'])
+    expect(config.slotMappings[0].prefixText).toBe('base prompt, prefix only')
+    const tasks = expandBatchToTasksChunk(config, snapshot, 0, 10)
+    expect(tasks).toHaveLength(2)
+    expect(tasks[0].promptData.positive).toBe('base prompt')
+    expect(tasks[0].promptData.slotPrompts!['1:text']).toBe('base prompt, prefix only, base prompt')
+  })
+
+  it('retains selections from repeated module dimensions in compact snapshots', () => {
+    const items = moduleItemList()
+    items.push({ ...items[0], id: 'second', name: 'Second', prompt: 'second prompt' })
+    items.push({ ...items[0], id: 'unselected' })
+    moduleItemList.mockReturnValueOnce(items).mockReturnValueOnce(items)
+    const prepared = service.prepare(
+      makeConfig({
+        moduleSelections: [
+          { moduleId: 'module-id', moduleType: 'character', selectedItemIds: ['item-id'] },
+          { moduleId: 'module-id', moduleType: 'emotion', selectedItemIds: ['second'] }
+        ]
+      })
+    )
+    const snapshot = JSON.parse(prepared.data.module_data_snapshot!)
+    expect(snapshot[0].items.map((item: { id: string }) => item.id)).toEqual(['item-id', 'second'])
+    const tasks = expandBatchToTasksChunk(JSON.parse(prepared.data.config), snapshot, 0, 10)
+    expect(tasks).toHaveLength(2)
+    expect(tasks[0].metadata).toMatchObject({ characterName: 'Item', emotionName: 'Second' })
+    expect(tasks[0].promptData.positive).toBe('base prompt, second prompt')
   })
 
   it('updates an existing draft through the same preparation path', () => {

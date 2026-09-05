@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       fileNamePattern: '{index}'
     },
     metadata: { combinationIndex: 0, imageIndex: 0, totalInCombination: 1 },
-    promptData: { positive: '', negative: '', seed: 1 },
+    promptData: { positive: '', negative: '', seed: 1, extraVariables: {} },
     promptId: 'prompt',
     taskId: 'task',
     jobId: 'job',

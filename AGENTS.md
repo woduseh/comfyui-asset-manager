@@ -68,8 +68,14 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
 - 코드 변경은 관련 테스트와 타입 검사를 실행하고, 영향 범위가 넓거나 빌드·패키징을 건드리면
   전체 테스트·빌드로 넓힌다. 검증이 통과하면 새 근거 없이 반복하지 않는다.
 - 문서만 변경하면 링크·참조·diff·서식을 확인한다. 앱 테스트와 빌드는 요구하지 않는다.
-- 명령: `npm test -- <test-path>`, `npm run typecheck`, `npm run lint`, `npm run build`.
-  Node 버전은 `.node-version`을 사용하며 CI는 Ubuntu·Windows에서 같은 검증을 수행한다.
+- 빠른 피드백은 `npm test -- <test-path>` 또는 `npm run test:related -- <source-path>`와
+  관련 타입 검사를 사용한다. import 관계에 잡히지 않는 IPC·동적 fixture는 테스트를 직접 지정한다.
+- 전체 검증은 `npm run verify`, CI와 같은 커버리지 게이트는 `npm run verify:coverage`다.
+  main·renderer·tests 타입 검사를 포함하며 `.reports/verify/latest.json`과 단계별 로그를 남긴다.
+  이전 성공을 재사용하지 말고 이번 실행의 상태와 종료 코드를 확인한다.
+  `incomplete.json`이 있으면 미완료이며, 같은 체크아웃에서 통합 검증을 동시에 실행하지 않는다.
+- 환경 문제는 `npm run doctor`로 진단한다. Node 버전은 `.node-version`을 사용하며
+  CI는 Ubuntu·Windows에서 같은 검증을 수행한다. 상세 사용법은 `docs/development.md`에 있다.
   CI의 전체 품질 게이트는 `.github/workflows/ci.yml`, 배포 검증은 `.github/workflows/release.yml`에 정의되어 있다.
 - 실제 결과와 미검증 영역을 보고한다. 과거 기록의 통과 결과를 이번 검증 결과로 사용하지 않는다.
 - 문서는 설명이 바뀐 경우에만 수정한다. AGENTS는 지속적인 프로젝트 계약, README는 사용법,

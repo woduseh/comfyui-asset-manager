@@ -13,20 +13,29 @@ describe('injectPromptData', () => {
       positive: 'global positive',
       negative: 'global negative',
       seed: 42,
+      extraVariables: {},
       slotMappings: [
         {
           nodeId: '1',
           fieldName: 'text',
           role: 'prompt_positive',
           action: 'inject',
-          fixedValue: ''
+          fixedValue: '',
+          assignedModuleIds: [],
+          prefixModuleIds: [],
+          prefixText: '',
+          suffixText: ''
         },
         {
           nodeId: '2',
           fieldName: 'text',
           role: 'prompt_negative',
           action: 'fixed',
-          fixedValue: 'fixed negative'
+          fixedValue: 'fixed negative',
+          assignedModuleIds: [],
+          prefixModuleIds: [],
+          prefixText: '',
+          suffixText: ''
         }
       ],
       slotPrompts: { '1:text': 'slot positive' }

@@ -503,10 +503,10 @@ describe('BatchWizard', () => {
 
     const wizard = wrapper.findComponent(BatchWizard)
     const workflowStep = wizard.findComponent(WizardStepWorkflow)
-    function nextButton(): VueWrapper {
+    function nextButton(): VueWrapper<InstanceType<typeof NButton>> {
       return wizard
         .findAllComponents(NButton)
-        .find((button) => button.text().includes('wizard.next')) as VueWrapper
+        .find((button) => button.text().includes('wizard.next'))!
     }
 
     expect(nextButton().props('disabled')).toBe(true)
@@ -598,10 +598,10 @@ describe('BatchWizard', () => {
     await flushPromises()
 
     const wizard = wrapper.findComponent(BatchWizard)
-    function nextButton(): VueWrapper {
+    function nextButton(): VueWrapper<InstanceType<typeof NButton>> {
       return wizard
         .findAllComponents(NButton)
-        .find((button) => button.text().includes('wizard.next')) as VueWrapper
+        .find((button) => button.text().includes('wizard.next'))!
     }
     await nextButton().trigger('click')
     await nextButton().trigger('click')

@@ -39,7 +39,7 @@ function fixture(): Parameters<typeof downloadTaskImages>[0] & {
       fileNamePattern: 'image'
     },
     metadata: { combinationIndex: 0, imageIndex: 0, totalInCombination: 1 },
-    promptData: { positive: '', negative: '', seed: 0 },
+    promptData: { positive: '', negative: '', seed: 0, extraVariables: {} },
     promptId: 'prompt',
     taskId: 'task',
     jobId: 'job',

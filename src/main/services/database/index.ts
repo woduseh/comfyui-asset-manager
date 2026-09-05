@@ -540,7 +540,21 @@ function createTables(database: SqlJsDatabase): void {
   // Create indexes
   database.run('CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id);')
   database.run('CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id);')
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job_status ON batch_tasks(job_id, status);'
+  )
   database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);')
+  // Asset authorization runs for every image request, including paths outside the output root.
+  // Both OR branches need an index to avoid scanning the entire gallery for each request.
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_generated_images_file_path ON generated_images(file_path);'
+  )
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_generated_images_thumbnail_path ON generated_images(thumbnail_path);'
+  )
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_generated_images_created_at ON generated_images(created_at);'
+  )
   database.run(
     'CREATE INDEX IF NOT EXISTS idx_generated_images_character ON generated_images(character_name);'
   )

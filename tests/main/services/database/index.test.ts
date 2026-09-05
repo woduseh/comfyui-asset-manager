@@ -125,6 +125,78 @@ describe('database transactions', () => {
   })
 })
 
+describe('database query indexes', () => {
+  it('uses indexed gallery authorization, ordering, and job status counts', async () => {
+    const { GeneratedImageRepository, BatchJobRepository } =
+      await import('@main/services/database/repositories')
+    const images = new GeneratedImageRepository()
+    const jobs = new BatchJobRepository()
+    const jobId = jobs.create({ name: 'Indexed job', config: '{}' })
+    const imageId = images.create({
+      job_id: jobId,
+      file_path: '/archive/original.png',
+      thumbnail_path: '/archive/thumbnail.png'
+    })
+    const db = databaseModule.getDatabase()
+    db.run(
+      "INSERT INTO batch_tasks (id, job_id, status, prompt_data) VALUES ('task', ?, 'uncertain', '{}')",
+      [jobId]
+    )
+    const prepareSpy = vi.spyOn(db, 'prepare')
+
+    expect(images.hasTrackedAssetPath(['/missing.png', '/archive/original.png'])).toBe(true)
+    expect(images.hasTrackedAssetPath('/archive/thumbnail.png')).toBe(true)
+    expect(images.hasTrackedAssetPath('/unregistered.png')).toBe(false)
+    expect(images.list({ page: 1, pageSize: 20 }).items[0].id).toBe(imageId)
+    expect(jobs.list()[0].uncertain_tasks).toBe(1)
+
+    // Check the repository's actual SQL so an accidental query change cannot bypass the indexes.
+    const queries = prepareSpy.mock.calls.map(([sql]) => String(sql))
+    prepareSpy.mockRestore()
+    const plan = (sql: string): string =>
+      db
+        .exec(`EXPLAIN QUERY PLAN ${sql}`)[0]
+        .values.map((row) => String(row[3]))
+        .join('\n')
+    const authorizationPlan = plan(queries.find((sql) => sql.startsWith('SELECT 1'))!)
+    expect(authorizationPlan).toContain('idx_generated_images_file_path')
+    expect(authorizationPlan).toContain('idx_generated_images_thumbnail_path')
+    expect(authorizationPlan).not.toContain('SCAN generated_images')
+    const galleryPlan = plan(
+      queries.find((sql) => sql.startsWith('SELECT * FROM generated_images'))!
+    )
+    expect(galleryPlan).toContain('idx_generated_images_created_at')
+    expect(galleryPlan).not.toContain('USE TEMP B-TREE')
+    const jobsPlan = plan(queries.find((sql) => sql.startsWith('SELECT batch_jobs.*'))!)
+    expect(jobsPlan).toContain('COVERING INDEX idx_batch_tasks_job_status')
+  })
+
+  it('adds query indexes to an existing database while preserving registered images', async () => {
+    const indexes = [
+      'idx_generated_images_file_path',
+      'idx_generated_images_thumbnail_path',
+      'idx_generated_images_created_at',
+      'idx_batch_tasks_job_status'
+    ]
+    const db = databaseModule.getDatabase()
+    for (const index of indexes) db.run(`DROP INDEX ${index}`)
+    db.run(
+      "INSERT INTO generated_images (id, file_path, thumbnail_path) VALUES ('existing', '/original.png', '/thumbnail.png')"
+    )
+    await databaseModule.closeDatabase()
+    await databaseModule.initDatabase()
+
+    const reopened = databaseModule.getDatabase()
+    const restoredIndexes = reopened
+      .exec("SELECT name FROM sqlite_master WHERE type = 'index'")[0]
+      .values.map(([name]) => name)
+    expect(restoredIndexes).toEqual(expect.arrayContaining(indexes))
+    expect(
+      reopened.exec('SELECT id, file_path, thumbnail_path FROM generated_images')[0].values
+    ).toEqual([['existing', '/original.png', '/thumbnail.png']])
+  })
+})
+
 describe('database persistence queue', () => {
   it('serializes writes and persists a newer revision after an in-flight write', async () => {
     const originalRename = fsPromises.rename.bind(fsPromises)

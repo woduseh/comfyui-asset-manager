@@ -79,18 +79,32 @@ export class BatchJobService {
       }
     }
 
+    // Keep every selected item when a module supplies more than one dimension.
+    const selectedIdsByModule = new Map<string, Set<string>>()
+    for (const selection of resolvedConfig.moduleSelections) {
+      let ids = selectedIdsByModule.get(selection.moduleId)
+      if (!ids) {
+        ids = new Set<string>()
+        selectedIdsByModule.set(selection.moduleId, ids)
+      }
+      for (const id of selection.selectedItemIds) ids.add(id)
+    }
+
     const moduleData: ModuleDataSnapshot = resolvedConfig.moduleSelections.map((selection) => ({
       moduleId: selection.moduleId,
       moduleType: selection.moduleType,
-      items: this.dependencies.moduleItemRepo.list(selection.moduleId).map((item) => ({
-        id: item.id as string,
-        name: item.name as string,
-        prompt: item.prompt as string,
-        negative: (item.negative as string) || '',
-        weight: (item.weight as number) || 1.0,
-        enabled: (item.enabled as number) !== 0,
-        prompt_variants: validatePromptVariants(item.prompt_variants as string)
-      }))
+      items: this.dependencies.moduleItemRepo
+        .list(selection.moduleId)
+        .filter((item) => selectedIdsByModule.get(selection.moduleId)!.has(item.id as string))
+        .map((item) => ({
+          id: item.id as string,
+          name: item.name as string,
+          prompt: item.prompt as string,
+          negative: (item.negative as string) || '',
+          weight: (item.weight as number) || 1.0,
+          enabled: (item.enabled as number) !== 0,
+          prompt_variants: validatePromptVariants(item.prompt_variants as string)
+        }))
     }))
     const totalTasks = countTotalTasksFromData(resolvedConfig, moduleData)
     if (totalTasks <= 0) {

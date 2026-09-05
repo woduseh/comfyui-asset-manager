@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   write: vi.fn()
 }))
 
+vi.mock('../../../../src/main/services/database', () => ({
+  withTransaction: (fn: () => unknown) => fn()
+}))
+
 vi.mock('../../../../src/main/services/mcp/tools/shared', () => ({
   moduleRepo: { get: mocks.get },
   moduleItemRepo: {
@@ -29,14 +33,17 @@ vi.mock('../../../../src/main/services/mcp/file-serializer', () => ({
 }))
 
 import { registerFileSyncTools } from '../../../../src/main/services/mcp/tools/file-sync'
+import { registerFileImportTools } from '../../../../src/main/services/mcp/tools/file-import'
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
 const handlers = new Map<string, Handler>()
-registerFileSyncTools({
+const server = {
   tool: (name: string, _description: string, _schema: unknown, handler: Handler) => {
     handlers.set(name, handler)
   }
-} as unknown as McpServer)
+} as unknown as McpServer
+registerFileSyncTools(server)
+registerFileImportTools(server)
 
 async function call(name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> {
   return handlers.get(name)!({ module_id: 'module', file_path: '/items.json', ...args })
@@ -61,6 +68,8 @@ describe('MCP file export and synchronization', () => {
       errors: []
     })
     mocks.write.mockReturnValue({ filePath: '/items.json', format: 'json', size: 100 })
+    mocks.bulkCreate.mockReturnValue({ succeeded: 1, failed: 0, errors: [] })
+    mocks.bulkUpdate.mockReturnValue({ succeeded: 1, failed: 0, errors: [] })
   })
 
   it('exports base fields while dropping malformed stored variants', async () => {
@@ -118,6 +127,21 @@ describe('MCP file export and synchronization', () => {
     expect(mocks.delete).not.toHaveBeenCalled()
   })
 
+  it.each(['diff_module_with_file', 'import_module_items_from_file'])(
+    '%s rejects partially parsed input instead of reporting a usable result',
+    async (tool) => {
+      mocks.parse.mockReturnValue({
+        format: 'json',
+        items: [{ name: 'Valid', prompt: 'valid' }],
+        errors: [{ line: 2, error: 'Invalid item' }]
+      })
+      const result = await call(tool)
+      expect(result.isError).toBe(true)
+      expect(payload(result)).toMatchObject({ parse_errors: [{ line: 2, error: 'Invalid item' }] })
+      expect(mocks.bulkCreate).not.toHaveBeenCalled()
+    }
+  )
+
   it('deletes only missing database items when requested', async () => {
     mocks.parse.mockReturnValue({ format: 'json', items: [], errors: [] })
 
@@ -125,5 +149,92 @@ describe('MCP file export and synchronization', () => {
 
     expect(mocks.delete).toHaveBeenCalledWith('alice')
     expect(payload(result)).toMatchObject({ created: 0, updated: 0, deleted: 1 })
+  })
+
+  it.each([false, true])(
+    'blocks destructive sync with parse errors (dry_run=%s)',
+    async (dry_run) => {
+      mocks.parse.mockReturnValue({
+        format: 'json',
+        items: [],
+        errors: [{ line: 1, error: 'Invalid JSON' }]
+      })
+      const result = await call('sync_module_from_file', { delete_missing: true, dry_run })
+      expect(result.isError).toBe(true)
+      expect(payload(result)).toMatchObject({
+        parse_errors: [{ line: 1, error: 'Invalid JSON' }],
+        deleted: 0
+      })
+      expect(mocks.bulkCreate).not.toHaveBeenCalled()
+      expect(mocks.bulkUpdate).not.toHaveBeenCalled()
+      expect(mocks.delete).not.toHaveBeenCalled()
+    }
+  )
+
+  it('preserves omitted fields and clears explicitly empty fields consistently with preview', async () => {
+    mocks.list.mockReturnValue([
+      {
+        id: 'alice',
+        name: 'Alice',
+        prompt: 'blue_eyes',
+        negative: 'blurry',
+        prompt_variants: '{"tags":{"prompt":"blue_eyes","negative":""}}'
+      }
+    ])
+    expect(payload(await call('sync_module_from_file', { dry_run: true }))).toMatchObject({
+      summary: { will_update: 0 }
+    })
+    mocks.parse.mockReturnValue({
+      format: 'json',
+      items: [{ name: 'Alice', prompt: 'blue_eyes', negative: '', prompt_variants: {} }],
+      errors: []
+    })
+    expect(payload(await call('sync_module_from_file', { dry_run: true }))).toMatchObject({
+      summary: { will_update: 1 }
+    })
+    await call('sync_module_from_file')
+    expect(mocks.bulkUpdate).toHaveBeenCalledWith([
+      { id: 'alice', data: { prompt: 'blue_eyes', negative: '', prompt_variants: '{}' } }
+    ])
+  })
+
+  it.each(['source', 'module'])(
+    'rejects ambiguous normalized %s names before writing',
+    async (source) => {
+      const items = [
+        { id: 'alice', name: 'Alice', prompt: 'a' },
+        { id: 'other', name: ' alice ', prompt: 'b' }
+      ]
+      if (source === 'source') mocks.parse.mockReturnValue({ format: 'json', items, errors: [] })
+      else mocks.list.mockReturnValue(items)
+      const result = await call('sync_module_from_file', { delete_missing: true })
+      expect(result.isError).toBe(true)
+      expect(mocks.bulkCreate).not.toHaveBeenCalled()
+      expect(mocks.bulkUpdate).not.toHaveBeenCalled()
+      expect(mocks.delete).not.toHaveBeenCalled()
+    }
+  )
+
+  it('reports rollback and skips deletion after a bulk mutation failure', async () => {
+    mocks.parse.mockReturnValue({
+      format: 'json',
+      items: [{ name: 'Bob', prompt: 'red_eyes' }],
+      errors: []
+    })
+    mocks.bulkCreate.mockReturnValue({
+      succeeded: 0,
+      failed: 1,
+      errors: [{ index: 0, error: 'Insert failed' }]
+    })
+    const result = await call('sync_module_from_file', { delete_missing: true })
+    expect(result.isError).toBe(true)
+    expect(payload(result)).toMatchObject({
+      rolled_back: true,
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      errors: [{ action: 'create', name: 'Bob', error: 'Insert failed' }]
+    })
+    expect(mocks.delete).not.toHaveBeenCalled()
   })
 })

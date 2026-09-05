@@ -1,7 +1,8 @@
-import { jsonResult } from './response'
+import { jsonError, jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { moduleRepo, moduleItemRepo } from './shared'
+import { moduleRepo } from './shared'
+import { itemQuerySchema, queryModuleItems } from './item-query'
 
 export function registerModuleCoreTools(server: McpServer): void {
   // === Module Management ===
@@ -18,9 +19,13 @@ export function registerModuleCoreTools(server: McpServer): void {
 
   server.tool(
     'get_module',
-    'Get a specific prompt module by ID, including its items.',
-    { id: z.string().describe('Module ID') },
-    async ({ id }) => {
+    'Get module metadata and a bounded page of items. Use limit/offset to inspect additional items.',
+    {
+      id: z.string().describe('Module ID'),
+      limit: itemQuerySchema.limit,
+      offset: itemQuerySchema.offset
+    },
+    async ({ id, limit, offset }) => {
       const mod = moduleRepo.get(id)
       if (!mod) {
         return {
@@ -28,8 +33,7 @@ export function registerModuleCoreTools(server: McpServer): void {
           isError: true
         }
       }
-      const items = moduleItemRepo.list(id)
-      return jsonResult({ module: mod, items })
+      return jsonResult({ module: mod, ...queryModuleItems(id, { limit, offset }) })
     }
   )
 
@@ -68,9 +72,11 @@ export function registerModuleCoreTools(server: McpServer): void {
       description: z.string().optional().describe('New description')
     },
     async ({ id, name, description }) => {
+      if (!moduleRepo.get(id)) return jsonError(`Module not found: ${id}`)
       const data: Record<string, unknown> = {}
       if (name !== undefined) data.name = name
       if (description !== undefined) data.description = description
+      if (Object.keys(data).length === 0) return jsonError('Provide at least one field to update')
       moduleRepo.update(id, data)
       return jsonResult({ success: true, id })
     }

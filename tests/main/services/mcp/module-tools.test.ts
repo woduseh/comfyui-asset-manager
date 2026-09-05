@@ -20,6 +20,7 @@ vi.mock('../../../../src/main/services/database/repositories', () => ({
   },
   ModuleItemRepository: class {
     list = repositoryMocks.itemList
+    count = (): number => 1
   },
   WorkflowRepository: class {},
   BatchJobRepository: class {},
@@ -57,10 +58,14 @@ describe('MCP module tools', () => {
     const result = await registerTools().get('get_module')!({ id: 'module-id' })
 
     expect(repositoryMocks.moduleGet).toHaveBeenCalledWith('module-id')
-    expect(repositoryMocks.itemList).toHaveBeenCalledWith('module-id')
+    expect(repositoryMocks.itemList).toHaveBeenCalledWith('module-id', { limit: 50, offset: 0 })
     expect(JSON.parse(result.content[0].text)).toEqual({
       module: { id: 'module-id', name: 'Characters' },
-      items: [{ id: 'item-id', name: 'Alice' }]
+      items: [{ id: 'item-id', name: 'Alice', prompt_variants: {} }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      has_more: false
     })
   })
 

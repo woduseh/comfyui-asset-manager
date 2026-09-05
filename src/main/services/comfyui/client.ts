@@ -43,7 +43,10 @@ export class ComfyUIClient {
 
   /** Get available node types and their configurations */
   async getObjectInfo(): Promise<ComfyUIObjectInfo> {
-    return await ofetch(`${this.baseUrl}/object_info`)
+    return await ofetch(`${this.baseUrl}/object_info`, {
+      timeout: COMFYUI_REQUEST_TIMEOUT_MS,
+      retry: 0
+    })
   }
 
   /** Queue a prompt for execution */

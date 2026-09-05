@@ -65,4 +65,98 @@ describe('injectPromptData', () => {
     expect(workflow.negative.inputs.text).toBe('new negative')
     expect(workflow.sampler.inputs).toMatchObject({ seed: 7, steps: 35 })
   })
+
+  it('preserves workflow primitive types for overrides and skips absent targets and links', () => {
+    const workflow = {
+      custom: { inputs: { amount: 1, active: true, text: 'old', link: ['source', 0] } }
+    }
+    injectPromptData(workflow, {
+      positive: '',
+      negative: '',
+      seed: 1,
+      extraVariables: {},
+      variableOverrides: [
+        { nodeId: 'custom', fieldName: 'amount', value: '2.5' },
+        { nodeId: 'custom', fieldName: 'active', value: 'false' },
+        { nodeId: 'custom', fieldName: 'text', value: '123' },
+        { nodeId: 'missing', fieldName: 'amount', value: '3' },
+        { nodeId: 'custom', fieldName: 'missing', value: '3' },
+        { nodeId: 'custom', fieldName: 'link', value: '3' }
+      ]
+    })
+    expect(workflow.custom.inputs).toEqual({
+      amount: 2.5,
+      active: false,
+      text: '123',
+      link: ['source', 0]
+    })
+  })
+
+  it.each(['not-a-number', 'Infinity', '-Infinity', 'NaN', '', ' '])(
+    'rejects invalid numeric overrides: %j',
+    (value) => {
+      const workflow = { custom: { inputs: { amount: 1 } } }
+      expect(() =>
+        injectPromptData(workflow, {
+          positive: '',
+          negative: '',
+          seed: 1,
+          extraVariables: {},
+          variableOverrides: [{ nodeId: 'custom', fieldName: 'amount', value }]
+        })
+      ).toThrow('finite number')
+      expect(workflow.custom.inputs.amount).toBe(1)
+    }
+  )
+
+  it('rejects invalid boolean override text', () => {
+    const workflow = { custom: { inputs: { active: false } } }
+    expect(() =>
+      injectPromptData(workflow, {
+        positive: '',
+        negative: '',
+        seed: 1,
+        extraVariables: {},
+        variableOverrides: [{ nodeId: 'custom', fieldName: 'active', value: '1' }]
+      })
+    ).toThrow('true or false')
+    expect(workflow.custom.inputs.active).toBe(false)
+  })
+
+  it('preserves an intentionally empty slot prompt instead of using the global prompt', () => {
+    const workflow = { positive: { inputs: { text: 'old' } } }
+    injectPromptData(workflow, {
+      positive: 'global positive',
+      negative: 'global negative',
+      seed: 1,
+      extraVariables: {},
+      slotMappings: [
+        {
+          nodeId: 'positive',
+          fieldName: 'text',
+          role: 'prompt_positive',
+          action: 'inject',
+          fixedValue: '',
+          assignedModuleIds: [],
+          prefixModuleIds: [],
+          prefixText: '',
+          suffixText: ''
+        }
+      ],
+      slotPrompts: { 'positive:text': '' }
+    })
+    expect(workflow.positive.inputs.text).toBe('')
+  })
+
+  it('injects seeds into custom workflows while preserving nonnumeric seed inputs', () => {
+    const workflow = {
+      noise: { class_type: 'RandomNoise', inputs: { noise_seed: 0 } },
+      custom: { class_type: 'CustomSampler', inputs: { seed: 1, noise_seed: 2 } },
+      links: { inputs: { seed: ['source', 0], noise_seed: 'external seed' } }
+    }
+    injectPromptData(workflow, { positive: '', negative: '', seed: 123, extraVariables: {} })
+    expect(workflow.noise.inputs.noise_seed).toBe(123)
+    expect(workflow.custom.inputs).toEqual({ seed: 123, noise_seed: 123 })
+    expect(workflow.links.inputs).toEqual({ seed: ['source', 0], noise_seed: 'external seed' })
+  })
 })

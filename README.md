@@ -68,7 +68,13 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 
 ### 🤖 MCP 서버 + 내장 터미널
 
-- **MCP 서버**: LLM CLI (Copilot, Claude, Gemini, Codex)가 앱 기능을 도구로 호출 가능 (30개 도구)
+- **MCP 서버**: LLM CLI (Copilot, Claude, Gemini, Codex)가 앱 기능을 도구로 호출 가능 (40개 도구)
+- **설치 환경 기반 워크플로우 준비**: `inspect_comfyui`로 실제 노드·모델 선택값을 조회하고 `prepare_workflow`로 표준 체크포인트·LoRA 레시피, 기존 워크플로우 복제, 커스텀 API JSON을 검증·신규 저장. 기본 dry-run이며 저장에는 검토 토큰이 필요하고 GPU 생성·자동 설치는 수행하지 않음
+- **통합 도구 계약**: 항목 생성·수정은 `create_module_items`/`update_module_items` 배열 입력, 검색은 `list_module_items(query)`, 실행 제어는 `control_batch_job(action)`. 이전 이름의 별칭은 제공하지 않으며 [호출 이전 방법](docs/mcp-agent-workflow.md#기존-도구에서-이전하기)을 참고
+- **프로필에서 생성·검토까지**: 캐릭터·감정 모듈 작성 → 슬롯별 프롬프트·수량 미리보기 → 배치 실행·대기 → 실제 이미지 확인 → 평점·즐겨찾기 저장. [에이전트 사용 흐름](docs/mcp-agent-workflow.md)
+- **실행 제어와 진단**: 저장된 ComfyUI 서버 연결, 작업별 일시정지·재개·취소, 상태별 태스크 페이지 조회. 미확정 결과는 자동 재제출하지 않음
+- **미리보기 검증**: `preview_token`으로 미리보기 이후 설정 변경을 감지하고, 생성·수정 응답의 `execution_token`을 시작 요청에 전달해 작업·워크플로우 변경도 확인
+- **파일 동기화**: 파싱 오류·중복 이름이면 적용 중단, 생성·수정·삭제는 전체 롤백. `negative`·`prompt_variants` 생략은 유지, `""`·`{}` 명시는 제거
 - **대량 작업 도구**: 일괄 생성/업데이트, 파일 가져오기/내보내기 (JSON/CSV/MD), 모듈 비교/동기화, 복제, 태그 치환
 - **동일한 배치 계약**: MCP 배치도 UI와 같은 검증·모듈 스냅샷·지연 태스크 생성을 사용하고 시작 요청은 즉시 응답
 - **명시적 MCP 시작**: 설정에서 서버를 켜면 즉시 시작되고 이후 앱 시작 시 자동 실행을 유지. 터미널 탭만으로는 자동 시작되지 않음
@@ -275,7 +281,7 @@ src/
 │       ├── comfyui/               # REST 클라이언트, WebSocket, 워크플로우 파서
 │       ├── prompt/                # 프롬프트 합성 엔진
 │       ├── batch/                 # 태스크 생성 + 큐 매니저
-│       ├── mcp/                   # MCP 서버 (30개 도구)
+│       ├── mcp/                   # MCP 서버 (40개 도구)
 │       └── terminal/              # PTY 인스턴스 관리
 ├── preload/                       # 컨텍스트 브리지
 └── renderer/src/                  # Vue 3 SPA

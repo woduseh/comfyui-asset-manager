@@ -9,29 +9,57 @@ import { MAX_BULK_UPDATE_ITEMS } from '../../../constants'
 
 export function registerItemOperationTools(server: McpServer): void {
   server.tool(
-    'bulk_update_module_items',
-    `Update multiple module items in a single call. Max ${MAX_BULK_UPDATE_ITEMS} items per request. Each item requires an id and at least one field to update. Supports prompt_variants for per-slot different prompts.`,
+    'update_module_items',
+    `Update one or more module items; pass an array of one for a single edit. Max ${MAX_BULK_UPDATE_ITEMS} items per request. Each item requires an id and at least one field to update. Returns succeeded/failed counts and per-ID errors; partial success is possible, so inspect errors and retry only failed items. prompt_variants replaces all named variants. Missing IDs are reported as failures.`,
     {
       items: z
         .array(
-          z.object({
-            id: z.string().describe('Item ID'),
-            name: z.string().optional().describe('New name'),
-            prompt: z.string().optional().describe('New default prompt'),
-            negative: z.string().optional().describe('New negative prompt'),
-            weight: z.number().optional().describe('New weight'),
-            prompt_variants: z
-              .record(
-                z.string(),
-                z.object({
-                  prompt: z.string(),
-                  negative: z.string()
-                })
-              )
-              .optional()
-              .describe('Named prompt variants')
-          })
+          z
+            .object({
+              id: z.string().min(1).describe('Item ID'),
+              name: z.string().trim().min(1).optional().describe('New name'),
+              prompt: z
+                .string()
+                .optional()
+                .describe(
+                  'Composed text: positive for ordinary modules, exclusions for negative-type modules'
+                ),
+              negative: z
+                .string()
+                .optional()
+                .describe(
+                  'Stored auxiliary field; batch composition does not use it. Put exclusions in the prompt of a negative-type module item.'
+                ),
+              weight: z.number().finite().optional().describe('New weight'),
+              enabled: z
+                .boolean()
+                .optional()
+                .describe('Whether this item participates in generation'),
+              prompt_variants: z
+                .record(
+                  z.string(),
+                  z.object({
+                    prompt: z.string(),
+                    negative: z
+                      .string()
+                      .describe(
+                        'Auxiliary field, not composed. For a negative-type module put exclusions in variant.prompt.'
+                      )
+                  })
+                )
+                .optional()
+                .describe('Named prompt variants')
+            })
+            .refine(
+              (item) =>
+                Object.keys(item).some(
+                  (key) => key !== 'id' && item[key as keyof typeof item] !== undefined
+                ),
+              'Provide at least one field to update'
+            )
         )
+        .min(1)
+        .max(MAX_BULK_UPDATE_ITEMS)
         .describe('Array of items to update')
     },
     async ({ items }) => {
@@ -53,6 +81,7 @@ export function registerItemOperationTools(server: McpServer): void {
         if (item.prompt !== undefined) data.prompt = item.prompt
         if (item.negative !== undefined) data.negative = item.negative
         if (item.weight !== undefined) data.weight = item.weight
+        if (item.enabled !== undefined) data.enabled = item.enabled ? 1 : 0
         if (item.prompt_variants !== undefined)
           data.prompt_variants = JSON.stringify(item.prompt_variants)
         return { id: item.id, data }
@@ -79,9 +108,27 @@ export function registerItemOperationTools(server: McpServer): void {
         .boolean()
         .optional()
         .describe('Also replace in prompt_variants (default: true)'),
+      variant_names: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Restrict variant edits to these names; use tags to leave natural-language variants unchanged'
+        ),
+      include_default: z
+        .boolean()
+        .optional()
+        .describe('Edit default prompt and negative too (default: true)'),
       dry_run: z.boolean().optional().describe('Preview changes without applying (default: false)')
     },
-    async ({ module_id, old_tag, new_tag, include_variants, dry_run }) => {
+    async ({
+      module_id,
+      old_tag,
+      new_tag,
+      include_variants,
+      variant_names,
+      include_default,
+      dry_run
+    }) => {
       const applyVariants = include_variants !== false
       const isDryRun = dry_run === true
       const items = moduleItemRepo.list(module_id)
@@ -99,13 +146,15 @@ export function registerItemOperationTools(server: McpServer): void {
         const prompt = (item.prompt as string) || ''
         const negative = (item.negative as string) || ''
 
-        const newPrompt = replaceTagInPrompt(prompt, old_tag, new_tag)
+        const newPrompt =
+          include_default === false ? prompt : replaceTagInPrompt(prompt, old_tag, new_tag)
         if (newPrompt !== prompt) {
           changes.push({ field: 'prompt', before: prompt, after: newPrompt })
           data.prompt = newPrompt
         }
 
-        const newNegative = replaceTagInPrompt(negative, old_tag, new_tag)
+        const newNegative =
+          include_default === false ? negative : replaceTagInPrompt(negative, old_tag, new_tag)
         if (newNegative !== negative) {
           changes.push({ field: 'negative', before: negative, after: newNegative })
           data.negative = newNegative
@@ -117,6 +166,7 @@ export function registerItemOperationTools(server: McpServer): void {
           const newVariants = { ...variants }
 
           for (const [variantName, variant] of Object.entries(variants)) {
+            if (variant_names && !variant_names.includes(variantName)) continue
             const vp = replaceTagInPrompt(variant.prompt, old_tag, new_tag)
             const vn = replaceTagInPrompt(variant.negative, old_tag, new_tag)
             if (vp !== variant.prompt) {
@@ -155,14 +205,19 @@ export function registerItemOperationTools(server: McpServer): void {
         }
       }
 
-      if (!isDryRun && updates.length > 0) {
-        moduleItemRepo.bulkUpdate(updates)
-      }
+      const result =
+        !isDryRun && updates.length > 0
+          ? moduleItemRepo.bulkUpdate(updates)
+          : { succeeded: 0, failed: 0, errors: [] }
 
       return jsonResult({
         dry_run: isDryRun,
         total_items: items.length,
-        modified_items: modifications.length,
+        matched_items: modifications.length,
+        modified_items: isDryRun ? 0 : result.succeeded,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        errors: result.errors,
         modifications
       })
     }
@@ -176,19 +231,31 @@ export function registerItemOperationTools(server: McpServer): void {
       include_variants: z
         .boolean()
         .optional()
-        .describe('Also validate tags in prompt_variants (default: true)'),
+        .describe('Also validate selected prompt variants (default: true; tags variant only)'),
+      variant_names: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Validate only these variants (default: tags). Natural-language variants should be excluded.'
+        ),
+      include_default: z
+        .boolean()
+        .optional()
+        .describe(
+          'Validate default prompts too (default: true). Set false for natural-language defaults.'
+        ),
       online_fallback: z
         .boolean()
         .optional()
         .describe('Check Danbooru API for tags not found locally (default: true)')
     },
-    async ({ module_id, include_variants, online_fallback }) => {
+    async ({ module_id, include_variants, variant_names, include_default, online_fallback }) => {
       const applyVariants = include_variants !== false
       const useOnline = online_fallback !== false
 
-      if (!tagService.isLoaded) {
+      if (!tagService.isLoaded()) {
         tagService.load()
-        if (!tagService.isLoaded) {
+        if (!tagService.isLoaded()) {
           return {
             content: [
               {
@@ -210,14 +277,18 @@ export function registerItemOperationTools(server: McpServer): void {
       >()
 
       for (const item of items) {
-        const fields: Array<{ field: string; text: string }> = [
-          { field: 'prompt', text: (item.prompt as string) || '' },
-          { field: 'negative', text: (item.negative as string) || '' }
-        ]
+        const fields: Array<{ field: string; text: string }> =
+          include_default === false
+            ? []
+            : [
+                { field: 'prompt', text: (item.prompt as string) || '' },
+                { field: 'negative', text: (item.negative as string) || '' }
+              ]
 
         if (applyVariants) {
           const variants = validatePromptVariants(item.prompt_variants)
           for (const [vName, v] of Object.entries(variants)) {
+            if (!(variant_names ?? ['tags']).includes(vName)) continue
             fields.push({ field: `variant:${vName}:prompt`, text: v.prompt })
             fields.push({ field: `variant:${vName}:negative`, text: v.negative })
           }
@@ -314,84 +385,6 @@ export function registerItemOperationTools(server: McpServer): void {
         local_tag_count: tagService.getTagCount(),
         issues
       })
-    }
-  )
-
-  server.tool(
-    'search_module_items',
-    'Search for items within a module by text query. Matches item names, prompts, negatives, and optionally prompt variants. Case-insensitive substring match.',
-    {
-      module_id: z.string().describe('Module ID'),
-      query: z.string().describe('Search text (case-insensitive substring match)'),
-      field: z
-        .enum(['prompt', 'negative', 'name', 'all'])
-        .optional()
-        .describe('Field to search in (default: all)'),
-      include_variants: z
-        .boolean()
-        .optional()
-        .describe('Also search in prompt_variants (default: true)')
-    },
-    async ({ module_id, query, field, include_variants }) => {
-      const searchField = field || 'all'
-      const applyVariants = include_variants !== false
-      const items = moduleItemRepo.list(module_id)
-      const q = query.toLowerCase()
-
-      const matches: Array<{
-        id: string
-        name: string
-        prompt: string
-        negative: string
-        matched_fields: string[]
-      }> = []
-
-      for (const item of items) {
-        const matchedFields: string[] = []
-        const name = (item.name as string) || ''
-        const prompt = (item.prompt as string) || ''
-        const negative = (item.negative as string) || ''
-
-        if ((searchField === 'all' || searchField === 'name') && name.toLowerCase().includes(q)) {
-          matchedFields.push('name')
-        }
-        if (
-          (searchField === 'all' || searchField === 'prompt') &&
-          prompt.toLowerCase().includes(q)
-        ) {
-          matchedFields.push('prompt')
-        }
-        if (
-          (searchField === 'all' || searchField === 'negative') &&
-          negative.toLowerCase().includes(q)
-        ) {
-          matchedFields.push('negative')
-        }
-
-        if (applyVariants) {
-          const variants = validatePromptVariants(item.prompt_variants)
-          for (const [vName, v] of Object.entries(variants)) {
-            if (v.prompt.toLowerCase().includes(q)) {
-              matchedFields.push(`variant:${vName}:prompt`)
-            }
-            if (v.negative.toLowerCase().includes(q)) {
-              matchedFields.push(`variant:${vName}:negative`)
-            }
-          }
-        }
-
-        if (matchedFields.length > 0) {
-          matches.push({
-            id: item.id as string,
-            name,
-            prompt,
-            negative,
-            matched_fields: matchedFields
-          })
-        }
-      }
-
-      return jsonResult({ total: matches.length, matches })
     }
   )
 }

@@ -91,15 +91,20 @@ function parseJSON(content: string): ParseResult {
       prompt: obj.prompt.trim()
     }
 
+    if (obj.negative !== undefined && typeof obj.negative !== 'string') {
+      errors.push({ line: i + 1, error: `Item ${i}: negative must be a string` })
+      continue
+    }
     if (typeof obj.negative === 'string') {
       item.negative = obj.negative.trim()
     }
 
-    if (obj.prompt_variants && typeof obj.prompt_variants === 'object') {
-      item.prompt_variants = obj.prompt_variants as Record<
-        string,
-        { prompt: string; negative: string }
-      >
+    if (obj.prompt_variants !== undefined) {
+      if (!isPromptVariantsRecord(obj.prompt_variants)) {
+        errors.push({ line: i + 1, error: `Item ${i}: invalid prompt_variants` })
+        continue
+      }
+      item.prompt_variants = obj.prompt_variants
     }
 
     items.push(item)
@@ -118,7 +123,17 @@ function parseCSV(content: string): ParseResult {
   }
 
   const headerLine = lines[0]
-  const headers = parseCSVLine(headerLine).map((h) => h.trim().toLowerCase())
+  let headers: string[]
+  try {
+    headers = parseCSVLine(headerLine).map((h) => h.trim().toLowerCase())
+    if (new Set(headers).size !== headers.length) throw new Error('Duplicate CSV header columns')
+  } catch (error) {
+    return {
+      items: [],
+      format: 'csv',
+      errors: [{ line: 1, error: error instanceof Error ? error.message : String(error) }]
+    }
+  }
 
   const nameIdx = headers.indexOf('name')
   const promptIdx = headers.indexOf('prompt')
@@ -135,7 +150,15 @@ function parseCSV(content: string): ParseResult {
 
   for (let i = 1; i < lines.length; i++) {
     const lineNum = i + 1
-    const fields = parseCSVLine(lines[i])
+    let fields: string[]
+    try {
+      fields = parseCSVLine(lines[i])
+      if (fields.length !== headers.length)
+        throw new Error(`CSV row has ${fields.length} fields; expected ${headers.length}`)
+    } catch (error) {
+      errors.push({ line: lineNum, error: error instanceof Error ? error.message : String(error) })
+      continue
+    }
 
     const name = fields[nameIdx]?.trim()
     const prompt = fields[promptIdx]?.trim()
@@ -151,8 +174,8 @@ function parseCSV(content: string): ParseResult {
 
     const item: ParsedModuleItem = { name, prompt }
 
-    if (negativeIdx !== -1 && fields[negativeIdx]) {
-      item.negative = fields[negativeIdx].trim()
+    if (negativeIdx !== -1) {
+      item.negative = (fields[negativeIdx] ?? '').trim()
     }
 
     if (variantsIdx !== -1 && fields[variantsIdx]) {
@@ -183,6 +206,7 @@ function parseCSVLine(line: string): string[] {
   const fields: string[] = []
   let current = ''
   let inQuotes = false
+  let closedQuote = false
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i]
@@ -193,21 +217,29 @@ function parseCSVLine(line: string): string[] {
           i++ // skip escaped quote
         } else {
           inQuotes = false
+          closedQuote = true
         }
       } else {
         current += ch
       }
     } else {
+      if (closedQuote && ch !== ',' && !/\s/.test(ch))
+        throw new Error('Unexpected text after CSV closing quote')
+      if (closedQuote && /\s/.test(ch)) continue
       if (ch === '"') {
+        if (current.trim()) throw new Error('Unexpected quote in unquoted CSV field')
+        current = ''
         inQuotes = true
       } else if (ch === ',') {
         fields.push(current)
         current = ''
+        closedQuote = false
       } else {
         current += ch
       }
     }
   }
+  if (inQuotes) throw new Error('Unclosed CSV quoted field; multiline fields are not supported')
   fields.push(current)
   return fields
 }
@@ -272,6 +304,12 @@ function parseMarkdown(content: string): ParseResult {
 
   flushItem()
 
+  if (items.length === 0 && errors.length === 0) {
+    errors.push({
+      line: 1,
+      error: 'Markdown must contain at least one ## item heading with a prompt'
+    })
+  }
   return { items, format: 'md', errors }
 }
 
@@ -311,14 +349,27 @@ export function parseModuleItemsFile(filePath: string, format?: FileFormat): Par
 
 /** Parse imported content in the selected format. */
 export function parseModuleItemsContent(content: string, format: FileFormat): ParseResult {
+  let result: ParseResult
   switch (format) {
     case 'json':
-      return parseJSON(content)
+      result = parseJSON(content)
+      break
     case 'csv':
-      return parseCSV(content)
+      result = parseCSV(content)
+      break
     case 'md':
-      return parseMarkdown(content)
+      result = parseMarkdown(content)
+      break
     default:
       throw new Error(`Unsupported format: ${format}`)
   }
+  const names = new Set<string>()
+  for (const [index, item] of result.items.entries()) {
+    const name = item.name.trim().toLowerCase()
+    if (names.has(name)) {
+      result.errors.push({ line: index + 1, error: `Duplicate item name: ${item.name}` })
+    }
+    names.add(name)
+  }
+  return result
 }

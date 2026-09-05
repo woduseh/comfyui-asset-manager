@@ -3,24 +3,43 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { queueManager } from '../../../../src/main/services/batch/queue-manager'
 
 const mocks = vi.hoisted(() => ({
-  workflowGet: vi.fn(() => ({ id: 'workflow-id' })),
+  workflowGet: vi.fn(() => ({
+    id: 'workflow-id',
+    api_json: '{"1":{"class_type":"CLIPTextEncode","inputs":{"text":""}}}'
+  })),
   moduleItemList: vi.fn(() => [{ id: 'item-id' }]),
   createBatch: vi.fn(() => ({ jobId: 'job-id', totalTasks: 3 })),
   requestStart: vi.fn<typeof queueManager.requestStart>(() => ({ success: true })),
   batchList: vi.fn(() => []),
-  batchGet: vi.fn(() => null),
+  batchGet: vi.fn(() => ({
+    id: 'job-id',
+    status: 'draft',
+    config: '{}',
+    module_data_snapshot: '[]',
+    workflow_id: 'workflow-id'
+  })),
   taskList: vi.fn(() => [])
 }))
 
 vi.mock('../../../../src/main/services/mcp/tools/shared', () => ({
+  moduleRepo: { get: () => ({ id: 'module-id', type: 'character' }) },
   moduleItemRepo: { list: mocks.moduleItemList },
-  workflowRepo: { list: vi.fn(() => []), get: mocks.workflowGet, getVariables: vi.fn(() => []) },
+  workflowRepo: {
+    list: vi.fn(() => []),
+    get: mocks.workflowGet,
+    getVariables: vi.fn(() => [
+      { id: 'positive', node_id: '1', field_name: 'text', role: 'prompt_positive' }
+    ])
+  },
   batchJobRepo: { list: mocks.batchList, get: mocks.batchGet },
   batchTaskRepo: { listByJob: mocks.taskList }
 }))
 
 vi.mock('../../../../src/main/services/batch/batch-job-service', () => ({
-  batchJobService: { create: mocks.createBatch }
+  batchJobService: {
+    create: mocks.createBatch,
+    prepare: (config: unknown) => ({ data: { config: JSON.stringify(config) }, totalTasks: 3 })
+  }
 }))
 
 vi.mock('../../../../src/main/services/batch/queue-manager', () => ({
@@ -69,7 +88,7 @@ describe('MCP workflow and batch tools', () => {
         ]
       })
     )
-    expect(JSON.parse(result.content[0].text)).toEqual({
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
       jobId: 'job-id',
       totalTasks: 3,
       name: 'Batch'
@@ -80,7 +99,11 @@ describe('MCP workflow and batch tools', () => {
     const result = await registerTools().get('start_batch_job')!({ job_id: 'job-id' })
 
     expect(mocks.requestStart).toHaveBeenCalledWith('job-id')
-    expect(JSON.parse(result.content[0].text)).toEqual({ success: true, job_id: 'job-id' })
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      success: true,
+      job_id: 'job-id',
+      accepted: true
+    })
   })
 
   it('returns preflight start failures as MCP errors', async () => {

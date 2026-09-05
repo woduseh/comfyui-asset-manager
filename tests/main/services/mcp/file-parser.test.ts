@@ -2,6 +2,26 @@ import { describe, it, expect } from 'vitest'
 import { parseModuleItemsContent } from '../../../../src/main/services/mcp/file-parser'
 
 describe('File Parser', () => {
+  it.each([
+    [{ name: 'Alice', prompt: 'ok', negative: 123 }],
+    [{ name: 'Alice', prompt: 'ok', prompt_variants: { tags: null } }],
+    [
+      { name: 'Alice', prompt: 'ok' },
+      { name: ' alice ', prompt: 'other' }
+    ]
+  ])('reports malformed optional fields and duplicate names', (...items) => {
+    expect(parseModuleItemsContent(JSON.stringify(items), 'json').errors.length).toBeGreaterThan(0)
+  })
+
+  it('rejects Markdown without any item headings', () => {
+    expect(parseModuleItemsContent('This is not a module file', 'md').errors).toHaveLength(1)
+  })
+
+  it('preserves an explicitly blank CSV negative value for clearing', () => {
+    expect(
+      parseModuleItemsContent('name,prompt,negative\nAlice,blue_eyes,', 'csv').items[0].negative
+    ).toBe('')
+  })
   describe('JSON format', () => {
     it('parses valid JSON array', () => {
       const content = JSON.stringify([
@@ -79,6 +99,20 @@ describe('File Parser', () => {
       const result = parseModuleItemsContent(content, 'csv')
       expect(result.items).toHaveLength(1)
       expect(result.items[0].prompt).toBe('prompt with "quotes"')
+    })
+
+    it.each([
+      'name,prompt,negative\nAlice,blue_eyes',
+      'name,prompt\nAlice,"blue_eyes',
+      'name,prompt\nAlice,"blue_eyes"unexpected',
+      'name,prompt\nAlice,blue"eyes',
+      'name,prompt\nAlice,blue_eyes,unexpected',
+      'name,prompt,prompt\nAlice,blue_eyes,green_eyes',
+      'name,"prompt\nAlice,blue_eyes'
+    ])('rejects malformed CSV instead of allowing truncated synchronization: %s', (content) => {
+      const result = parseModuleItemsContent(content, 'csv')
+      expect(result.errors.length).toBeGreaterThan(0)
+      expect(result.items).toEqual([])
     })
 
     it('reports error for missing required columns', () => {

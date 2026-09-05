@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { registerMcpTools } from './tools'
+import { MCP_SERVER_INSTRUCTIONS } from './tools/guide'
 import { tagService } from '../tags'
 import http from 'http'
 import { randomUUID } from 'crypto'
@@ -289,7 +290,10 @@ class McpServerManager {
         this.evictOldestSession()
       }
 
-      const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
+      const server = new McpServer(
+        { name: SERVER_NAME, version: SERVER_VERSION },
+        { instructions: MCP_SERVER_INSTRUCTIONS }
+      )
       registerMcpTools(server)
 
       const transport = new StreamableHTTPServerTransport({

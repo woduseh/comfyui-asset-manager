@@ -11,6 +11,7 @@ const ALLOWED_UPDATE_FIELDS = {
     'prompt',
     'negative',
     'weight',
+    'enabled',
     'sort_order',
     'metadata',
     'module_id',
@@ -473,6 +474,10 @@ export class ModuleItemRepository {
             ...(values as string[]),
             update.id
           ])
+          if (db.getRowsModified() === 0) {
+            errors.push({ id: update.id, error: 'Module item not found' })
+            continue
+          }
           succeeded++
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
@@ -613,6 +618,36 @@ export interface BatchJobWriteData {
 }
 
 export class BatchJobRepository {
+  listSummaries(
+    limit: number,
+    offset: number,
+    status?: string
+  ): { items: Record<string, unknown>[]; total: number } {
+    const db = getDatabase()
+    const where = status ? ' WHERE status = ?' : ''
+    const count = db.prepare(`SELECT COUNT(*) AS total FROM batch_jobs${where}`)
+    let total: number
+    try {
+      if (status) count.bind([status])
+      count.step()
+      total = Number(count.getAsObject().total)
+    } finally {
+      count.free()
+    }
+    const stmt = db.prepare(`SELECT id, name, description, workflow_id, status, total_tasks,
+      completed_tasks, failed_tasks, created_at, started_at, completed_at,
+      (SELECT COUNT(*) FROM batch_tasks WHERE job_id = batch_jobs.id AND status = 'uncertain') AS uncertain_tasks
+      FROM batch_jobs${where} ORDER BY sort_order ASC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    try {
+      stmt.bind(status ? [status, limit, offset] : [limit, offset])
+      const items: Record<string, unknown>[] = []
+      while (stmt.step()) items.push(stmt.getAsObject())
+      return { items, total }
+    } finally {
+      stmt.free()
+    }
+  }
+
   private static readonly SELECT_WITH_UNCERTAIN = `SELECT batch_jobs.*,
     (SELECT COUNT(*) FROM batch_tasks WHERE batch_tasks.job_id = batch_jobs.id
       AND batch_tasks.status = 'uncertain') AS uncertain_tasks FROM batch_jobs`
@@ -746,6 +781,26 @@ export class BatchJobRepository {
 }
 
 export class BatchTaskRepository {
+  listPage(
+    jobId: string,
+    limit: number,
+    offset: number,
+    status?: string
+  ): Record<string, unknown>[] {
+    const stmt = getDatabase().prepare(
+      `SELECT * FROM batch_tasks WHERE job_id = ?${status ? ' AND status = ?' : ''}
+       ORDER BY sort_order ASC, id ASC LIMIT ? OFFSET ?`
+    )
+    try {
+      stmt.bind(status ? [jobId, status, limit, offset] : [jobId, limit, offset])
+      const rows: Record<string, unknown>[] = []
+      while (stmt.step()) rows.push(stmt.getAsObject())
+      return rows
+    } finally {
+      stmt.free()
+    }
+  }
+
   get(id: string): Record<string, unknown> | null {
     const stmt = getDatabase().prepare('SELECT * FROM batch_tasks WHERE id = ?')
     try {
@@ -902,6 +957,16 @@ export class BatchTaskRepository {
 }
 
 export class GeneratedImageRepository {
+  get(id: string): Record<string, unknown> | null {
+    const stmt = getDatabase().prepare('SELECT * FROM generated_images WHERE id = ?')
+    try {
+      stmt.bind([id])
+      return stmt.step() ? stmt.getAsObject() : null
+    } finally {
+      stmt.free()
+    }
+  }
+
   private static readonly SORT_COLUMNS: Record<string, string> = {
     created_at: 'created_at',
     rating: 'rating',

@@ -58,6 +58,7 @@ export interface ComfyUIObjectInfo {
     input: {
       required?: Record<string, unknown[]>
       optional?: Record<string, unknown[]>
+      hidden?: Record<string, unknown>
     }
     output: string[]
     output_is_list: boolean[]
@@ -66,6 +67,7 @@ export interface ComfyUIObjectInfo {
     display_name: string
     description: string
     category: string
+    output_node?: boolean
   }
 }
 

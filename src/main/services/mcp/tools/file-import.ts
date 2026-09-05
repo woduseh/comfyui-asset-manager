@@ -10,7 +10,7 @@ export function registerFileImportTools(server: McpServer): void {
 
   server.tool(
     'import_module_items_from_file',
-    `Import module items from a file (JSON/CSV/Markdown). Max file size: ${MAX_IMPORT_FILE_SIZE_BYTES / 1024}KB. Use dry_run=true to preview without saving.`,
+    `Import module items from a file (JSON/CSV/Markdown). Max file size: ${MAX_IMPORT_FILE_SIZE_BYTES / 1024}KB. Use dry_run=true to preview without saving. Parse errors block writes; inspect parse_errors. Creation can partially succeed; inspect succeeded, failed, and create_errors before retrying.`,
     {
       module_id: z.string().describe('Module ID to import items into'),
       file_path: z.string().describe('Absolute path to the import file'),
@@ -54,6 +54,19 @@ export function registerFileImportTools(server: McpServer): void {
           items_preview: preview,
           parse_errors: parseResult.errors
         })
+      }
+
+      if (parseResult.errors.length > 0) {
+        return {
+          ...jsonResult({
+            error: 'Source file has parse errors; no items were imported.',
+            dry_run: false,
+            succeeded: 0,
+            failed: 0,
+            parse_errors: parseResult.errors
+          }),
+          isError: true
+        }
       }
 
       const preparedItems = parseResult.items.map((item, index) => ({

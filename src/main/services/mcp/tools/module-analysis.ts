@@ -39,7 +39,7 @@ export function registerModuleAnalysisTools(server: McpServer): void {
     async ({ module_id }) => {
       function getModuleStats(mod: Record<string, unknown>): Record<string, unknown> {
         const items = moduleItemRepo.list(mod.id as string)
-        const enabledItems = items.filter((i) => (i.weight as number) > 0)
+        const enabledItems = items.filter((i) => i.enabled !== 0 && i.enabled !== false)
         let hasVariants = false
         let totalPromptLen = 0
 

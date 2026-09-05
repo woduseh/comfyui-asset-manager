@@ -417,6 +417,44 @@ describe('Database Repositories', () => {
       expect(result.errors[0].error).toContain('No valid fields')
     })
 
+    it('reports missing bulk updates without losing successful changes or counting stale affected rows', () => {
+      const firstId = itemRepo.create({ module_id: moduleId, name: 'A', prompt: 'old' })
+      const secondId = itemRepo.create({ module_id: moduleId, name: 'B', prompt: 'keep' })
+
+      const result = itemRepo.bulkUpdate([
+        { id: 'missing-before', data: { prompt: 'missing' } },
+        { id: firstId, data: { prompt: 'new' } },
+        { id: 'missing-after', data: { prompt: 'missing' } },
+        { id: secondId, data: { prompt: 'keep' } }
+      ])
+
+      expect(result).toEqual({
+        succeeded: 2,
+        failed: 2,
+        errors: [
+          { id: 'missing-before', error: 'Module item not found' },
+          { id: 'missing-after', error: 'Module item not found' }
+        ]
+      })
+      expect(itemRepo.get(firstId)?.prompt).toBe('new')
+      expect(itemRepo.get(secondId)?.prompt).toBe('keep')
+      expect(itemRepo.count(moduleId)).toBe(2)
+    })
+
+    it('persists enabled through single and bulk updates independently of weight', () => {
+      const id = itemRepo.create({ module_id: moduleId, name: 'A', prompt: 'p', weight: 0 })
+
+      itemRepo.update(id, { enabled: 0 })
+      expect(itemRepo.get(id)).toMatchObject({ enabled: 0, weight: 0 })
+
+      expect(itemRepo.bulkUpdate([{ id, data: { enabled: 1 } }])).toEqual({
+        succeeded: 1,
+        failed: 0,
+        errors: []
+      })
+      expect(itemRepo.get(id)).toMatchObject({ enabled: 1, weight: 0 })
+    })
+
     it('bulk update returns empty result for empty array', () => {
       const result = itemRepo.bulkUpdate([])
       expect(result.succeeded).toBe(0)
@@ -564,6 +602,53 @@ describe('Database Repositories', () => {
       repo = new BatchJobRepository()
     })
 
+    it('pages filtered summaries without config blobs and reports per-job uncertain counts', () => {
+      const tasks = new BatchTaskRepository()
+      const ids = ['First', 'Middle', 'Last'].map((name) =>
+        repo.create({
+          name,
+          config: '{"private_config":true}',
+          module_data_snapshot: '[{"large_snapshot":true}]',
+          pipeline_config: '{"large_pipeline":true}'
+        })
+      )
+      repo.reorder(ids)
+      repo.updateStatus(ids[0], 'failed')
+      repo.updateStatus(ids[2], 'failed')
+      for (const [jobId, status] of [
+        [ids[0], 'uncertain'],
+        [ids[0], 'failed'],
+        [ids[1], 'uncertain']
+      ]) {
+        const taskId = tasks.createSingle({
+          job_id: jobId,
+          prompt_data: '{}',
+          sort_order: 0,
+          metadata: '{}'
+        })
+        tasks.updateStatus(taskId, status)
+      }
+
+      const first = repo.listSummaries(1, 0, 'failed')
+      expect(first.total).toBe(2)
+      expect(first.items).toHaveLength(1)
+      expect(first.items[0]).toMatchObject({ id: ids[0], name: 'First', uncertain_tasks: 1 })
+      const second = repo.listSummaries(1, 1, 'failed')
+      expect(second.total).toBe(2)
+      expect(second.items).toHaveLength(1)
+      expect(second.items[0]).toMatchObject({ id: ids[2], uncertain_tasks: 0 })
+      expect(repo.listSummaries(1, 2, 'failed')).toEqual({ items: [], total: 2 })
+      const all = repo.listSummaries(10, 0)
+      expect(all.total).toBe(3)
+      expect(all.items.map((item) => item.id)).toEqual(ids)
+      expect(all.items.map((item) => item.uncertain_tasks)).toEqual([1, 1, 0])
+      for (const item of all.items) {
+        expect(item).not.toHaveProperty('config')
+        expect(item).not.toHaveProperty('module_data_snapshot')
+        expect(item).not.toHaveProperty('pipeline_config')
+      }
+    })
+
     it('creates and retrieves a job', () => {
       const id = repo.create({ name: 'Job 1', config: '{}' })
       const job = repo.get(id)
@@ -691,6 +776,34 @@ describe('Database Repositories', () => {
       }
       const tasks = taskRepo.listByJob(jobId)
       expect(tasks.map((t) => t.sort_order)).toEqual([0, 1, 2])
+    })
+
+    it('paginates tasks by stable order, applying status and job filters before pagination', () => {
+      const otherJobId = jobRepo.create({ name: 'Other job', config: '{}' })
+      for (const row of [
+        { id: 'late', jobId, order: 3, status: 'uncertain' },
+        { id: 'tie-b', jobId, order: 1, status: 'uncertain' },
+        { id: 'pending', jobId, order: 0, status: 'pending' },
+        { id: 'tie-a', jobId, order: 1, status: 'uncertain' },
+        { id: 'other', jobId: otherJobId, order: 0, status: 'uncertain' }
+      ]) {
+        mockDb.run(
+          'INSERT INTO batch_tasks (id, job_id, sort_order, status, prompt_data) VALUES (?, ?, ?, ?, ?)',
+          [row.id, row.jobId, row.order, row.status, '{}']
+        )
+      }
+
+      expect(taskRepo.listPage(jobId, 2, 0).map((task) => task.id)).toEqual(['pending', 'tie-a'])
+      expect(taskRepo.listPage(jobId, 2, 2).map((task) => task.id)).toEqual(['tie-b', 'late'])
+      expect(taskRepo.listPage(jobId, 2, 0, 'uncertain').map((task) => task.id)).toEqual([
+        'tie-a',
+        'tie-b'
+      ])
+      expect(taskRepo.listPage(jobId, 2, 2, 'uncertain').map((task) => task.id)).toEqual(['late'])
+      expect(taskRepo.listPage(jobId, 2, 4)).toEqual([])
+      expect(taskRepo.listPage(jobId, 2, 0, 'completed')).toEqual([])
+      expect(taskRepo.listPage('missing', 2, 0)).toEqual([])
+      expect(taskRepo.listPage(jobId, 2, 0, "uncertain' OR 1=1 --")).toEqual([])
     })
 
     it('updates task status', () => {
@@ -879,6 +992,32 @@ describe('Database Repositories', () => {
       const result = repo.list({ page: 1, pageSize: 50 })
       expect(result.total).toBe(2)
       expect(result.items).toHaveLength(2)
+    })
+
+    it('gets the requested image with its review metadata and returns null for missing IDs', () => {
+      const id = repo.create({
+        file_path: '/img/alice.png',
+        character_name: 'Alice',
+        emotion_name: 'happy',
+        prompt_text: 'smile',
+        generation_params: '{"seed":42}'
+      })
+      repo.create({ file_path: '/img/bob.png', character_name: 'Bob' })
+      repo.updateRating(id, 4)
+      repo.updateFavorite(id, true)
+
+      expect(repo.get(id)).toMatchObject({
+        id,
+        file_path: '/img/alice.png',
+        character_name: 'Alice',
+        emotion_name: 'happy',
+        prompt_text: 'smile',
+        generation_params: '{"seed":42}',
+        rating: 4,
+        is_favorite: 1
+      })
+      expect(repo.get('missing')).toBeNull()
+      expect(repo.get("' OR 1=1 --")).toBeNull()
     })
 
     it('recognizes a stored file path as a tracked gallery asset', () => {

@@ -8,10 +8,12 @@ export function registerTagTools(server: McpServer): void {
 
   server.tool(
     'validate_danbooru_tags',
-    'Validate whether given tags are valid Danbooru tags. Returns validation result for each tag with suggestions for invalid ones. IMPORTANT: Always use this tool to verify your tags before creating module items with prompts. Local DB has ~6500 popular tags. Tags not found locally are checked via Danbooru API if online_fallback is true. If the API is unreachable, unknown tags are marked as "unverified" (valid=null) instead of invalid.',
+    'Validate whether given tags are valid Danbooru tags. Returns validation result for each tag with suggestions for invalid ones. Use for Danbooru tag prompts only; do not validate natural-language prompts as tags. Local DB has ~6500 popular tags. Tags not found locally are checked via Danbooru API if online_fallback is true. If the API is unreachable, unknown tags are marked as "unverified" (valid=null) instead of invalid.',
     {
       tags: z
         .array(z.string())
+        .min(1)
+        .max(200)
         .describe('List of tags to validate (e.g. ["blue_eyes", "long_hair", "school_uniform"])'),
       online_fallback: z
         .boolean()
@@ -65,7 +67,14 @@ export function registerTagTools(server: McpServer): void {
         .enum(['general', 'artist', 'copyright', 'character', 'meta'])
         .optional()
         .describe('Filter by tag category'),
-      limit: z.number().optional().default(20).describe('Max results (default: 20, max: 50)')
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(50)
+        .optional()
+        .default(20)
+        .describe('Max results (default: 20, max: 50)')
     },
     async ({ query, category, limit }) => {
       if (!tagService.isLoaded()) {
@@ -102,6 +111,9 @@ export function registerTagTools(server: McpServer): void {
         .describe('Filter by tag category (most character-related tags are "general")'),
       limit: z
         .number()
+        .int()
+        .min(1)
+        .max(500)
         .optional()
         .default(100)
         .describe('Max results per group or total (default: 100, max: 500)'),
@@ -150,7 +162,7 @@ export function registerTagTools(server: McpServer): void {
 
   server.prompt(
     'danbooru_tag_guide',
-    'Guidelines and reference for writing image generation prompts using Danbooru tags. Call this before creating character prompts to get the correct tag format and popular tags.',
+    'Guidelines and reference for writing image generation prompts using Danbooru tags. Call this when creating Danbooru tag-based character prompts to get the correct tag format and popular tags.',
     {
       character_description: z
         .string()

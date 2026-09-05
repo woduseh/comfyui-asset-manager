@@ -50,11 +50,21 @@ export function diffModuleWithItems(
 ): DiffResult {
   const moduleMap = new Map<string, DiffItem & { id?: string }>()
   for (const item of moduleItems) {
+    if (moduleMap.has(normalizeName(item.name))) {
+      throw new Error(
+        `Duplicate module item name: ${item.name}. Names must be unique ignoring case and surrounding whitespace.`
+      )
+    }
     moduleMap.set(normalizeName(item.name), item)
   }
 
   const fileMap = new Map<string, ParsedModuleItem>()
   for (const item of fileItems) {
+    if (fileMap.has(normalizeName(item.name))) {
+      throw new Error(
+        `Duplicate file item name: ${item.name}. Names must be unique ignoring case and surrounding whitespace.`
+      )
+    }
     fileMap.set(normalizeName(item.name), item)
   }
 
@@ -75,14 +85,14 @@ export function diffModuleWithItems(
     const modulePrompt = moduleItem.prompt.trim()
     const filePrompt = fileItem.prompt.trim()
     const moduleNeg = (moduleItem.negative || '').trim()
-    const fileNeg = (fileItem.negative || '').trim()
+    const fileNeg = (fileItem.negative ?? moduleItem.negative ?? '').trim()
 
     const promptChanged = modulePrompt !== filePrompt
     const negativeChanged = moduleNeg !== fileNeg
 
     // Compare variants
     const moduleVariants = moduleItem.prompt_variants || {}
-    const fileVariants = fileItem.prompt_variants || {}
+    const fileVariants = fileItem.prompt_variants ?? moduleVariants
     const variantsChanged = JSON.stringify(moduleVariants) !== JSON.stringify(fileVariants)
 
     if (!promptChanged && !negativeChanged && !variantsChanged) {

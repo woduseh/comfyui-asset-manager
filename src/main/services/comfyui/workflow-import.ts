@@ -3,7 +3,7 @@ import { basename, extname, isAbsolute } from 'path'
 import { MAX_WORKFLOW_FILE_SIZE_BYTES } from '../../constants'
 import { withTransaction } from '../database'
 import { isJsonObject, safeJsonParse } from '@shared/safe-json'
-import { parseWorkflow } from './workflow-parser'
+import { parseWorkflow, type ParsedWorkflow } from './workflow-parser'
 
 interface WorkflowImportRepository {
   create(data: {
@@ -41,6 +41,78 @@ export interface WorkflowImportResult {
   variableCount: number
 }
 
+interface WorkflowImportOptions {
+  name?: string
+  category?: ParsedWorkflow['suggestedCategory']
+  description?: string
+}
+
+export interface PreparedWorkflowImport {
+  content: string
+  parsed: ParsedWorkflow
+  category: ParsedWorkflow['suggestedCategory']
+  description?: string
+}
+
+export function prepareWorkflowImport(
+  content: string,
+  options: WorkflowImportOptions = {}
+): PreparedWorkflowImport {
+  if (Buffer.byteLength(content, 'utf-8') > MAX_WORKFLOW_FILE_SIZE_BYTES) {
+    throw new Error('Workflow file exceeds the 10MB size limit')
+  }
+  const workflowJson = safeJsonParse<Record<string, unknown>>(content, {
+    context: 'Workflow file',
+    validate: isJsonObject,
+    invalidShapeMessage: 'Workflow file must contain a JSON object'
+  })
+  if (!workflowJson.ok) throw new Error(workflowJson.error)
+  if (workflowJson.value.nodes && workflowJson.value.links) {
+    throw new Error('UI format workflow detected. Please export in API format (Save API Format).')
+  }
+  const parsed = parseWorkflow(content, options.name)
+  if (Object.keys(parsed.nodes).length === 0) {
+    throw new Error('Workflow must contain at least one API node')
+  }
+  return {
+    content,
+    parsed,
+    category: options.category ?? parsed.suggestedCategory,
+    description: options.description
+  }
+}
+
+export function persistPreparedWorkflowImport(
+  prepared: PreparedWorkflowImport,
+  repository: WorkflowImportRepository,
+  runInTransaction: WorkflowImportDependencies['runInTransaction'] = withTransaction
+): WorkflowImportResult {
+  const { parsed, content, category, description } = prepared
+  return runInTransaction(() => {
+    const workflowId = repository.create({
+      name: parsed.name,
+      description,
+      category,
+      api_json: content,
+      variables: JSON.stringify(parsed.variables)
+    })
+    repository.setVariables(
+      workflowId,
+      parsed.variables.map((variable) => ({
+        node_id: variable.nodeId,
+        field_name: variable.fieldName,
+        display_name: variable.displayName,
+        var_type: variable.varType,
+        default_val:
+          variable.currentValue !== undefined ? String(variable.currentValue) : undefined,
+        description: `${variable.nodeType} → ${variable.fieldName}`,
+        role: variable.role
+      }))
+    )
+    return { id: workflowId, name: parsed.name, category, variableCount: parsed.variables.length }
+  })
+}
+
 const DEFAULT_DEPENDENCIES: WorkflowImportDependencies = {
   readTextFile: (filePath) => readFileSync(filePath, 'utf-8'),
   getFileSize: (filePath) => statSync(filePath).size,
@@ -67,50 +139,10 @@ export function importWorkflowFromSelectedPath(
   }
 
   const content = deps.readTextFile(filePath)
-  const workflowJson = safeJsonParse<Record<string, unknown>>(content, {
-    context: 'Workflow file',
-    validate: isJsonObject,
-    invalidShapeMessage: 'Workflow file must contain a JSON object'
-  })
-  if (!workflowJson.ok) {
-    throw new Error(workflowJson.error)
-  }
-
-  if (workflowJson.value.nodes && workflowJson.value.links) {
-    throw new Error('UI format workflow detected. Please export in API format (Save API Format).')
-  }
-
   const fileName = basename(filePath, extname(filePath))
-  const parsed = parseWorkflow(content, fileName)
-
-  return deps.runInTransaction(() => {
-    const workflowId = repository.create({
-      name: parsed.name,
-      description: `Imported from ${basename(filePath)}`,
-      category: parsed.suggestedCategory,
-      api_json: content,
-      variables: JSON.stringify(parsed.variables)
-    })
-
-    repository.setVariables(
-      workflowId,
-      parsed.variables.map((variable) => ({
-        node_id: variable.nodeId,
-        field_name: variable.fieldName,
-        display_name: variable.displayName,
-        var_type: variable.varType,
-        default_val:
-          variable.currentValue !== undefined ? String(variable.currentValue) : undefined,
-        description: `${variable.nodeType} → ${variable.fieldName}`,
-        role: variable.role
-      }))
-    )
-
-    return {
-      id: workflowId,
-      name: parsed.name,
-      category: parsed.suggestedCategory,
-      variableCount: parsed.variables.length
-    }
+  const prepared = prepareWorkflowImport(content, {
+    name: fileName,
+    description: `Imported from ${basename(filePath)}`
   })
+  return persistPreparedWorkflowImport(prepared, repository, deps.runInTransaction)
 }

@@ -7,6 +7,7 @@ import type { ParsedModuleItem } from '../file-parser'
 import { writeModuleItemsFile } from '../file-serializer'
 import { diffModuleWithItems } from '../diff-engine'
 import { validatePromptVariants } from '../../../ipc/validators'
+import { withTransaction } from '../../database'
 
 function toParsedModuleItem(item: Record<string, unknown>): ParsedModuleItem {
   const variants = validatePromptVariants(item.prompt_variants)
@@ -23,7 +24,7 @@ export function registerFileSyncTools(server: McpServer): void {
 
   server.tool(
     'export_module_items_to_file',
-    'Export module items to a file (JSON/CSV/Markdown). Format auto-detected from extension if omitted.',
+    'Export module items to a file (JSON/CSV/Markdown), overwriting an existing destination file. Format auto-detected from extension if omitted.',
     {
       module_id: z.string().describe('Module ID'),
       file_path: z.string().describe('Absolute path for the output file'),
@@ -82,13 +83,28 @@ export function registerFileSyncTools(server: McpServer): void {
         return jsonError(msg)
       }
 
+      if (parseResult.errors.length > 0) {
+        return {
+          ...jsonResult({
+            error: 'Source file has parse errors; comparison is unavailable until they are fixed.',
+            parse_errors: parseResult.errors
+          }),
+          isError: true
+        }
+      }
+
       const items = moduleItemRepo.list(module_id)
       const moduleItems = items.map((item) => ({
         id: item.id as string,
         ...toParsedModuleItem(item)
       }))
 
-      const diff = diffModuleWithItems(moduleItems, parseResult.items)
+      let diff
+      try {
+        diff = diffModuleWithItems(moduleItems, parseResult.items)
+      } catch (error) {
+        return jsonError(error instanceof Error ? error.message : String(error))
+      }
 
       return jsonResult({
         module_name: mod.name,
@@ -118,7 +134,7 @@ export function registerFileSyncTools(server: McpServer): void {
 
   server.tool(
     'sync_module_from_file',
-    'Synchronize module items with an external file (upsert). Matches by name: updates existing, creates new, optionally deletes missing. Use dry_run=true to preview.',
+    'Synchronize module items atomically from JSON/CSV/Markdown. Matches unique names ignoring case/outer whitespace. Omitted negative and prompt_variants preserve existing values; use an empty string or empty object to clear them. Parse errors or ambiguous names block all writes. Use dry_run=true to preview; delete_missing=true also deletes absent items.',
     {
       module_id: z.string().describe('Module ID to sync'),
       file_path: z.string().describe('Absolute path to the source file'),
@@ -151,17 +167,38 @@ export function registerFileSyncTools(server: McpServer): void {
         return jsonError(msg)
       }
 
+      if (parseResult.errors.length > 0) {
+        return {
+          ...jsonResult({
+            error:
+              'Source file has parse errors; no changes were applied. Fix all parse_errors before retrying.',
+            dry_run: !!dry_run,
+            parse_errors: parseResult.errors,
+            created: 0,
+            updated: 0,
+            deleted: 0
+          }),
+          isError: true
+        }
+      }
+
       const items = moduleItemRepo.list(module_id)
       const moduleItems = items.map((item) => ({
         id: item.id as string,
         ...toParsedModuleItem(item)
       }))
 
-      const diff = diffModuleWithItems(moduleItems, parseResult.items)
+      let diff
+      try {
+        diff = diffModuleWithItems(moduleItems, parseResult.items)
+      } catch (error) {
+        return jsonError(error instanceof Error ? error.message : String(error))
+      }
 
       if (dry_run) {
         return jsonResult({
           dry_run: true,
+          parse_errors: parseResult.errors,
           summary: {
             ...diff.summary,
             will_create: diff.added.length,
@@ -184,65 +221,88 @@ export function registerFileSyncTools(server: McpServer): void {
       let deleted = 0
       const errors: Array<{ action: string; name: string; error: string }> = []
 
-      // Create new items
-      if (diff.added.length > 0) {
-        const newItems = diff.added.map((item, index) => ({
-          module_id,
-          name: item.name,
-          prompt: item.prompt,
-          negative: item.negative,
-          sort_order: items.length + index,
-          prompt_variants: item.prompt_variants ? JSON.stringify(item.prompt_variants) : undefined
-        }))
-        const result = moduleItemRepo.bulkCreate(newItems)
-        created = result.succeeded
-        for (const err of result.errors) {
-          errors.push({
-            action: 'create',
-            name: diff.added[err.index]?.name || '',
-            error: err.error
-          })
-        }
-      }
-
-      // Update modified items
-      if (diff.modified.length > 0) {
-        const updates = diff.modified
-          .filter((m) => m.module_item_id)
-          .map((m) => {
-            const fileItem = parseResult.items.find(
-              (fi) => fi.name.trim().toLowerCase() === m.name.trim().toLowerCase()
-            )
-            if (!fileItem) return null
-            const data: Record<string, unknown> = { prompt: fileItem.prompt }
-            if (fileItem.negative !== undefined) data.negative = fileItem.negative
-            if (fileItem.prompt_variants) {
-              data.prompt_variants = JSON.stringify(fileItem.prompt_variants)
+      try {
+        withTransaction(() => {
+          // Create new items
+          if (diff.added.length > 0) {
+            const newItems = diff.added.map((item, index) => ({
+              module_id,
+              name: item.name,
+              prompt: item.prompt,
+              negative: item.negative,
+              sort_order: items.length + index,
+              prompt_variants: item.prompt_variants
+                ? JSON.stringify(item.prompt_variants)
+                : undefined
+            }))
+            const result = moduleItemRepo.bulkCreate(newItems)
+            created = result.succeeded
+            for (const err of result.errors) {
+              errors.push({
+                action: 'create',
+                name: diff.added[err.index]?.name || '',
+                error: err.error
+              })
             }
-            return { id: m.module_item_id!, data }
-          })
-          .filter((u): u is { id: string; data: Record<string, unknown> } => u !== null)
-
-        const result = moduleItemRepo.bulkUpdate(updates)
-        updated = result.succeeded
-        for (const err of result.errors) {
-          errors.push({ action: 'update', name: err.id, error: err.error })
-        }
-      }
-
-      // Delete missing items
-      if (delete_missing && diff.removed.length > 0) {
-        for (const item of diff.removed) {
-          try {
-            const id = (item as { id?: string }).id
-            if (id) {
-              moduleItemRepo.delete(id)
-              deleted++
-            }
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
-            errors.push({ action: 'delete', name: item.name, error: msg })
+            if (result.failed > 0) throw new Error('Creating source items failed')
           }
+
+          // Update modified items
+          if (diff.modified.length > 0) {
+            const updates = diff.modified
+              .filter((m) => m.module_item_id)
+              .map((m) => {
+                const fileItem = parseResult.items.find(
+                  (fi) => fi.name.trim().toLowerCase() === m.name.trim().toLowerCase()
+                )
+                if (!fileItem) return null
+                const data: Record<string, unknown> = { prompt: fileItem.prompt }
+                if (fileItem.negative !== undefined) data.negative = fileItem.negative
+                if (fileItem.prompt_variants) {
+                  data.prompt_variants = JSON.stringify(fileItem.prompt_variants)
+                }
+                return { id: m.module_item_id!, data }
+              })
+              .filter((u): u is { id: string; data: Record<string, unknown> } => u !== null)
+
+            const result = moduleItemRepo.bulkUpdate(updates)
+            updated = result.succeeded
+            for (const err of result.errors) {
+              errors.push({ action: 'update', name: err.id, error: err.error })
+            }
+            if (result.failed > 0) throw new Error('Updating source items failed')
+          }
+
+          // Delete missing items
+          if (delete_missing && diff.removed.length > 0) {
+            for (const item of diff.removed) {
+              try {
+                const id = (item as { id?: string }).id
+                if (id) {
+                  moduleItemRepo.delete(id)
+                  deleted++
+                }
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e)
+                errors.push({ action: 'delete', name: item.name, error: msg })
+                throw e
+              }
+            }
+          }
+        })
+      } catch (error) {
+        return {
+          ...jsonResult({
+            error: error instanceof Error ? error.message : String(error),
+            dry_run: false,
+            rolled_back: true,
+            created: 0,
+            updated: 0,
+            deleted: 0,
+            parse_errors: parseResult.errors,
+            errors
+          }),
+          isError: true
         }
       }
 
@@ -252,6 +312,7 @@ export function registerFileSyncTools(server: McpServer): void {
         created,
         updated,
         deleted,
+        parse_errors: parseResult.errors,
         errors
       })
     }

@@ -147,50 +147,6 @@ function detectCategory(
   return 'custom'
 }
 
-/**
- * Apply variable values to a workflow template, producing a ready-to-submit prompt.
- */
-export function applyVariables(
-  apiJson: string,
-  variableValues: Record<string, Record<string, unknown>>
-): Record<string, ComfyUINode> {
-  const nodes = parseWorkflowNodes(apiJson)
-
-  for (const [nodeId, fields] of Object.entries(variableValues)) {
-    if (nodes[nodeId]) {
-      for (const [fieldName, value] of Object.entries(fields)) {
-        nodes[nodeId].inputs[fieldName] = value
-      }
-    }
-  }
-
-  return nodes
-}
-
-/**
- * Get a list of prompt text nodes from a workflow (CLIPTextEncode nodes).
- * Useful for identifying which nodes should receive prompt module content.
- */
-export function getPromptNodes(
-  apiJson: string
-): Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> {
-  const nodes = parseWorkflowNodes(apiJson)
-  const result: Array<{ nodeId: string; title: string; currentText: string; isNegative: boolean }> =
-    []
-
-  for (const [nodeId, node] of Object.entries(nodes)) {
-    if (node.class_type === 'CLIPTextEncode') {
-      const text = (node.inputs.text as string) || ''
-      const title = node._meta?.title || `CLIPTextEncode #${nodeId}`
-      const isNegative = isLikelyNegativePrompt(title, text)
-
-      result.push({ nodeId, title, currentText: text, isNegative })
-    }
-  }
-
-  return result
-}
-
 function isComfyUINode(value: unknown): value is ComfyUINode {
   return (
     isJsonObject(value) &&
@@ -216,26 +172,6 @@ function parseWorkflowNodes(apiJson: string): Record<string, ComfyUINode> {
   }
 
   return parsed.value
-}
-
-/**
- * Heuristic to detect if a CLIPTextEncode node is a negative prompt.
- */
-function isLikelyNegativePrompt(title: string, text: string): boolean {
-  const titleLower = title.toLowerCase()
-  if (titleLower.includes('negative') || titleLower.includes('neg')) return true
-
-  const negativeKeywords = [
-    'worst quality',
-    'low quality',
-    'bad anatomy',
-    'bad hands',
-    'blurry',
-    'deformed',
-    'ugly'
-  ]
-  const matchCount = negativeKeywords.filter((kw) => text.toLowerCase().includes(kw)).length
-  return matchCount >= 2
 }
 
 /**

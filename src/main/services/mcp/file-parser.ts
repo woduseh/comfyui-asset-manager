@@ -306,23 +306,11 @@ export function parseModuleItemsFile(filePath: string, format?: FileFormat): Par
   const detectedFormat = format || detectFormat(resolved)
   const content = fs.readFileSync(resolved, 'utf-8')
 
-  switch (detectedFormat) {
-    case 'json':
-      return parseJSON(content)
-    case 'csv':
-      return parseCSV(content)
-    case 'md':
-      return parseMarkdown(content)
-    default:
-      throw new Error(`Unsupported format: ${detectedFormat}`)
-  }
+  return parseModuleItemsContent(content, detectedFormat)
 }
 
-/** Parse content directly without reading from file (for testing) */
-export function parseModuleItemsContent(
-  content: string,
-  format: FileFormat
-): Omit<ParseResult, 'format'> & { format: FileFormat } {
+/** Parse imported content in the selected format. */
+export function parseModuleItemsContent(content: string, format: FileFormat): ParseResult {
   switch (format) {
     case 'json':
       return parseJSON(content)

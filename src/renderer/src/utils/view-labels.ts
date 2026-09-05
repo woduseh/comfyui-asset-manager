@@ -91,23 +91,6 @@ export function buildGalleryRatingOptions(
   ]
 }
 
-export function buildModulePromptPreviewLabels(t: Translate): {
-  positive: string
-  negative: string
-} {
-  return {
-    positive: t('module.promptPreviewPositive'),
-    negative: t('module.promptPreviewNegative')
-  }
-}
-
-export function buildSettingsThemeOptions(t: Translate): Array<{ label: string; value: string }> {
-  return [
-    { label: t('settings.general.dark'), value: 'dark' },
-    { label: t('settings.general.light'), value: 'light' }
-  ]
-}
-
 export function getGenerationWorkflowHint(workflows: WorkflowLike[], t: Translate): string | null {
   const generationCount = workflows.filter((workflow) => workflow.category === 'generation').length
   const hiddenCount = workflows.length - generationCount

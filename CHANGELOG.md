@@ -19,6 +19,8 @@
 
 ### Changed
 
+- 사용하지 않는 UnoCSS·UUID 의존성, macOS·Linux 배포 설정, 미사용 ComfyUI API와 중복 스토어 상태·라벨 래퍼를 제거
+- 정적 목록·문구를 그대로 복제하는 테스트와 미사용 API 전용 테스트를 정리하고 동작·실패 경로 검증은 유지
 - 로컬·CI·릴리스 품질 게이트를 `verify:coverage`로 통일하고 실패 검증 로그를 CI artifact로 보존
 - 테스트 fixture의 필수 데이터와 mock·VueWrapper 타입 계약을 보완하고 생성된 검증 결과를 lint 대상에서 제외
 - 갤러리 경로 확인·날짜 정렬·작업별 상태 집계에 DB 인덱스를 추가하고 기존 DB에도 자동 적용

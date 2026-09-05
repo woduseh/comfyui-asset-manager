@@ -15,7 +15,6 @@ export interface WorkflowItem {
 
 export const useWorkflowStore = defineStore('workflow', () => {
   const workflows = ref<WorkflowItem[]>([])
-  const currentWorkflow = ref<Record<string, unknown> | null>(null)
   const loading = ref(false)
 
   async function loadWorkflows(category?: string): Promise<void> {
@@ -31,12 +30,6 @@ export const useWorkflowStore = defineStore('workflow', () => {
     }
   }
 
-  async function getWorkflow(id: string): Promise<Record<string, unknown> | null> {
-    const result = await invokeIpc(IPC_CHANNELS.WORKFLOW_GET, { id })
-    currentWorkflow.value = result
-    return result
-  }
-
   async function deleteWorkflow(id: string): Promise<void> {
     await invokeIpc(IPC_CHANNELS.WORKFLOW_DELETE, { id })
     workflows.value = workflows.value.filter((w) => w.id !== id)
@@ -49,10 +42,8 @@ export const useWorkflowStore = defineStore('workflow', () => {
 
   return {
     workflows,
-    currentWorkflow,
     loading,
     loadWorkflows,
-    getWorkflow,
     deleteWorkflow,
     updateWorkflow
   }

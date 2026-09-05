@@ -31,8 +31,6 @@ describe('ComfyUI protocol fault fixture (real HTTP and WebSocket)', () => {
     server.onPrompt = () => 'drop'
     await expect(client.queuePrompt({})).rejects.toThrow()
     expect(server.accepted).toHaveLength(1)
-    const queue = await client.getQueue()
-    expect(queue.queue_pending.map((entry) => entry[1])).toEqual(['prompt-1'])
     server.complete('prompt-1')
     expect((await client.getHistoryEntry('prompt-1'))?.status.completed).toBe(true)
   })

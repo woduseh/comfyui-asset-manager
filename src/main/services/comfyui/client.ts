@@ -4,7 +4,6 @@ import log from '../../logger'
 import type {
   ComfyUIPromptRequest,
   ComfyUIPromptResponse,
-  ComfyUIQueueResponse,
   ComfyUIHistoryEntry,
   ComfyUISystemStats,
   ComfyUIObjectInfo
@@ -24,10 +23,6 @@ export class ComfyUIClient {
 
   setServer(host: string, port: number): void {
     this.baseUrl = `http://${host}:${port}`
-  }
-
-  getBaseUrl(): string {
-    return this.baseUrl
   }
 
   /** Check if the server is reachable */
@@ -51,17 +46,6 @@ export class ComfyUIClient {
     return await ofetch(`${this.baseUrl}/object_info`)
   }
 
-  /** Get object info for a specific node type */
-  async getNodeInfo(nodeType: string): Promise<Record<string, unknown> | null> {
-    try {
-      const info = await ofetch(`${this.baseUrl}/object_info/${nodeType}`)
-      return info
-    } catch (error) {
-      log.debug(`[ComfyUI] Failed to load node info for "${nodeType}":`, error)
-      return null
-    }
-  }
-
   /** Queue a prompt for execution */
   async queuePrompt(
     prompt: Record<string, unknown>,
@@ -77,11 +61,6 @@ export class ComfyUIClient {
       retry: 0,
       timeout: COMFYUI_REQUEST_TIMEOUT_MS
     })
-  }
-
-  /** Get the current queue status */
-  async getQueue(): Promise<ComfyUIQueueResponse> {
-    return await ofetch(`${this.baseUrl}/queue`)
   }
 
   /** Get execution history */
@@ -116,44 +95,9 @@ export class ComfyUIClient {
     return Buffer.from(response)
   }
 
-  /** Upload an image to ComfyUI */
-  async uploadImage(
-    imageBuffer: Buffer,
-    filename: string,
-    subfolder: string = '',
-    overwrite: boolean = true
-  ): Promise<{ name: string; subfolder: string; type: string }> {
-    const formData = new FormData()
-    const blob = new Blob([new Uint8Array(imageBuffer)])
-    formData.append('image', blob, filename)
-    if (subfolder) formData.append('subfolder', subfolder)
-    formData.append('overwrite', overwrite ? 'true' : 'false')
-
-    return await ofetch(`${this.baseUrl}/upload/image`, {
-      method: 'POST',
-      body: formData
-    })
-  }
-
   /** Interrupt the current execution */
   async interrupt(): Promise<void> {
     await ofetch(`${this.baseUrl}/interrupt`, { method: 'POST' })
-  }
-
-  /** Delete items from the queue */
-  async deleteFromQueue(ids: string[]): Promise<void> {
-    await ofetch(`${this.baseUrl}/queue`, {
-      method: 'POST',
-      body: { delete: ids }
-    })
-  }
-
-  /** Clear the entire queue */
-  async clearQueue(): Promise<void> {
-    await ofetch(`${this.baseUrl}/queue`, {
-      method: 'POST',
-      body: { clear: true }
-    })
   }
 
   /** Delete items from history */
@@ -163,14 +107,6 @@ export class ComfyUIClient {
       timeout: COMFYUI_REQUEST_TIMEOUT_MS,
       retry: 0,
       body: { delete: ids }
-    })
-  }
-
-  /** Clear entire history */
-  async clearHistory(): Promise<void> {
-    await ofetch(`${this.baseUrl}/history`, {
-      method: 'POST',
-      body: { clear: true }
     })
   }
 

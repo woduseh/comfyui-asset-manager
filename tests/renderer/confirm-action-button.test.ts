@@ -6,17 +6,6 @@ import { NPopconfirm } from 'naive-ui'
 import ConfirmActionButton from '../../src/renderer/src/components/common/ConfirmActionButton'
 
 describe('ConfirmActionButton', () => {
-  it('renders the button label', () => {
-    const wrapper = mount(ConfirmActionButton, {
-      props: {
-        label: 'Delete',
-        confirmText: 'Delete this item?'
-      }
-    })
-
-    expect(wrapper.text()).toContain('Delete')
-  })
-
   it('emits confirm when the popconfirm is accepted', async () => {
     const wrapper = mount(ConfirmActionButton, {
       props: {

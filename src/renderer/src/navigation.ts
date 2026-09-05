@@ -2,20 +2,6 @@
 
 export type RouteName = 'workflows' | 'modules' | 'jobs' | 'gallery' | 'terminal' | 'settings'
 
-/** Routes present in the shipped product. */
-export const SHIPPED_ROUTES = [
-  'workflows',
-  'modules',
-  'jobs',
-  'gallery',
-  'terminal',
-  'settings'
-] as const satisfies RouteName[]
-
-/** Legacy route names removed from the product (kept for documentation / guard use). */
-export const LEGACY_ROUTES = ['dashboard', 'batch', 'queue'] as const
-export type LegacyRouteName = (typeof LEGACY_ROUTES)[number]
-
 export interface NavItem {
   name: RouteName
   path: string

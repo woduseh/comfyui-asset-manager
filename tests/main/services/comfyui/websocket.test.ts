@@ -37,8 +37,8 @@ vi.mock('ws', () => ({
   default: MockWebSocket
 }))
 
-vi.mock('uuid', () => ({
-  v4: () => 'client-1'
+vi.mock('node:crypto', () => ({
+  randomUUID: () => 'client-1'
 }))
 
 vi.mock('electron', () => ({

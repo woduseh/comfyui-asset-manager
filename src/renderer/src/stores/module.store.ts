@@ -30,7 +30,6 @@ export interface ModuleItem {
 
 export const useModuleStore = defineStore('module', () => {
   const modules = ref<PromptModule[]>([])
-  const currentModule = ref<PromptModule | null>(null)
   const currentItems = ref<ModuleItem[]>([])
   const loading = ref(false)
 
@@ -42,12 +41,6 @@ export const useModuleStore = defineStore('module', () => {
     } finally {
       loading.value = false
     }
-  }
-
-  async function getModule(id: string): Promise<PromptModule | null> {
-    const result = await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })
-    currentModule.value = result as PromptModule
-    return currentModule.value
   }
 
   async function createModule(data: {
@@ -110,11 +103,9 @@ export const useModuleStore = defineStore('module', () => {
 
   return {
     modules,
-    currentModule,
     currentItems,
     loading,
     loadModules,
-    getModule,
     createModule,
     updateModule,
     deleteModule,

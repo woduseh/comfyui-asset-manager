@@ -1,5 +1,5 @@
 import { getDatabase, saveDatabase, withTransaction } from '../index'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import log from '../../../logger'
 
 // Allowed field names for dynamic update queries (SQL injection prevention)
@@ -123,7 +123,7 @@ export class WorkflowRepository {
     variables?: string
   }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO workflows (id, name, description, category, api_json, ui_json, variables)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -190,7 +190,7 @@ export class WorkflowRepository {
     const db = getDatabase()
     db.run('DELETE FROM workflow_variables WHERE workflow_id = ?', [workflowId])
     for (const v of variables) {
-      const id = uuidv4()
+      const id = randomUUID()
       db.run(
         `INSERT INTO workflow_variables (id, workflow_id, node_id, field_name, display_name, var_type, default_val, description, role)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -259,7 +259,7 @@ export class ModuleRepository {
 
   create(data: { name: string; type: string; description?: string; parent_id?: string }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO prompt_modules (id, name, type, description, parent_id)
        VALUES (?, ?, ?, ?, ?)`,
@@ -297,7 +297,7 @@ export class ModuleRepository {
     const source = this.get(sourceId)
     if (!source) return null
 
-    const newModuleId = uuidv4()
+    const newModuleId = randomUUID()
 
     return withTransaction(() => {
       db.run(
@@ -324,7 +324,7 @@ export class ModuleRepository {
       stmt.free()
 
       for (const item of sourceItems) {
-        const newItemId = uuidv4()
+        const newItemId = randomUUID()
         db.run(
           `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -403,7 +403,7 @@ export class ModuleItemRepository {
     prompt_variants?: string
   }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -511,7 +511,7 @@ export class ModuleItemRepository {
       for (let i = 0; i < items.length; i++) {
         try {
           const item = items[i]
-          const id = uuidv4()
+          const id = randomUUID()
           db.run(
             `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -574,7 +574,7 @@ export class CharacterRepository {
     metadata?: string
   }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO characters (id, name, base_prompt, negative_prompt, metadata)
        VALUES (?, ?, ?, ?, ?)`,
@@ -651,7 +651,7 @@ export class BatchJobRepository {
 
   create(data: BatchJobWriteData): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO batch_jobs (id, name, description, config, workflow_id, total_tasks, pipeline_config, module_data_snapshot)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -810,27 +810,6 @@ export class BatchTaskRepository {
     return result
   }
 
-  createBulk(
-    tasks: Array<{
-      job_id: string
-      prompt_data: string
-      sort_order: number
-      metadata: string
-    }>
-  ): void {
-    const db = getDatabase()
-    withTransaction(() => {
-      for (const task of tasks) {
-        const id = uuidv4()
-        db.run(
-          `INSERT INTO batch_tasks (id, job_id, prompt_data, sort_order, metadata)
-           VALUES (?, ?, ?, ?, ?)`,
-          [id, task.job_id, task.prompt_data, task.sort_order, task.metadata]
-        )
-      }
-    })
-  }
-
   updateStatus(
     id: string,
     status: string,
@@ -872,15 +851,6 @@ export class BatchTaskRepository {
     saveDatabase()
   }
 
-  resetByJob(jobId: string): void {
-    const db = getDatabase()
-    db.run(
-      "UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL, error_message = NULL, completed_at = NULL, retry_count = 0 WHERE job_id = ?",
-      [jobId]
-    )
-    saveDatabase()
-  }
-
   createSingle(data: {
     job_id: string
     prompt_data: string
@@ -888,7 +858,7 @@ export class BatchTaskRepository {
     metadata: string
   }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO batch_tasks (id, job_id, prompt_data, sort_order, metadata)
        VALUES (?, ?, ?, ?, ?)`,
@@ -896,18 +866,6 @@ export class BatchTaskRepository {
     )
     saveDatabase()
     return id
-  }
-
-  countProcessedByJob(jobId: string): number {
-    const db = getDatabase()
-    const stmt = db.prepare(
-      "SELECT COUNT(*) as count FROM batch_tasks WHERE job_id = ? AND status IN ('completed', 'failed', 'cancelled')"
-    )
-    stmt.bind([jobId])
-    stmt.step()
-    const count = (stmt.getAsObject() as { count: number }).count
-    stmt.free()
-    return count
   }
 
   clearPromptDataForCompleted(jobId: string): void {
@@ -1051,7 +1009,7 @@ export class GeneratedImageRepository {
     style_name?: string
   }): string {
     const db = getDatabase()
-    const id = uuidv4()
+    const id = randomUUID()
     db.run(
       `INSERT INTO generated_images (id, task_id, job_id, file_path, thumbnail_path, file_size,
         width, height, generation_params, prompt_text, negative_text,

@@ -13,7 +13,7 @@ vi.mock('../../../../src/main/services/tags/danbooru-api', () => ({
   checkOnlineAvailability: vi.fn()
 }))
 
-import { tagService, CATEGORY_NAMES, CATEGORY_IDS } from '../../../../src/main/services/tags/index'
+import { tagService } from '../../../../src/main/services/tags/index'
 import {
   validateTagOnline,
   searchTagsOnline,
@@ -31,20 +31,6 @@ describe('TagService', () => {
     it('should load tags from file', () => {
       expect(tagService.isLoaded()).toBe(true)
       expect(tagService.getTagCount()).toBeGreaterThan(6000)
-    })
-  })
-
-  describe('lookupLocal', () => {
-    it('should find existing tags', () => {
-      const tag = tagService.lookupLocal('long_hair')
-      expect(tag).toBeDefined()
-      expect(tag!.name).toBe('long_hair')
-      expect(tag!.count).toBeGreaterThan(0)
-    })
-
-    it('should return undefined for non-existent tags', () => {
-      const tag = tagService.lookupLocal('completely_made_up_tag_xyz')
-      expect(tag).toBeUndefined()
     })
   })
 
@@ -193,7 +179,7 @@ describe('TagService', () => {
     it('should respect category filter', () => {
       const results = tagService.search('*', 'rating')
       expect(results.length).toBeGreaterThanOrEqual(1)
-      expect(results.every((r) => r.category === CATEGORY_IDS['rating'])).toBe(true)
+      expect(results.every((r) => r.category === 9)).toBe(true)
     })
 
     it('should respect limit parameter', () => {
@@ -317,25 +303,5 @@ describe('TagService', () => {
         }
       ])
     })
-  })
-})
-
-describe('Constants', () => {
-  it('CATEGORY_NAMES should map all known categories', () => {
-    expect(CATEGORY_NAMES[0]).toBe('general')
-    expect(CATEGORY_NAMES[1]).toBe('artist')
-    expect(CATEGORY_NAMES[3]).toBe('copyright')
-    expect(CATEGORY_NAMES[4]).toBe('character')
-    expect(CATEGORY_NAMES[5]).toBe('meta')
-    expect(CATEGORY_NAMES[9]).toBe('rating')
-  })
-
-  it('CATEGORY_IDS should be inverse of CATEGORY_NAMES', () => {
-    expect(CATEGORY_IDS['general']).toBe(0)
-    expect(CATEGORY_IDS['artist']).toBe(1)
-    expect(CATEGORY_IDS['copyright']).toBe(3)
-    expect(CATEGORY_IDS['character']).toBe(4)
-    expect(CATEGORY_IDS['meta']).toBe(5)
-    expect(CATEGORY_IDS['rating']).toBe(9)
   })
 })

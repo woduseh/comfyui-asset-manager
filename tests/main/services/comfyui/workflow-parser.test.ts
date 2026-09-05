@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  parseWorkflow,
-  applyVariables,
-  getPromptNodes
-} from '../../../../src/main/services/comfyui/workflow-parser'
+import { parseWorkflow } from '../../../../src/main/services/comfyui/workflow-parser'
 
 // Minimal ComfyUI API-format workflow JSON fixtures
 function makeGenerationWorkflow(): string {
@@ -200,103 +196,6 @@ describe('Workflow Parser', () => {
 
     it('throws on invalid JSON', () => {
       expect(() => parseWorkflow('not json')).toThrow()
-    })
-  })
-
-  describe('applyVariables', () => {
-    it('applies variable values to workflow nodes', () => {
-      const json = makeGenerationWorkflow()
-      const result = applyVariables(json, {
-        '5': { seed: 999, steps: 30 },
-        '2': { text: 'new prompt text' }
-      })
-      expect(result['5'].inputs.seed).toBe(999)
-      expect(result['5'].inputs.steps).toBe(30)
-      expect(result['2'].inputs.text).toBe('new prompt text')
-    })
-
-    it('does not modify nodes not in variableValues', () => {
-      const json = makeGenerationWorkflow()
-      const original = JSON.parse(json)
-      const result = applyVariables(json, { '5': { seed: 999 } })
-      // Node 1 (CheckpointLoaderSimple) should be unchanged
-      expect(result['1'].inputs.ckpt_name).toBe(original['1'].inputs.ckpt_name)
-    })
-
-    it('ignores non-existent node IDs', () => {
-      const json = makeGenerationWorkflow()
-      const result = applyVariables(json, { '999': { seed: 42 } })
-      // Should not throw and original nodes should be intact
-      expect(result['5'].inputs.seed).toBe(123456)
-    })
-
-    it('preserves all nodes', () => {
-      const json = makeGenerationWorkflow()
-      const original = JSON.parse(json)
-      const result = applyVariables(json, {})
-      expect(Object.keys(result).length).toBe(Object.keys(original).length)
-    })
-  })
-
-  describe('getPromptNodes', () => {
-    it('returns all CLIPTextEncode nodes', () => {
-      const result = getPromptNodes(makeGenerationWorkflow())
-      expect(result).toHaveLength(2)
-    })
-
-    it('detects positive prompt correctly', () => {
-      const result = getPromptNodes(makeGenerationWorkflow())
-      const positive = result.find((n) => n.title === 'Positive Prompt')
-      expect(positive).toBeDefined()
-      expect(positive!.isNegative).toBe(false)
-      expect(positive!.currentText).toBe('masterpiece, 1girl')
-    })
-
-    it('detects negative prompt by title', () => {
-      const result = getPromptNodes(makeGenerationWorkflow())
-      const negative = result.find((n) => n.title === 'Negative Prompt')
-      expect(negative).toBeDefined()
-      expect(negative!.isNegative).toBe(true)
-    })
-
-    it('detects negative prompt by content heuristic', () => {
-      const json = JSON.stringify({
-        '1': {
-          class_type: 'CLIPTextEncode',
-          inputs: { text: 'worst quality, bad anatomy, ugly, deformed, blurry' },
-          _meta: { title: 'CLIP Text' }
-        }
-      })
-      const result = getPromptNodes(json)
-      expect(result[0].isNegative).toBe(true)
-    })
-
-    it('marks positive when no negative indicators found', () => {
-      const json = JSON.stringify({
-        '1': {
-          class_type: 'CLIPTextEncode',
-          inputs: { text: 'beautiful girl, masterpiece' },
-          _meta: { title: 'CLIP Text' }
-        }
-      })
-      const result = getPromptNodes(json)
-      expect(result[0].isNegative).toBe(false)
-    })
-
-    it('returns empty array when no CLIPTextEncode nodes exist', () => {
-      const result = getPromptNodes(makeUpscaleWorkflow())
-      expect(result).toHaveLength(0)
-    })
-
-    it('falls back to auto-generated title when _meta is missing', () => {
-      const json = JSON.stringify({
-        '10': {
-          class_type: 'CLIPTextEncode',
-          inputs: { text: 'test' }
-        }
-      })
-      const result = getPromptNodes(json)
-      expect(result[0].title).toBe('CLIPTextEncode #10')
     })
   })
 })

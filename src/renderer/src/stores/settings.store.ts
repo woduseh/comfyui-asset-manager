@@ -63,16 +63,11 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  async function getSetting(key: string): Promise<string | null> {
-    return await invokeIpc(IPC_CHANNELS.SETTINGS_GET, { key })
-  }
-
   return {
     settings,
     loaded,
     loadError,
     loadSettings,
-    setSetting,
-    getSetting
+    setSetting
   }
 })

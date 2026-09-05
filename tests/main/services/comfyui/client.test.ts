@@ -15,13 +15,13 @@ describe('ComfyUI REST Client', () => {
     mockFetch.mockReset()
   })
 
-  it('constructs correct base URL', () => {
-    expect(client.getBaseUrl()).toBe('http://localhost:8188')
-  })
-
-  it('updates server address', () => {
+  it('uses the updated server address for requests', async () => {
     client.setServer('192.168.1.100', 9000)
-    expect(client.getBaseUrl()).toBe('http://192.168.1.100:9000')
+    await client.ping()
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://192.168.1.100:9000/system_stats',
+      expect.any(Object)
+    )
   })
 
   describe('ping', () => {
@@ -71,15 +71,6 @@ describe('ComfyUI REST Client', () => {
           timeout: 30_000
         })
       )
-    })
-  })
-
-  describe('getQueue', () => {
-    it('returns queue state', async () => {
-      const queue = { queue_running: [], queue_pending: [] }
-      mockFetch.mockResolvedValueOnce(queue)
-      const result = await client.getQueue()
-      expect(result).toEqual(queue)
     })
   })
 
@@ -137,34 +128,6 @@ describe('ComfyUI REST Client', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8188/interrupt',
         expect.objectContaining({ method: 'POST' })
-      )
-    })
-  })
-
-  describe('deleteFromQueue', () => {
-    it('sends delete request', async () => {
-      mockFetch.mockResolvedValueOnce(undefined)
-      await client.deleteFromQueue(['id1', 'id2'])
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8188/queue',
-        expect.objectContaining({
-          method: 'POST',
-          body: { delete: ['id1', 'id2'] }
-        })
-      )
-    })
-  })
-
-  describe('clearQueue', () => {
-    it('sends clear request', async () => {
-      mockFetch.mockResolvedValueOnce(undefined)
-      await client.clearQueue()
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8188/queue',
-        expect.objectContaining({
-          method: 'POST',
-          body: { clear: true }
-        })
       )
     })
   })

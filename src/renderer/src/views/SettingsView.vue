@@ -25,7 +25,6 @@ import { parseIntegerOrFallback } from '@shared/number'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
 import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
-import { buildSettingsThemeOptions } from '@renderer/utils/view-labels'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 
@@ -72,7 +71,10 @@ const languageOptions = [
   { label: 'English', value: 'en' }
 ]
 
-const themeOptions = computed(() => buildSettingsThemeOptions(t))
+const themeOptions = computed(() => [
+  { label: t('settings.general.dark'), value: 'dark' },
+  { label: t('settings.general.light'), value: 'light' }
+])
 
 async function handleConnect(): Promise<void> {
   const success = await connectionStore.connect(host.value, port.value)

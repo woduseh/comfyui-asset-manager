@@ -188,11 +188,13 @@ describe('QueueManager Recovery', () => {
 
       const jobId = jobRepo.create({ name: 'Test Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 2, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[0].id as string, 'completed')
       taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
@@ -395,7 +397,7 @@ describe('QueueManager Recovery', () => {
       const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
       const jobId = jobRepo.create({ name: 'Active Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       Object.assign(queueManager, {
         _isProcessing: true,
         _isPaused: true,
@@ -418,10 +420,12 @@ describe('QueueManager Recovery', () => {
 
       const jobId = jobRepo.create({ name: 'Stale Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[0].id as string, 'completed')
 
@@ -439,10 +443,12 @@ describe('QueueManager Recovery', () => {
 
       const jobId = jobRepo.create({ name: 'Paused Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'paused')
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
 
       queueManager.cancel(jobId)
 
@@ -547,7 +553,7 @@ describe('QueueManager Recovery', () => {
     it('stops after the configured number of retries and marks the task failed', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const task = taskRepo.listByJob(jobId)[0]
       const processTask = vi
         .spyOn(
@@ -585,7 +591,7 @@ describe('QueueManager Recovery', () => {
       async (failureType) => {
         const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
         const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
-        taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+        taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
         const task = taskRepo.listByJob(jobId)[0]
         if (failureType === 'remote') {
           taskRepo.updateStatus(task.id as string, 'running', {
@@ -667,14 +673,14 @@ describe('QueueManager Recovery', () => {
         .mockReset()
         .mockImplementation((_config, _data, start) => generated.slice(start, start + 2))
       if (mode === 'legacy') {
-        taskRepo.createBulk(
-          generated.map((task) => ({
-            job_id: jobId,
-            prompt_data: JSON.stringify(task.promptData),
-            metadata: JSON.stringify(task.metadata),
-            sort_order: task.sortOrder
-          }))
-        )
+        for (const task of generated.map((task) => ({
+          job_id: jobId,
+          prompt_data: JSON.stringify(task.promptData),
+          metadata: JSON.stringify(task.metadata),
+          sort_order: task.sortOrder
+        }))) {
+          taskRepo.createSingle(task)
+        }
       }
       ;(comfyuiManager as { isConnected: boolean }).isConnected = true
       settingsRepo.set('max_retries', '0')
@@ -738,18 +744,16 @@ describe('QueueManager Recovery', () => {
   describe('task result consistency', () => {
     function createTaskFixture(): { jobId: string; task: Record<string, unknown> } {
       const jobId = jobRepo.create({ name: 'Result Job', config: '{}' })
-      taskRepo.createBulk([
-        {
-          job_id: jobId,
-          prompt_data: JSON.stringify({ positive: 'prompt', negative: '', seed: 42 }),
-          sort_order: 0,
-          metadata: JSON.stringify({
-            combinationIndex: 0,
-            imageIndex: 0,
-            totalInCombination: 1
-          })
-        }
-      ])
+      taskRepo.createSingle({
+        job_id: jobId,
+        prompt_data: JSON.stringify({ positive: 'prompt', negative: '', seed: 42 }),
+        sort_order: 0,
+        metadata: JSON.stringify({
+          combinationIndex: 0,
+          imageIndex: 0,
+          totalInCombination: 1
+        })
+      })
       return { jobId, task: taskRepo.listByJob(jobId)[0] }
     }
 

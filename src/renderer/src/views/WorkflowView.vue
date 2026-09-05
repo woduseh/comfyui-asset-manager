@@ -148,7 +148,7 @@ async function handleImport(): Promise<void> {
 }
 
 async function handleViewDetail(id: string): Promise<void> {
-  detailWorkflow.value = await workflowStore.getWorkflow(id)
+  detailWorkflow.value = await invokeIpc(IPC_CHANNELS.WORKFLOW_GET, { id })
   if (detailWorkflow.value) {
     editName.value = (detailWorkflow.value.name as string) || ''
     editDescription.value = (detailWorkflow.value.description as string) || ''

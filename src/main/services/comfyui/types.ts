@@ -18,11 +18,6 @@ export interface ComfyUIPromptResponse {
   node_errors: Record<string, unknown>
 }
 
-export interface ComfyUIQueueResponse {
-  queue_running: Array<[number, string, Record<string, ComfyUINode>, Record<string, unknown>]>
-  queue_pending: Array<[number, string, Record<string, ComfyUINode>, Record<string, unknown>]>
-}
-
 export interface ComfyUIHistoryEntry {
   prompt: [number, string, Record<string, ComfyUINode>, Record<string, unknown>]
   outputs: Record<

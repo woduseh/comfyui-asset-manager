@@ -30,7 +30,6 @@ import {
 } from '@vicons/ionicons5'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useModuleStore, type PromptModule, type ModuleItem } from '@renderer/stores/module.store'
-import { buildModulePromptPreviewLabels } from '@renderer/utils/view-labels'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
 import OverflowActionMenu, {
@@ -75,8 +74,6 @@ const moduleTypeOptions = computed(() => [
   { label: t('module.type.custom'), value: 'custom' }
 ])
 
-const promptPreviewLabels = computed(() => buildModulePromptPreviewLabels(t))
-
 const filterType = ref<string | null>(null)
 const searchQuery = ref('')
 const sortMode = ref<'nameAsc' | 'nameDesc' | 'type'>('nameAsc')
@@ -111,8 +108,7 @@ const filteredModules = computed(() => {
 // Watch selected module to load items
 watch(selectedModuleId, async (id) => {
   if (id) {
-    const mod = await moduleStore.getModule(id)
-    selectedModule.value = mod
+    selectedModule.value = (await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })) as PromptModule | null
     await moduleStore.loadItems(id)
     await updatePreview()
   } else {
@@ -175,7 +171,9 @@ async function handleEditModule(): Promise<void> {
     })
     showEditModuleModal.value = false
     if (selectedModuleId.value === editModule.value.id) {
-      selectedModule.value = await moduleStore.getModule(editModule.value.id)
+      selectedModule.value = (await invokeIpc(IPC_CHANNELS.MODULE_GET, {
+        id: editModule.value.id
+      })) as PromptModule | null
     }
     message.success(t('module.msg.updated'))
   } catch (e) {
@@ -509,7 +507,7 @@ onMounted(() => {
                 word-break: break-all;
               "
             >
-              <strong>{{ promptPreviewLabels.positive }}:</strong> {{ promptPreview.positive }}
+              <strong>{{ t('module.promptPreviewPositive') }}:</strong> {{ promptPreview.positive }}
             </div>
             <div
               v-if="promptPreview.negative"
@@ -521,7 +519,7 @@ onMounted(() => {
                 word-break: break-all;
               "
             >
-              <strong>{{ promptPreviewLabels.negative }}:</strong> {{ promptPreview.negative }}
+              <strong>{{ t('module.promptPreviewNegative') }}:</strong> {{ promptPreview.negative }}
             </div>
           </template>
         </NCard>

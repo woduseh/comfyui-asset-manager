@@ -14,11 +14,4 @@ describe('renderer locales', () => {
   it('keeps Korean and English translation keys in sync', () => {
     expect(collectLeafKeys(ko).sort()).toEqual(collectLeafKeys(en).sort())
   })
-
-  it('describes gallery removal as metadata-only and preserves original files', () => {
-    expect(ko.gallery.viewer.confirmDelete).toContain('원본 파일은 유지')
-    expect(ko.gallery.viewer.deleteImage).toContain('갤러리에서 제거')
-    expect(en.gallery.viewer.confirmDelete).toContain('original file will be kept')
-    expect(en.gallery.viewer.deleteImage).toBe('Remove from Gallery')
-  })
 })

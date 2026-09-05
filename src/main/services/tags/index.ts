@@ -161,10 +161,6 @@ class TagService {
     return this.tags.size
   }
 
-  lookupLocal(name: string): DanbooruTag | undefined {
-    return this.tags.get(name)
-  }
-
   async validate(
     tags: string[],
     onlineFallback = true
@@ -407,4 +403,3 @@ function levenshtein(a: string, b: string): number {
 }
 
 export const tagService = new TagService()
-export { CATEGORY_NAMES, CATEGORY_IDS, SEMANTIC_GROUPS }

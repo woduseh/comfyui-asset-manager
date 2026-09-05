@@ -609,7 +609,7 @@ describe('Database Repositories', () => {
     it('updates an unstarted draft and clears its generated task rows atomically', () => {
       const taskRepo = new BatchTaskRepository()
       const id = repo.create({ name: 'Before', config: '{"before":true}', total_tasks: 1 })
-      taskRepo.createBulk([{ job_id: id, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: id, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const runSpy = vi.spyOn(mockDb, 'run')
 
       repo.updateDraft(id, {
@@ -669,28 +669,32 @@ describe('Database Repositories', () => {
       jobId = jobRepo.create({ name: 'Job', config: '{}' })
     })
 
-    it('creates bulk tasks and lists them', () => {
-      taskRepo.createBulk([
+    it('creates tasks and lists them', () => {
+      for (const task of [
         { job_id: jobId, prompt_data: '{"p":"1"}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"p":"2"}', sort_order: 1, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"p":"3"}', sort_order: 2, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       expect(tasks).toHaveLength(3)
     })
 
     it('tasks are ordered by sort_order', () => {
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{"order":2}', sort_order: 2, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"order":0}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"order":1}', sort_order: 1, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       expect(tasks.map((t) => t.sort_order)).toEqual([0, 1, 2])
     })
 
     it('updates task status', () => {
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const tasks = taskRepo.listByJob(jobId)
       const taskId = tasks[0].id as string
       taskRepo.updateStatus(taskId, 'running')
@@ -699,7 +703,7 @@ describe('Database Repositories', () => {
     })
 
     it('updates status with extra fields', () => {
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const taskId = taskRepo.listByJob(jobId)[0].id as string
       taskRepo.updateStatus(taskId, 'completed', {
         comfyui_prompt_id: 'prompt-123',
@@ -712,7 +716,7 @@ describe('Database Repositories', () => {
     })
 
     it('increments retry_count on retrying status', () => {
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const taskId = taskRepo.listByJob(jobId)[0].id as string
       taskRepo.updateStatus(taskId, 'retrying')
       taskRepo.updateStatus(taskId, 'retrying')
@@ -721,12 +725,14 @@ describe('Database Repositories', () => {
     })
 
     it('lists only pending and retrying tasks for execution', () => {
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 1, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 2, metadata: '{}' },
         { job_id: jobId, prompt_data: '{}', sort_order: 3, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[1].id as string, 'retrying')
       taskRepo.updateStatus(tasks[2].id as string, 'failed')
@@ -739,17 +745,19 @@ describe('Database Repositories', () => {
     })
 
     it('cascade deletes tasks when job is deleted', () => {
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+      taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       jobRepo.delete(jobId)
       expect(taskRepo.listByJob(jobId)).toHaveLength(0)
     })
 
     it('preserves prompt IDs when recovering known running requests', () => {
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":3}', sort_order: 2, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[0].id as string, 'completed')
       taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
@@ -766,12 +774,14 @@ describe('Database Repositories', () => {
     })
 
     it('cancels unsubmitted tasks while preserving failures and unresolved execution', () => {
-      taskRepo.createBulk([
+      for (const task of [
         { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":3}', sort_order: 2, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":4}', sort_order: 3, metadata: '{}' }
-      ])
+      ]) {
+        taskRepo.createSingle(task)
+      }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[0].id as string, 'completed')
       taskRepo.updateStatus(tasks[1].id as string, 'running')

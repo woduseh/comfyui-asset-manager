@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
 import { EventEmitter } from 'events'
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 import type { ComfyUIWSMessage } from './types'
 import {
   WS_RECONNECT_INTERVAL_MS,
@@ -25,7 +25,7 @@ export class ComfyUIWebSocket extends EventEmitter {
     super()
     this.host = host
     this.port = port
-    this._clientId = uuidv4()
+    this._clientId = randomUUID()
     this.currentReconnectInterval = this.reconnectInterval
   }
 

@@ -226,8 +226,8 @@ npm run dev        # 개발 모드 (HMR)
 ### Codex 작업 안내
 
 저장소의 에이전트 지침은 [AGENTS.md](AGENTS.md)에서 Codex용으로 관리합니다.
-과거 계획은 [개선 작업 회고](docs/history/2026-07-hardening.md), 작업·감사 증거는
-`work/`와 `docs/`에 보존하며 현재 실행 지침으로 사용하지 않습니다.
+변경 이력은 [CHANGELOG.md](CHANGELOG.md), 현재 제약과 판단에 필요한 감사·성능 근거는
+`docs/`에서 관리합니다. 과거 구현 과정은 Git 이력에서 확인할 수 있습니다.
 앱의 MCP 클라이언트 연동 지원과 저장소의 에이전트 지침 지원은 별개입니다.
 환경 진단·빠른 관련 테스트·전체 검증·실패 로그 확인은 [개발과 검증 루프](docs/development.md)를 참고하세요.
 

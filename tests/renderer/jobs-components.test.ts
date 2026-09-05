@@ -5,7 +5,7 @@ import { defineComponent } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { NButton, NMessageProvider } from 'naive-ui'
+import { NButton, NMessageProvider, NSelect, NCollapseItem } from 'naive-ui'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
@@ -358,7 +358,7 @@ describe('BatchWizard', () => {
       expect(
         wizard
           .findAllComponents(NButton)
-          .find((button) => button.text().includes('wizard.next'))!
+          .find((button) => button.text().includes('wizard.submit'))!
           .props('disabled')
       ).toBe(oldResponseFirst)
       pending[oldResponseFirst ? 1 : 0]()
@@ -447,7 +447,7 @@ describe('BatchWizard', () => {
     expect(
       wizard
         .findAllComponents(NButton)
-        .find((button) => button.text().includes('wizard.next'))!
+        .find((button) => button.text().includes('wizard.submit'))!
         .props('disabled')
     ).toBe(true)
     resolveVariables(variables)
@@ -477,7 +477,7 @@ describe('BatchWizard', () => {
     wrapper.unmount()
   })
 
-  it('gates navigation and emits the unchanged batch payload after submit', async () => {
+  it('shows all editor sections, gates saving and submits the unchanged batch payload', async () => {
     const Host = defineComponent({
       components: { BatchWizard, NMessageProvider },
       template: `
@@ -506,16 +506,17 @@ describe('BatchWizard', () => {
     function nextButton(): VueWrapper<InstanceType<typeof NButton>> {
       return wizard
         .findAllComponents(NButton)
-        .find((button) => button.text().includes('wizard.next'))!
+        .find((button) => button.text().includes('wizard.submit'))!
     }
 
     expect(nextButton().props('disabled')).toBe(true)
     workflowStep.vm.$emit('update:batchName', 'Example batch')
     workflowStep.vm.$emit('update:selectedWorkflowId', 'workflow-1')
     await flushPromises()
-    expect(nextButton().props('disabled')).toBe(false)
-
-    await nextButton().trigger('click')
+    expect(nextButton().props('disabled')).toBe(true)
+    expect(wizard.findComponent(WizardStepWorkflow).isVisible()).toBe(true)
+    expect(wizard.findComponent(WizardStepModules).isVisible()).toBe(true)
+    expect(wizard.findComponent(WizardStepConfirm).isVisible()).toBe(true)
     const moduleStep = wizard.findComponent(WizardStepModules)
     moduleStep.vm.$emit('update:moduleSelections', [
       {
@@ -529,7 +530,6 @@ describe('BatchWizard', () => {
     await flushPromises()
     expect(nextButton().props('disabled')).toBe(false)
 
-    await nextButton().trigger('click')
     const submitButton = wizard
       .findAllComponents(NButton)
       .find((button) => button.text().includes('wizard.submitCreate'))!
@@ -554,6 +554,126 @@ describe('BatchWizard', () => {
       })
     )
     expect(wizard.emitted('saved')).toHaveLength(1)
+  })
+
+  it('preserves configured slots when a role refresh fails and is retried', async () => {
+    const defaultInvoke = invokeIpcMock.getMockImplementation()!
+    let reads = 0
+    const variables = [
+      {
+        id: 'prompt',
+        node_id: '1',
+        field_name: 'text',
+        display_name: 'Prompt',
+        role: 'prompt_positive',
+        var_type: 'string',
+        default_val: ''
+      },
+      {
+        id: 'steps',
+        node_id: '2',
+        field_name: 'steps',
+        display_name: 'Steps',
+        role: 'custom',
+        var_type: 'number',
+        default_val: '20'
+      }
+    ]
+    invokeIpcMock.mockImplementation((channel: string, args: unknown) => {
+      if (channel === IPC_CHANNELS.WORKFLOW_VARIABLES) {
+        reads++
+        if (reads === 2) return Promise.reject(new Error('Temporary read failure'))
+        return Promise.resolve(variables)
+      }
+      if (channel === IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE) return Promise.resolve(true)
+      return defaultInvoke(channel, args)
+    })
+    const sourceJob = {
+      id: 'saved',
+      name: 'Configured',
+      config: JSON.stringify({
+        workflowId: 'workflow-1',
+        moduleSelections: [{ moduleId: 'module-1', selectedItemIds: ['item-1'] }],
+        slotMappings: [
+          {
+            nodeId: '1',
+            fieldName: 'text',
+            prefixText: 'preserve me',
+            assignedModuleIds: ['module-1']
+          }
+        ],
+        variableOverrides: [{ nodeId: '2', fieldName: 'steps', value: '35' }]
+      })
+    }
+    const Host = defineComponent({
+      components: { BatchWizard, NMessageProvider },
+      setup: () => ({ sourceJob }),
+      template:
+        '<NMessageProvider><BatchWizard :show="true" mode="edit" :source-job="sourceJob" /></NMessageProvider>'
+    })
+    const wrapper = mount(Host, {
+      global: {
+        plugins: [createPinia(), createTestI18n()],
+        stubs: {
+          NModal: { template: '<div><slot /><slot name="footer" /></div>' },
+          NScrollbar: { template: '<div><slot /></div>' },
+          NCollapse: { template: '<div><slot /></div>' },
+          NCollapseItem: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    await flushPromises()
+    const wizard = wrapper.findComponent(BatchWizard)
+    await wizard
+      .findAllComponents(NCollapseItem)
+      .find((item) => item.props('name') === 'roles')!
+      .find('.n-collapse-item__header-main')
+      .trigger('click')
+    await flushPromises()
+    const role = wizard
+      .findAllComponents(NSelect)
+      .find((select) =>
+        select.props('options')?.some((option) => option.value === 'prompt_positive')
+      )!
+    role.vm.$emit('update:value', 'prompt_positive')
+    await flushPromises()
+    const submit = wizard
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('wizard.submitEdit'))!
+    expect(submit.props('disabled')).toBe(true)
+    expect(wizard.findComponent(WizardStepModules).props('slotMappings')[0].prefixText).toBe(
+      'preserve me'
+    )
+    const retry = wizard
+      .findAllComponents(NButton)
+      .find((button) => button.text() === 'common.retry')!
+    await retry.trigger('click')
+    await flushPromises()
+    expect(submit.props('disabled')).toBe(false)
+    expect(wizard.findComponent(WizardStepModules).props('slotMappings')[0]).toMatchObject({
+      prefixText: 'preserve me',
+      assignedModuleIds: ['module-1']
+    })
+    expect(wizard.findComponent(WizardStepConfirm).props('variableOverrides')[0]).toMatchObject({
+      enabled: true,
+      value: '35'
+    })
+    let resolveSave!: (result: unknown) => void
+    invokeIpcMock.mockImplementation((channel: string, args: unknown) =>
+      channel === IPC_CHANNELS.BATCH_UPDATE_DRAFT
+        ? new Promise((resolve) => {
+            resolveSave = resolve
+          })
+        : defaultInvoke(channel, args)
+    )
+    await submit.trigger('click')
+    await submit.trigger('click')
+    expect(
+      invokeIpcMock.mock.calls.filter(([channel]) => channel === IPC_CHANNELS.BATCH_UPDATE_DRAFT)
+    ).toHaveLength(1)
+    resolveSave({ jobId: 'saved', totalTasks: 1 })
+    await flushPromises()
+    wrapper.unmount()
   })
 
   it('updates an existing draft without deleting it first', async () => {
@@ -598,13 +718,6 @@ describe('BatchWizard', () => {
     await flushPromises()
 
     const wizard = wrapper.findComponent(BatchWizard)
-    function nextButton(): VueWrapper<InstanceType<typeof NButton>> {
-      return wizard
-        .findAllComponents(NButton)
-        .find((button) => button.text().includes('wizard.next'))!
-    }
-    await nextButton().trigger('click')
-    await nextButton().trigger('click')
     const submitButton = wizard
       .findAllComponents(NButton)
       .find((button) => button.text().includes('wizard.submitEdit'))!

@@ -33,6 +33,7 @@ const emit = defineEmits<{
   clone: [job: Record<string, unknown>]
   delete: [jobId: string]
   move: [jobId: string, direction: 'up' | 'down']
+  results: [jobId: string]
 }>()
 
 const { t, locale } = useI18n()
@@ -88,11 +89,15 @@ function handleAction(action: string, job: Record<string, unknown>): void {
 <template>
   <div class="production-table" role="table" :aria-label="t('jobs.production.history')">
     <div class="production-table__header" role="row">
-      <span>{{ t('jobs.production.job') }}</span>
-      <span>{{ t('common.status') }}</span>
-      <span>{{ t('jobs.production.progress') }}</span>
-      <span>{{ t('jobs.production.updated') }}</span>
-      <span class="production-table__actions-label">{{ t('common.actions') }}</span>
+      <span role="columnheader">{{ t('jobs.production.job') }}</span>
+      <span role="columnheader">{{ t('common.status') }}</span>
+      <span role="columnheader">{{ t('jobs.production.progress') }}</span>
+      <span role="columnheader" class="production-table__date">{{
+        t('jobs.production.updated')
+      }}</span>
+      <span role="columnheader" class="production-table__actions-label">{{
+        t('common.actions')
+      }}</span>
     </div>
 
     <div
@@ -130,6 +135,14 @@ function handleAction(action: string, job: Record<string, unknown>): void {
         {{ formatDate(job.completed_at || job.created_at) }}
       </span>
       <div class="production-table__actions" role="cell">
+        <NButton
+          v-if="Number(job.completed_tasks) > 0"
+          size="small"
+          secondary
+          @click="$emit('results', job.id as string)"
+        >
+          {{ t('jobs.production.viewResults') }}
+        </NButton>
         <div v-if="reorderable" class="production-table__reorder">
           <NButton
             size="tiny"
@@ -169,7 +182,7 @@ function handleAction(action: string, job: Record<string, unknown>): void {
           "
           size="small"
           quaternary
-          :disabled="isProcessing || Number(job.uncertain_tasks) > 0"
+          :disabled="!isConnected || isProcessing || Number(job.uncertain_tasks) > 0"
           @click="$emit('rerun', job)"
         >
           {{ t('batch.actions.rerun') }}
@@ -188,13 +201,14 @@ function handleAction(action: string, job: Record<string, unknown>): void {
 
 <style scoped>
 .production-table {
+  container-type: inline-size;
   border-top: 1px solid var(--app-border);
 }
 
 .production-table__header,
 .production-table__row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.55fr) 100px minmax(180px, 1fr) 130px 176px;
+  grid-template-columns: minmax(150px, 1.55fr) 90px minmax(120px, 1fr) 110px minmax(176px, auto);
   align-items: center;
   column-gap: 16px;
 }
@@ -260,10 +274,10 @@ function handleAction(action: string, job: Record<string, unknown>): void {
   align-items: center;
 }
 
-@media (max-width: 1040px) {
+@container (max-width: 850px) {
   .production-table__header,
   .production-table__row {
-    grid-template-columns: minmax(180px, 1.5fr) 90px minmax(150px, 1fr) 158px;
+    grid-template-columns: minmax(130px, 1.5fr) 80px minmax(100px, 1fr) auto;
   }
 
   .production-table__date {
@@ -271,7 +285,7 @@ function handleAction(action: string, job: Record<string, unknown>): void {
   }
 }
 
-@media (max-width: 760px) {
+@container (max-width: 680px) {
   .production-table__header {
     display: none;
   }

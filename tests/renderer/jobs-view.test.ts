@@ -12,11 +12,14 @@ import JobsView from '@renderer/views/JobsView.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
 import ProductionJobTable from '@renderer/components/jobs/ProductionJobTable.vue'
+import OverflowActionMenu from '@renderer/components/common/OverflowActionMenu.vue'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import en from '@renderer/locales/en.json'
 
 const invokeIpc = vi.hoisted(() => vi.fn())
+const push = vi.hoisted(() => vi.fn())
 vi.mock('@renderer/utils/ipc', () => ({ invokeIpc }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
 function job(id: string, status: BatchJobRecord['status']): BatchJobRecord {
   return {
@@ -44,6 +47,7 @@ describe('production jobs view', () => {
     vi.useFakeTimers()
     jobs = []
     invokeIpc.mockReset()
+    push.mockReset()
     invokeIpc.mockImplementation(
       async (channel: string, args?: { id?: string; status?: string }) => {
         if (channel === IPC_CHANNELS.BATCH_LIST) {
@@ -174,5 +178,46 @@ describe('production jobs view', () => {
     view.findComponent(BatchWizard).vm.$emit('saved')
     await flushPromises()
     expect(view.findComponent(ProductionJobTable).props('jobs')).toEqual(jobs)
+  })
+
+  it('keeps failed and uncertain jobs visible outside collapsed history and protects uncertain outputs', async () => {
+    jobs = [
+      job('failed-job', 'failed'),
+      { ...job('uncertain-job', 'completed'), uncertain_tasks: 1, completed_tasks: 1 },
+      job('history-job', 'completed')
+    ]
+    const view = await openJobs()
+    const attention = view.get('.production-section--attention')
+    expect(attention.text()).toContain('failed-job')
+    expect(attention.text()).toContain('uncertain-job')
+    const table = view.findComponent(ProductionJobTable)
+    expect(table.props('jobs').map((entry) => entry.id)).toEqual(['failed-job', 'uncertain-job'])
+    const uncertainRow = table.findAll('.production-table__row')[1]
+    const rerun = uncertainRow
+      .findAll('button')
+      .find((button) => button.text() === en.batch.actions.rerun)!
+    expect(rerun.attributes('disabled')).toBeDefined()
+    expect(table.findAllComponents(OverflowActionMenu)[1].props('actions')).toContainEqual(
+      expect.objectContaining({ key: 'delete', disabled: true })
+    )
+    await uncertainRow.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'gallery', query: { jobId: 'uncertain-job' } })
+    await view.get('.n-collapse-item__header-main').trigger('click')
+    await flushPromises()
+    expect(view.findAllComponents(ProductionJobTable)[1].props('jobs')).toEqual([
+      expect.objectContaining({ id: 'history-job' })
+    ])
+  })
+
+  it('offers workflow and module preparation for an empty workspace', async () => {
+    const view = await openJobs()
+    const actions = view.get('.production-setup').findAll('button')
+    await actions[0].trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'workflows' })
+    await actions[1].trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'modules' })
+    await actions[2].trigger('click')
+    expect(view.findComponent(BatchWizard).props('show')).toBe(true)
   })
 })

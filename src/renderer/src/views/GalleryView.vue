@@ -43,6 +43,7 @@ const queueStore = useQueueStore()
 
 // Filters
 const searchText = ref('')
+const filterJobId = ref(typeof route.query.jobId === 'string' ? route.query.jobId : undefined)
 const filterRating = ref<number | null>(null)
 const filterFavorite = ref<boolean | null>(null)
 const sortBy = ref<'created_at' | 'rating' | 'file_size'>('created_at')
@@ -51,14 +52,27 @@ const sortOrder = ref<'asc' | 'desc'>('desc')
 // Detail modal
 const showDetail = ref(false)
 const detailIndex = ref(-1)
+const navigatingDetail = ref(false)
+const transitionImage = ref<GalleryImage | null>(null)
 
 const detailImage = computed<GalleryImage | null>(() => {
+  if (navigatingDetail.value && transitionImage.value) return transitionImage.value
   if (detailIndex.value < 0 || detailIndex.value >= galleryStore.images.length) return null
   return galleryStore.images[detailIndex.value]
 })
 
-const canGoPrev = computed(() => detailIndex.value > 0)
-const canGoNext = computed(() => detailIndex.value < galleryStore.images.length - 1)
+const canGoPrev = computed(
+  () =>
+    !galleryStore.loading &&
+    !navigatingDetail.value &&
+    (detailIndex.value > 0 || galleryStore.page > 1)
+)
+const canGoNext = computed(
+  () =>
+    !galleryStore.loading &&
+    !navigatingDetail.value &&
+    (galleryStore.page - 1) * galleryStore.pageSize + detailIndex.value + 1 < galleryStore.total
+)
 const positionLabel = computed(() => {
   if (!detailImage.value) return ''
   const globalIndex = (galleryStore.page - 1) * galleryStore.pageSize + detailIndex.value + 1
@@ -87,7 +101,7 @@ const ratingOptions = computed<SelectMixedOption[]>(() =>
 
 const totalPages = computed(() => Math.ceil(galleryStore.total / galleryStore.pageSize))
 const hasActiveFilters = computed(
-  () => !!(searchText.value || filterRating.value || filterFavorite.value)
+  () => !!(searchText.value || filterRating.value || filterFavorite.value || filterJobId.value)
 )
 const formattedTotal = computed(() =>
   new Intl.NumberFormat(locale.value === 'ko' ? 'ko-KR' : 'en-US').format(galleryStore.total)
@@ -99,15 +113,22 @@ function goToJobs(): void {
 
 // Apply filters
 async function applyFilters(): Promise<void> {
+  showDetail.value = false
+  selectedIds.value = new Set()
   failedImageIds.value = new Set()
   galleryStore.setFilters({
+    jobId: filterJobId.value,
     searchText: searchText.value || undefined,
     minRating: filterRating.value || undefined,
     isFavorite: filterFavorite.value || undefined,
     sortBy: sortBy.value,
     sortOrder: sortOrder.value
   })
-  await galleryStore.loadImages()
+  try {
+    await galleryStore.loadImages()
+  } catch {
+    message.error(t('gallery.msg.loadFailed'))
+  }
 }
 
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -126,6 +147,8 @@ function handleSortChange(val: string): void {
 }
 
 function clearFilters(): void {
+  filterJobId.value = undefined
+  void router.replace({ query: { ...route.query, jobId: undefined } })
   searchText.value = ''
   filterRating.value = null
   filterFavorite.value = null
@@ -144,12 +167,35 @@ function openDetail(image: GalleryImage): void {
   showDetail.value = true
 }
 
+async function navigateDetail(direction: -1 | 1): Promise<void> {
+  if (direction === -1 ? !canGoPrev.value : !canGoNext.value) return
+  const nextIndex = detailIndex.value + direction
+  if (nextIndex >= 0 && nextIndex < galleryStore.images.length) {
+    detailIndex.value = nextIndex
+    return
+  }
+  const targetPage = galleryStore.page + direction
+  transitionImage.value = detailImage.value
+  navigatingDetail.value = true
+  try {
+    await galleryStore.loadImages(targetPage)
+    if (showDetail.value && galleryStore.page === targetPage) {
+      detailIndex.value = direction === 1 ? 0 : galleryStore.images.length - 1
+    }
+  } catch {
+    message.error(t('gallery.msg.loadFailed'))
+  } finally {
+    navigatingDetail.value = false
+    transitionImage.value = null
+  }
+}
+
 function goToPrev(): void {
-  if (canGoPrev.value) detailIndex.value--
+  void navigateDetail(-1)
 }
 
 function goToNext(): void {
-  if (canGoNext.value) detailIndex.value++
+  void navigateDetail(1)
 }
 
 function toggleSelection(id: string): void {
@@ -220,7 +266,7 @@ async function handleShowInExplorer(): Promise<void> {
 async function handleDeleteFromDetail(): Promise<void> {
   if (!detailImage.value) return
   const id = detailImage.value.id
-  const hadNext = canGoNext.value
+  const previousPage = galleryStore.page
 
   await galleryStore.deleteImages([id])
   message.success(t('gallery.msg.imageDeleted'))
@@ -228,15 +274,22 @@ async function handleDeleteFromDetail(): Promise<void> {
   if (galleryStore.images.length === 0) {
     showDetail.value = false
     detailIndex.value = -1
-  } else if (!hadNext && detailIndex.value > 0) {
-    detailIndex.value--
+  } else {
+    detailIndex.value =
+      previousPage === galleryStore.page
+        ? Math.min(detailIndex.value, galleryStore.images.length - 1)
+        : galleryStore.images.length - 1
   }
-  // else: detailIndex stays the same, pointing at the next image that shifted into position
 }
 
 // Keyboard navigation for detail modal
 function handleKeydown(e: KeyboardEvent): void {
-  if (!showDetail.value) return
+  if (
+    !showDetail.value ||
+    (e.target instanceof HTMLElement &&
+      (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)))
+  )
+    return
 
   if (e.key === 'ArrowLeft') {
     e.preventDefault()
@@ -253,13 +306,25 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
-function handlePageChange(p: number): void {
+async function handlePageChange(p: number): Promise<void> {
   failedImageIds.value = new Set()
-  galleryStore.setPage(p)
-  galleryStore.loadImages()
+  try {
+    await galleryStore.loadImages(p)
+  } catch {
+    message.error(t('gallery.msg.loadFailed'))
+  }
 }
 
 watch(filterFavorite, () => applyFilters())
+watch(
+  () => route.query.jobId,
+  (value) => {
+    const jobId = typeof value === 'string' ? value : undefined
+    if (filterJobId.value === jobId) return
+    filterJobId.value = jobId
+    void applyFilters()
+  }
+)
 
 watch(
   () => galleryStore.images.map((image) => image.id),
@@ -285,10 +350,10 @@ watch(
   () => queueStore.activeJobs.reduce((sum, j) => sum + j.completed_tasks, 0),
   () => {
     if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
-    galleryRefreshTimer = setTimeout(
-      () => galleryStore.loadImages(),
-      GALLERY_BATCH_REFRESH_DEBOUNCE_MS
-    )
+    galleryRefreshTimer = setTimeout(() => {
+      if (!showDetail.value)
+        void galleryStore.loadImages().catch(() => message.error(t('gallery.msg.loadFailed')))
+    }, GALLERY_BATCH_REFRESH_DEBOUNCE_MS)
   }
 )
 
@@ -324,6 +389,15 @@ onUnmounted(() => {
         </NTag>
       </template>
     </PageHeader>
+
+    <NAlert v-if="filterJobId" type="info" :bordered="false" class="gallery-job-context">
+      <div class="gallery-missing-alert__content">
+        <span>{{ t('gallery.jobFilterActive') }}</span>
+        <NButton size="small" secondary @click="clearFilters">{{
+          t('gallery.showAllJobs')
+        }}</NButton>
+      </div>
+    </NAlert>
 
     <GalleryFilterBar
       v-model:search-text="searchText"
@@ -411,6 +485,7 @@ onUnmounted(() => {
             :page="galleryStore.page"
             :page-count="totalPages"
             :page-size="galleryStore.pageSize"
+            :disabled="galleryStore.loading"
             @update:page="handlePageChange"
           />
         </NSpace>
@@ -479,12 +554,7 @@ onUnmounted(() => {
                     circle
                     size="small"
                     :type="detailImage.is_favorite ? 'warning' : 'default'"
-                    @click="
-                      () => {
-                        handleToggleFavorite(detailImage!)
-                        detailImage!.is_favorite = detailImage!.is_favorite ? 0 : 1
-                      }
-                    "
+                    @click="handleToggleFavorite(detailImage!)"
                   >
                     {{ detailImage.is_favorite ? '♥' : '♡' }}
                   </NButton>
@@ -550,12 +620,7 @@ onUnmounted(() => {
                   :value="detailImage.rating"
                   :count="5"
                   size="small"
-                  @update:value="
-                    (val: number) => {
-                      galleryStore.rateImage(detailImage!.id, val)
-                      detailImage!.rating = val
-                    }
-                  "
+                  @update:value="(val: number) => galleryStore.rateImage(detailImage!.id, val)"
                 />
               </div>
 
@@ -842,7 +907,8 @@ onUnmounted(() => {
   padding: 6px 8px;
 }
 
-.gallery-missing-alert {
+.gallery-missing-alert,
+.gallery-job-context {
   margin-bottom: 16px;
 }
 

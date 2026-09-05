@@ -22,7 +22,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
 <template>
   <div>
     <NForm label-placement="top" :disabled="disabled">
-      <NGrid :cols="2" :x-gap="16">
+      <NGrid cols="1 540:2" :x-gap="16">
         <NGridItem>
           <NFormItem :label="t('batch.wizard.jobNameLabel')" required>
             <NInput
@@ -61,7 +61,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
           :aria-label="t('batch.wizard.descriptionLabel')"
         />
       </NFormItem>
-      <NGrid :cols="3" :x-gap="16">
+      <NGrid cols="1 540:3" :x-gap="16">
         <NGridItem>
           <NFormItem :label="t('batch.wizard.countLabel')">
             <NInputNumber

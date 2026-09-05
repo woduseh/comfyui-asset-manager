@@ -15,6 +15,8 @@ import {
   NTag,
   NIcon,
   NAlert,
+  NTabs,
+  NTabPane,
   useMessage
 } from 'naive-ui'
 import { CopyOutline, CheckmarkCircleOutline } from '@vicons/ionicons5'
@@ -39,6 +41,29 @@ const port = ref(8188)
 const outputDir = ref('')
 const mcpEnabled = ref(false)
 const mcpPort = ref(39464)
+const activeSection = ref('connection')
+const outputPathExample = computed(() => {
+  const examples: Record<string, string> = {
+    job: 'Portraits',
+    character: 'Alice',
+    outfit: 'Casual',
+    emotion: 'Smile',
+    style: 'Watercolor',
+    index: '0001',
+    seed: '12345',
+    date: '2026-09-06'
+  }
+  const folder = (
+    settingsStore.settings.output_pattern || '{job}/{character}/{outfit}/{emotion}'
+  ).replace(/\{(job|character|outfit|emotion|style|date)\}/g, (_, key: string) => examples[key])
+  const filename = (
+    settingsStore.settings.filename_pattern || '{character}_{outfit}_{emotion}_{index}'
+  ).replace(
+    /\{(character|outfit|emotion|style|index|seed|date)\}/g,
+    (_, key: string) => examples[key]
+  )
+  return [outputDir.value || t('settings.output.exampleRoot'), folder, `${filename}.png`].join('/')
+})
 const hasAnyManagedCliConfig = computed(
   () =>
     terminalStore.mcpConfigStatus.claudeCode ||
@@ -273,330 +298,408 @@ onMounted(async () => {
   <PageShell width="compact" class="settings-view">
     <PageHeader :title="t('settings.title')" :description="t('settings.pageDescription')" />
 
-    <!-- Server Settings -->
-    <NCard :title="t('settings.server.title')" style="margin-top: 16px">
-      <NForm label-placement="left" label-width="140">
-        <NFormItem :label="t('settings.server.host')">
-          <NInput v-model:value="host" :aria-label="t('settings.server.host')" />
-        </NFormItem>
-        <NFormItem :label="t('settings.server.port')">
-          <NInputNumber
-            v-model:value="port"
-            :min="1"
-            :max="65535"
-            :aria-label="t('settings.server.port')"
-          />
-        </NFormItem>
-        <NFormItem>
-          <NSpace>
-            <NButton type="primary" :disabled="connectionStore.isConnected" @click="handleConnect">
-              {{ t('settings.server.connect') }}
-            </NButton>
-            <NButton :disabled="!connectionStore.isConnected" @click="handleDisconnect">
-              {{ t('settings.server.disconnect') }}
-            </NButton>
-          </NSpace>
-        </NFormItem>
-      </NForm>
-    </NCard>
-
-    <!-- Output Settings -->
-    <NCard :title="t('settings.output.title')" style="margin-top: 16px">
-      <NForm label-placement="left" label-width="140">
-        <NFormItem :label="t('settings.output.directory')">
-          <NSpace>
-            <NInput
-              v-model:value="outputDir"
-              readonly
-              style="flex: 1"
-              :aria-label="t('settings.output.directory')"
-            />
-            <NButton @click="handleBrowseOutput">
-              {{ t('settings.output.browse') }}
-            </NButton>
-          </NSpace>
-        </NFormItem>
-        <NFormItem :label="t('settings.output.folderPattern')">
-          <NInput
-            :value="settingsStore.settings.output_pattern"
-            placeholder="{job}/{character}/{outfit}/{emotion}"
-            :aria-label="t('settings.output.folderPattern')"
-            @update:value="(v: string) => handleSettingChange('output_pattern', v)"
-          />
-        </NFormItem>
-        <NFormItem :label="t('settings.output.filePattern')">
-          <NInput
-            :value="settingsStore.settings.filename_pattern"
-            placeholder="{character}_{outfit}_{emotion}_{index}"
-            :aria-label="t('settings.output.filePattern')"
-            @update:value="(v: string) => handleSettingChange('filename_pattern', v)"
-          />
-        </NFormItem>
-      </NForm>
-    </NCard>
-
-    <!-- General Settings -->
-    <NCard :title="t('settings.general.title')" style="margin-top: 16px">
-      <NForm label-placement="left" label-width="140">
-        <NFormItem :label="t('settings.general.language')">
-          <NSelect
-            :value="settingsStore.settings.language"
-            :options="languageOptions"
-            :aria-label="t('settings.general.language')"
-            @update:value="handleLanguageChange"
-          />
-        </NFormItem>
-        <NFormItem :label="t('settings.general.theme')">
-          <NSelect
-            :value="settingsStore.settings.theme"
-            :options="themeOptions"
-            :aria-label="t('settings.general.theme')"
-            @update:value="handleThemeChange"
-          />
-        </NFormItem>
-      </NForm>
-    </NCard>
-
-    <NDivider />
-
-    <!-- Batch Settings -->
-    <NCard :title="t('settings.batch.title')">
-      <NForm label-placement="left" label-width="200">
-        <NFormItem :label="t('settings.batch.maxRetries')">
-          <NInputNumber
-            :value="parseIntegerOrFallback(settingsStore.settings.max_retries, 3)"
-            :min="0"
-            :max="10"
-            :aria-label="t('settings.batch.maxRetries')"
-            @update:value="(v: number | null) => handleSettingChange('max_retries', String(v ?? 3))"
-          />
-        </NFormItem>
-      </NForm>
-    </NCard>
-
-    <NDivider />
-
-    <!-- MCP Server Settings -->
-    <NCard :title="t('settings.mcp.title')">
-      <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
-        {{ t('settings.mcp.description') }}
-      </NAlert>
-
-      <NForm label-placement="left" label-width="200">
-        <NFormItem :label="t('settings.mcp.enabled')">
-          <NSwitch
-            :value="mcpEnabled"
-            :aria-label="t('settings.mcp.enabled')"
-            @update:value="handleMcpEnabledChange"
-          />
-        </NFormItem>
-        <NFormItem :label="t('settings.mcp.port')">
-          <NInputNumber
-            :value="mcpPort"
-            :min="1024"
-            :max="65535"
-            :disabled="terminalStore.mcpStatus.isRunning"
-            :aria-label="t('settings.mcp.port')"
-            @update:value="handleMcpPortChange"
-          />
-        </NFormItem>
-        <NFormItem :label="t('settings.mcp.auth.required')">
-          <NSwitch
-            :value="terminalStore.mcpAuthStatus.required"
-            :aria-label="t('settings.mcp.auth.required')"
-            @update:value="handleMcpAuthRequiredChange"
-          />
-        </NFormItem>
-        <NFormItem
-          v-if="terminalStore.mcpAuthStatus.required"
-          :label="t('settings.mcp.auth.token')"
-        >
-          <NSpace vertical style="width: 100%">
-            <NInput
-              :value="terminalStore.mcpAuthStatus.token"
-              type="password"
-              show-password-on="click"
-              readonly
-              :aria-label="t('settings.mcp.auth.token')"
-            />
-            <NSpace :size="8">
-              <NButton size="small" @click="handleCopyMcpToken">
-                {{ t('settings.mcp.auth.copyToken') }}
-              </NButton>
-              <ConfirmActionButton
-                size="small"
-                type="warning"
-                quaternary
-                :label="t('settings.mcp.auth.rotate')"
-                :confirm-text="t('settings.mcp.auth.rotateConfirm')"
-                @confirm="handleRotateMcpToken"
+    <NTabs v-model:value="activeSection" type="line" class="settings-tabs" animated>
+      <NTabPane
+        name="connection"
+        :tab="t('settings.sections.connection')"
+        display-directive="show:lazy"
+      >
+        <!-- Server Settings -->
+        <NCard :title="t('settings.server.title')">
+          <NForm label-placement="left" label-width="140">
+            <NFormItem :label="t('settings.server.host')">
+              <NInput
+                v-model:value="host"
+                placeholder="localhost"
+                :aria-label="t('settings.server.host')"
               />
-            </NSpace>
-          </NSpace>
-        </NFormItem>
-        <NFormItem :label="t('settings.mcp.status')">
-          <NSpace align="center" :size="8">
-            <NTag
-              :type="terminalStore.mcpStatus.isRunning ? 'success' : 'default'"
-              size="small"
-              round
-            >
-              {{
-                terminalStore.mcpStatus.isRunning
-                  ? t('settings.mcp.running')
-                  : t('settings.mcp.stopped')
-              }}
-            </NTag>
-            <NButton
-              v-if="terminalStore.mcpStatus.isRunning"
-              size="tiny"
-              quaternary
-              @click="handleCopyMcpUrl"
-            >
-              <template #icon><NIcon :component="CopyOutline" /></template>
-              {{ terminalStore.mcpStatus.url }}
-            </NButton>
-          </NSpace>
-        </NFormItem>
-      </NForm>
+            </NFormItem>
+            <NFormItem :label="t('settings.server.port')">
+              <NInputNumber
+                v-model:value="port"
+                :min="1"
+                :max="65535"
+                :aria-label="t('settings.server.port')"
+              />
+            </NFormItem>
+            <NFormItem>
+              <NSpace>
+                <NButton
+                  type="primary"
+                  :disabled="connectionStore.isConnected"
+                  @click="handleConnect"
+                >
+                  {{ t('settings.server.connect') }}
+                </NButton>
+                <NButton :disabled="!connectionStore.isConnected" @click="handleDisconnect">
+                  {{ t('settings.server.disconnect') }}
+                </NButton>
+              </NSpace>
+            </NFormItem>
+          </NForm>
+        </NCard>
+      </NTabPane>
 
-      <NDivider style="margin: 12px 0" />
-
-      <!-- MCP client connection -->
-      <h4 style="margin: 0 0 12px 0">{{ t('settings.mcp.cliSetup.title') }}</h4>
-      <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px">
-        {{ t('settings.mcp.cliSetup.description') }}
-      </p>
-
-      <NSpace vertical :size="12">
-        <NAlert
-          v-if="hasOutdatedMcpAuthConfig"
-          type="warning"
-          :title="t('settings.mcp.auth.configUpdateTitle')"
-          :bordered="false"
-        >
-          {{ t('settings.mcp.auth.configUpdateDescription') }}
-        </NAlert>
-
-        <!-- Environment Variables -->
-        <NAlert type="info" :title="t('settings.mcp.cliSetup.envTitle')" :bordered="false">
-          <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>,
-          <code>{{ '$' + mcpTokenEnvironmentVariable }}</code>
-          <br />
-          <span style="font-size: 12px; color: var(--n-text-color3)">
-            {{ t('settings.mcp.cliSetup.envDescription') }}
-          </span>
-        </NAlert>
-
-        <!-- Codex uses its official one-time CLI registration flow. -->
-        <div class="codex-setup">
-          <div class="codex-setup__header">
-            <div>
-              <strong>{{ t('settings.mcp.cliSetup.codexTitle') }}</strong>
-              <p>{{ t('settings.mcp.cliSetup.codexDescription') }}</p>
-            </div>
-            <NTag
-              :type="terminalStore.mcpConfigStatus.codexCli ? 'success' : 'default'"
-              size="small"
-              round
-            >
-              {{
-                terminalStore.mcpConfigStatus.codexCli
-                  ? t('settings.mcp.cliSetup.codexRegistered')
-                  : t('settings.mcp.cliSetup.codexNotRegistered')
-              }}
-            </NTag>
+      <NTabPane name="output" :tab="t('settings.sections.output')" display-directive="show:lazy">
+        <!-- Output Settings -->
+        <NCard :title="t('settings.output.title')">
+          <NForm label-placement="left" label-width="140">
+            <NFormItem :label="t('settings.output.directory')">
+              <div class="output-directory">
+                <NInput
+                  v-model:value="outputDir"
+                  readonly
+                  :placeholder="t('settings.output.directoryPlaceholder')"
+                  style="flex: 1"
+                  :aria-label="t('settings.output.directory')"
+                />
+                <NButton @click="handleBrowseOutput">
+                  {{ t('settings.output.browse') }}
+                </NButton>
+              </div>
+            </NFormItem>
+            <NFormItem :label="t('settings.output.folderPattern')">
+              <NInput
+                :value="settingsStore.settings.output_pattern"
+                placeholder="{job}/{character}/{outfit}/{emotion}"
+                :aria-label="t('settings.output.folderPattern')"
+                @update:value="(v: string) => handleSettingChange('output_pattern', v)"
+              />
+            </NFormItem>
+            <NFormItem :label="t('settings.output.filePattern')">
+              <NInput
+                :value="settingsStore.settings.filename_pattern"
+                placeholder="{character}_{outfit}_{emotion}_{index}"
+                :aria-label="t('settings.output.filePattern')"
+                @update:value="(v: string) => handleSettingChange('filename_pattern', v)"
+              />
+            </NFormItem>
+          </NForm>
+          <div class="output-example" aria-live="polite">
+            <strong>{{ t('settings.output.exampleTitle') }}</strong>
+            <code>{{ outputPathExample }}</code>
+            <p>{{ t('settings.output.exampleHint') }}</p>
           </div>
-          <code class="codex-setup__command">{{ codexAddCommand }}</code>
-          <NSpace :size="8" :wrap="true">
-            <NButton
-              v-if="terminalStore.mcpAuthStatus.required"
-              size="small"
-              @click="
-                handleCopyCodexCommand(
-                  codexTokenCommand,
-                  'settings.mcp.auth.codexTokenCommandCopied'
-                )
-              "
-            >
-              <template #icon><NIcon :component="CopyOutline" /></template>
-              {{ t('settings.mcp.auth.copyCodexTokenCommand') }}
-            </NButton>
-            <NButton
-              size="small"
-              @click="
-                handleCopyCodexCommand(codexAddCommand, 'settings.mcp.cliSetup.codexCommandCopied')
-              "
-            >
-              <template #icon><NIcon :component="CopyOutline" /></template>
-              {{ t('settings.mcp.cliSetup.copyCodexCommand') }}
-            </NButton>
-            <NButton
-              v-if="terminalStore.mcpConfigStatus.codexCli"
-              size="small"
-              quaternary
-              @click="
-                handleCopyCodexCommand(
-                  codexRemoveCommand,
-                  'settings.mcp.cliSetup.codexRemoveCommandCopied'
-                )
-              "
-            >
-              {{ t('settings.mcp.cliSetup.copyCodexRemoveCommand') }}
-            </NButton>
-          </NSpace>
-          <span class="codex-setup__hint">{{ t('settings.mcp.cliSetup.codexHint') }}</span>
-        </div>
+        </NCard>
+      </NTabPane>
 
-        <!-- Explicitly managed non-Codex CLI configs -->
-        <strong class="managed-cli-title">{{ t('settings.mcp.cliSetup.managedTitle') }}</strong>
-        <NSpace align="center" :size="8">
-          <NButton
-            size="small"
-            :type="hasAnyManagedCliConfig ? 'default' : 'primary'"
-            :disabled="!terminalStore.mcpStatus.isRunning"
-            @click="handleSetupCli"
-          >
-            {{
-              hasAnyManagedCliConfig
-                ? t('settings.mcp.cliSetup.updateConfig')
-                : t('settings.mcp.cliSetup.setupClaudeCode')
-            }}
-          </NButton>
-          <NTag v-if="terminalStore.mcpConfigStatus.claudeCode" type="success" size="small" round>
-            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            Claude Code ✓
-          </NTag>
-          <NTag v-if="terminalStore.mcpConfigStatus.copilotCli" type="success" size="small" round>
-            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            Copilot CLI ✓
-          </NTag>
-          <NTag v-if="terminalStore.mcpConfigStatus.geminiCli" type="success" size="small" round>
-            <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
-            Gemini CLI ✓
-          </NTag>
-          <NButton
-            v-if="hasAnyManagedCliConfig"
-            size="tiny"
-            quaternary
-            type="error"
-            @click="handleRemoveCli"
-          >
-            {{ t('settings.mcp.cliSetup.remove') }}
-          </NButton>
-        </NSpace>
-        <span
-          v-if="terminalStore.mcpConfigStatus.configPath"
-          style="font-size: 12px; color: var(--n-text-color3)"
-        >
-          {{ terminalStore.mcpConfigStatus.configPath }}
-        </span>
-      </NSpace>
-    </NCard>
+      <NTabPane name="general" :tab="t('settings.sections.general')" display-directive="show:lazy">
+        <!-- General Settings -->
+        <NCard :title="t('settings.general.title')">
+          <NForm label-placement="left" label-width="140">
+            <NFormItem :label="t('settings.general.language')">
+              <NSelect
+                :value="settingsStore.settings.language"
+                :options="languageOptions"
+                :aria-label="t('settings.general.language')"
+                @update:value="handleLanguageChange"
+              />
+            </NFormItem>
+            <NFormItem :label="t('settings.general.theme')">
+              <NSelect
+                :value="settingsStore.settings.theme"
+                :options="themeOptions"
+                :aria-label="t('settings.general.theme')"
+                @update:value="handleThemeChange"
+              />
+            </NFormItem>
+          </NForm>
+        </NCard>
+
+        <NDivider />
+        <!-- Batch Settings -->
+        <NCard :title="t('settings.batch.title')">
+          <NForm label-placement="left" label-width="200">
+            <NFormItem :label="t('settings.batch.maxRetries')">
+              <NInputNumber
+                :value="parseIntegerOrFallback(settingsStore.settings.max_retries, 3)"
+                :min="0"
+                :max="10"
+                :aria-label="t('settings.batch.maxRetries')"
+                @update:value="
+                  (v: number | null) => handleSettingChange('max_retries', String(v ?? 3))
+                "
+              />
+            </NFormItem>
+          </NForm>
+        </NCard>
+      </NTabPane>
+      <NTabPane
+        name="advanced"
+        :tab="t('settings.sections.advanced')"
+        display-directive="show:lazy"
+      >
+        <!-- MCP Server Settings -->
+        <NCard :title="t('settings.mcp.title')">
+          <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
+            {{ t('settings.mcp.description') }}
+          </NAlert>
+
+          <NForm label-placement="left" label-width="200">
+            <NFormItem :label="t('settings.mcp.enabled')">
+              <NSwitch
+                :value="mcpEnabled"
+                :aria-label="t('settings.mcp.enabled')"
+                @update:value="handleMcpEnabledChange"
+              />
+            </NFormItem>
+            <NFormItem :label="t('settings.mcp.port')">
+              <NInputNumber
+                :value="mcpPort"
+                :min="1024"
+                :max="65535"
+                :disabled="terminalStore.mcpStatus.isRunning"
+                :aria-label="t('settings.mcp.port')"
+                @update:value="handleMcpPortChange"
+              />
+            </NFormItem>
+            <NFormItem :label="t('settings.mcp.auth.required')">
+              <NSwitch
+                :value="terminalStore.mcpAuthStatus.required"
+                :aria-label="t('settings.mcp.auth.required')"
+                @update:value="handleMcpAuthRequiredChange"
+              />
+            </NFormItem>
+            <NFormItem
+              v-if="terminalStore.mcpAuthStatus.required"
+              :label="t('settings.mcp.auth.token')"
+            >
+              <NSpace vertical style="width: 100%">
+                <NInput
+                  :value="terminalStore.mcpAuthStatus.token"
+                  type="password"
+                  show-password-on="click"
+                  readonly
+                  :placeholder="t('settings.mcp.auth.token')"
+                  :aria-label="t('settings.mcp.auth.token')"
+                />
+                <NSpace :size="8">
+                  <NButton size="small" @click="handleCopyMcpToken">
+                    {{ t('settings.mcp.auth.copyToken') }}
+                  </NButton>
+                  <ConfirmActionButton
+                    size="small"
+                    type="warning"
+                    quaternary
+                    :label="t('settings.mcp.auth.rotate')"
+                    :confirm-text="t('settings.mcp.auth.rotateConfirm')"
+                    @confirm="handleRotateMcpToken"
+                  />
+                </NSpace>
+              </NSpace>
+            </NFormItem>
+            <NFormItem :label="t('settings.mcp.status')">
+              <NSpace align="center" :size="8">
+                <NTag
+                  :type="terminalStore.mcpStatus.isRunning ? 'success' : 'default'"
+                  size="small"
+                  round
+                >
+                  {{
+                    terminalStore.mcpStatus.isRunning
+                      ? t('settings.mcp.running')
+                      : t('settings.mcp.stopped')
+                  }}
+                </NTag>
+                <NButton
+                  v-if="terminalStore.mcpStatus.isRunning"
+                  size="tiny"
+                  quaternary
+                  @click="handleCopyMcpUrl"
+                >
+                  <template #icon><NIcon :component="CopyOutline" /></template>
+                  {{ terminalStore.mcpStatus.url }}
+                </NButton>
+              </NSpace>
+            </NFormItem>
+          </NForm>
+
+          <NDivider style="margin: 12px 0" />
+
+          <!-- MCP client connection -->
+          <h4 style="margin: 0 0 12px 0">{{ t('settings.mcp.cliSetup.title') }}</h4>
+          <p style="margin: 0 0 12px 0; color: var(--n-text-color3); font-size: 13px">
+            {{ t('settings.mcp.cliSetup.description') }}
+          </p>
+
+          <NSpace vertical :size="12">
+            <NAlert
+              v-if="hasOutdatedMcpAuthConfig"
+              type="warning"
+              :title="t('settings.mcp.auth.configUpdateTitle')"
+              :bordered="false"
+            >
+              {{ t('settings.mcp.auth.configUpdateDescription') }}
+            </NAlert>
+
+            <!-- Environment Variables -->
+            <NAlert type="info" :title="t('settings.mcp.cliSetup.envTitle')" :bordered="false">
+              <code>$COMFYUI_MCP_URL</code>, <code>$MCP_ENDPOINT</code>,
+              <code>{{ '$' + mcpTokenEnvironmentVariable }}</code>
+              <br />
+              <span style="font-size: 12px; color: var(--n-text-color3)">
+                {{ t('settings.mcp.cliSetup.envDescription') }}
+              </span>
+            </NAlert>
+
+            <!-- Codex uses its official one-time CLI registration flow. -->
+            <div class="codex-setup">
+              <div class="codex-setup__header">
+                <div>
+                  <strong>{{ t('settings.mcp.cliSetup.codexTitle') }}</strong>
+                  <p>{{ t('settings.mcp.cliSetup.codexDescription') }}</p>
+                </div>
+                <NTag
+                  :type="terminalStore.mcpConfigStatus.codexCli ? 'success' : 'default'"
+                  size="small"
+                  round
+                >
+                  {{
+                    terminalStore.mcpConfigStatus.codexCli
+                      ? t('settings.mcp.cliSetup.codexRegistered')
+                      : t('settings.mcp.cliSetup.codexNotRegistered')
+                  }}
+                </NTag>
+              </div>
+              <code class="codex-setup__command">{{ codexAddCommand }}</code>
+              <NSpace :size="8" :wrap="true">
+                <NButton
+                  v-if="terminalStore.mcpAuthStatus.required"
+                  size="small"
+                  @click="
+                    handleCopyCodexCommand(
+                      codexTokenCommand,
+                      'settings.mcp.auth.codexTokenCommandCopied'
+                    )
+                  "
+                >
+                  <template #icon><NIcon :component="CopyOutline" /></template>
+                  {{ t('settings.mcp.auth.copyCodexTokenCommand') }}
+                </NButton>
+                <NButton
+                  size="small"
+                  @click="
+                    handleCopyCodexCommand(
+                      codexAddCommand,
+                      'settings.mcp.cliSetup.codexCommandCopied'
+                    )
+                  "
+                >
+                  <template #icon><NIcon :component="CopyOutline" /></template>
+                  {{ t('settings.mcp.cliSetup.copyCodexCommand') }}
+                </NButton>
+                <NButton
+                  v-if="terminalStore.mcpConfigStatus.codexCli"
+                  size="small"
+                  quaternary
+                  @click="
+                    handleCopyCodexCommand(
+                      codexRemoveCommand,
+                      'settings.mcp.cliSetup.codexRemoveCommandCopied'
+                    )
+                  "
+                >
+                  {{ t('settings.mcp.cliSetup.copyCodexRemoveCommand') }}
+                </NButton>
+              </NSpace>
+              <span class="codex-setup__hint">{{ t('settings.mcp.cliSetup.codexHint') }}</span>
+            </div>
+
+            <!-- Explicitly managed non-Codex CLI configs -->
+            <strong class="managed-cli-title">{{ t('settings.mcp.cliSetup.managedTitle') }}</strong>
+            <NSpace align="center" :size="8">
+              <NButton
+                size="small"
+                :type="hasAnyManagedCliConfig ? 'default' : 'primary'"
+                :disabled="!terminalStore.mcpStatus.isRunning"
+                @click="handleSetupCli"
+              >
+                {{
+                  hasAnyManagedCliConfig
+                    ? t('settings.mcp.cliSetup.updateConfig')
+                    : t('settings.mcp.cliSetup.setupClaudeCode')
+                }}
+              </NButton>
+              <NTag
+                v-if="terminalStore.mcpConfigStatus.claudeCode"
+                type="success"
+                size="small"
+                round
+              >
+                <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+                Claude Code ✓
+              </NTag>
+              <NTag
+                v-if="terminalStore.mcpConfigStatus.copilotCli"
+                type="success"
+                size="small"
+                round
+              >
+                <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+                Copilot CLI ✓
+              </NTag>
+              <NTag
+                v-if="terminalStore.mcpConfigStatus.geminiCli"
+                type="success"
+                size="small"
+                round
+              >
+                <template #icon><NIcon :component="CheckmarkCircleOutline" /></template>
+                Gemini CLI ✓
+              </NTag>
+              <NButton
+                v-if="hasAnyManagedCliConfig"
+                size="tiny"
+                quaternary
+                type="error"
+                @click="handleRemoveCli"
+              >
+                {{ t('settings.mcp.cliSetup.remove') }}
+              </NButton>
+            </NSpace>
+            <span
+              v-if="terminalStore.mcpConfigStatus.configPath"
+              style="font-size: 12px; color: var(--n-text-color3)"
+            >
+              {{ terminalStore.mcpConfigStatus.configPath }}
+            </span>
+          </NSpace>
+        </NCard>
+      </NTabPane>
+    </NTabs>
   </PageShell>
 </template>
 
 <style scoped>
+.settings-tabs {
+  margin-top: 20px;
+}
+
+.output-directory {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.output-example {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--app-surface-muted);
+}
+
+.output-example code {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.output-example p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
 .codex-setup {
   display: flex;
   flex-direction: column;

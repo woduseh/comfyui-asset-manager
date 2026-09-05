@@ -116,4 +116,48 @@ describe('gallery.store request scheduling', () => {
     expect(store.total).toBe(2)
     expect(store.loading).toBe(false)
   })
+
+  it('commits page navigation with its images and keeps the old page when navigation fails', async () => {
+    invoke.mockResolvedValueOnce({ items: [{ id: 'first' }], total: 3 })
+    const store = useGalleryStore()
+    store.pageSize = 1
+    await store.loadImages()
+    const next = deferred<unknown>()
+    invoke.mockReturnValueOnce(next.promise)
+    const navigation = store.loadImages(2)
+    await Promise.resolve()
+    expect(store.page).toBe(1)
+    expect(store.images[0].id).toBe('first')
+    next.resolve({ items: [{ id: 'second' }], total: 3 })
+    await navigation
+    expect(store.page).toBe(2)
+    expect(store.images[0].id).toBe('second')
+    invoke.mockRejectedValueOnce(new Error('offline'))
+    await expect(store.loadImages(3)).rejects.toThrow('offline')
+    expect(store.page).toBe(2)
+    expect(store.images[0].id).toBe('second')
+  })
+
+  it('returns to the previous page and refills it when deleting the last page', async () => {
+    const store = useGalleryStore()
+    store.pageSize = 2
+    invoke.mockResolvedValueOnce({ items: [{ id: 'last' }], total: 3 })
+    await store.loadImages(2)
+    invoke.mockResolvedValueOnce(true)
+    invoke.mockResolvedValueOnce({ items: [{ id: 'one' }, { id: 'two' }], total: 2 })
+    await store.deleteImages(['last'])
+    expect(invoke.mock.calls.at(-1)?.[1]).toMatchObject({ page: 1, pageSize: 2 })
+    expect(store.page).toBe(1)
+    expect(store.images.map((image) => image.id)).toEqual(['one', 'two'])
+  })
+
+  it('preserves the gallery when removal fails', async () => {
+    const store = useGalleryStore()
+    invoke.mockResolvedValueOnce({ items: [{ id: 'keep' }], total: 1 })
+    await store.loadImages()
+    invoke.mockRejectedValueOnce(new Error('write failed'))
+    await expect(store.deleteImages(['keep'])).rejects.toThrow('write failed')
+    expect(store.images[0].id).toBe('keep')
+    expect(store.total).toBe(1)
+  })
 })

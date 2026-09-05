@@ -71,7 +71,7 @@ const { t } = useI18n()
         {{ selectionMode ? t('gallery.selectionModeOff') : t('gallery.selectionModeOn') }}
       </NButton>
       <template v-if="selectionMode">
-        <NButton size="small" @click="$emit('selectAll')">{{ t('gallery.selectAll') }}</NButton>
+        <NButton size="small" @click="$emit('selectAll')">{{ t('gallery.selectPage') }}</NButton>
         <NPopconfirm @positive-click="$emit('deleteSelected')">
           <template #trigger>
             <NButton size="small" type="error" :disabled="selectedCount === 0">

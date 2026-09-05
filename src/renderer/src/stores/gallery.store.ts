@@ -51,6 +51,7 @@ export const useGalleryStore = defineStore('gallery', () => {
           if (!pendingQuery && result) {
             images.value = result.items as GalleryImage[]
             total.value = result.total
+            page.value = query.page ?? 1
           }
         } catch (error) {
           if (!pendingQuery) throw error
@@ -62,9 +63,9 @@ export const useGalleryStore = defineStore('gallery', () => {
     }
   }
 
-  function loadImages(): Promise<void> {
+  function loadImages(targetPage = page.value): Promise<void> {
     // Bound IPC work to one active query and the latest pending query.
-    pendingQuery = { page: page.value, pageSize: pageSize.value, ...filters.value }
+    pendingQuery = { ...filters.value, page: targetPage, pageSize: pageSize.value }
     if (!loadPromise) {
       loading.value = true
       loadPromise = Promise.resolve().then(drainImageRequests)
@@ -89,7 +90,9 @@ export const useGalleryStore = defineStore('gallery', () => {
   async function deleteImages(ids: string[]): Promise<void> {
     await invokeIpc(IPC_CHANNELS.GALLERY_DELETE, { ids })
     images.value = images.value.filter((i) => !ids.includes(i.id))
-    total.value -= ids.length
+    total.value = Math.max(0, total.value - ids.length)
+    // Refill the page so continuous navigation does not skip images after deletion.
+    await loadImages(Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value))))
   }
 
   function setPage(p: number): void {

@@ -2,10 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { AddOutline, FlashOutline, TimeOutline } from '@vicons/ionicons5'
 import { NButton, NCollapse, NCollapseItem, NIcon, useMessage } from 'naive-ui'
 import PageShell from '@renderer/components/common/PageShell.vue'
-import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
 import ProductionJobTable from '@renderer/components/jobs/ProductionJobTable.vue'
@@ -21,6 +21,7 @@ import { JOBS_REFRESH_INTERVAL_MS, PRODUCTION_RECENT_RESULTS_LIMIT } from '@rend
 import { buildBatchStatusLabels } from '@renderer/utils/view-labels'
 
 const { t } = useI18n()
+const router = useRouter()
 const message = useMessage()
 const connectionStore = useConnectionStore()
 const galleryStore = useGalleryStore()
@@ -51,16 +52,29 @@ const runningJob = computed(
 const queuedJobs = computed(() =>
   batchJobs.value.filter(
     (job) =>
-      job.status === 'draft' ||
-      job.status === 'queued' ||
-      (job.status === 'paused' && job.id !== runningJob.value?.id)
+      Number(job.uncertain_tasks || 0) === 0 &&
+      (job.status === 'draft' ||
+        job.status === 'queued' ||
+        (job.status === 'paused' && job.id !== runningJob.value?.id))
+  )
+)
+const attentionJobs = computed(() =>
+  batchJobs.value.filter(
+    (job) =>
+      job.id !== runningJob.value?.id &&
+      (job.status === 'failed' || Number(job.uncertain_tasks || 0) > 0)
   )
 )
 const completedJobs = computed(() =>
-  batchJobs.value.filter((job) =>
-    ['completed', 'failed', 'cancelled'].includes(job.status as string)
+  batchJobs.value.filter(
+    (job) =>
+      ['completed', 'cancelled'].includes(job.status as string) &&
+      Number(job.uncertain_tasks || 0) === 0
   )
 )
+function openResults(jobId: string): void {
+  void router.push({ name: 'gallery', query: { jobId } })
+}
 const runningJobEta = computed(() => {
   const etaMs = runningJob.value?.etaMs
   if (!etaMs || etaMs <= 0) return null
@@ -281,14 +295,52 @@ onUnmounted(() => {
         />
 
         <section v-else class="production-empty-run">
-          <ActionableEmptyState
-            :title="t('jobs.production.noActiveRun')"
-            :description="t('jobs.production.noActiveRunHint')"
-            :action-label="t('jobs.production.newGeneration')"
-            @action="openWizard('create')"
-          >
-            <template #icon><NIcon :component="FlashOutline" :size="28" /></template>
-          </ActionableEmptyState>
+          <NIcon :component="FlashOutline" :size="24" />
+          <div>
+            <h2>{{ t('jobs.production.noActiveRun') }}</h2>
+            <p>{{ t('jobs.production.readyHint') }}</p>
+          </div>
+        </section>
+
+        <section v-if="!loadingJobs && batchJobs.length === 0" class="production-setup">
+          <h2>{{ t('jobs.production.setupTitle') }}</h2>
+          <p>{{ t('jobs.production.setupHint') }}</p>
+          <div class="production-setup__actions">
+            <NButton secondary @click="router.push({ name: 'workflows' })">{{
+              t('jobs.production.openWorkflows')
+            }}</NButton>
+            <NButton secondary @click="router.push({ name: 'modules' })">{{
+              t('jobs.production.openModules')
+            }}</NButton>
+            <NButton type="primary" @click="openWizard('create')">{{
+              t('jobs.production.configureBatch')
+            }}</NButton>
+          </div>
+        </section>
+
+        <section
+          v-if="attentionJobs.length > 0"
+          class="production-section production-section--attention"
+        >
+          <header class="production-section__header">
+            <div>
+              <h2>{{ t('jobs.production.needsReview') }}</h2>
+              <p>{{ t('jobs.production.attentionHint') }}</p>
+            </div>
+            <span class="production-section__count">{{ attentionJobs.length }}</span>
+          </header>
+          <ProductionJobTable
+            :jobs="attentionJobs"
+            :status-labels="statusLabels"
+            :is-connected="connectionStore.isConnected"
+            :is-processing="queueStatus.isProcessing"
+            @start="handleStartJob"
+            @rerun="handleRerunJob"
+            @edit="(job) => openWizard('edit', job)"
+            @clone="(job) => openWizard('clone', job)"
+            @delete="handleDeleteJob"
+            @results="openResults"
+          />
         </section>
 
         <section class="production-section">
@@ -315,6 +367,7 @@ onUnmounted(() => {
             @clone="(job) => openWizard('clone', job)"
             @delete="handleDeleteJob"
             @move="handleMoveJob"
+            @results="openResults"
           />
           <div v-else class="production-section__empty">
             {{ loadingJobs ? t('common.loading') : t('jobs.production.queueEmpty') }}
@@ -341,6 +394,7 @@ onUnmounted(() => {
               @edit="(job) => openWizard('edit', job)"
               @clone="(job) => openWizard('clone', job)"
               @delete="handleDeleteJob"
+              @results="openResults"
             />
             <div v-else class="production-section__empty">
               {{ t('jobs.production.historyEmpty') }}
@@ -409,10 +463,39 @@ onUnmounted(() => {
 }
 
 .production-empty-run {
-  min-height: 254px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
   border: 1px dashed var(--app-border);
   border-radius: var(--radius-md);
   background: var(--app-surface-raised);
+}
+
+.production-empty-run h2,
+.production-setup h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.production-empty-run p,
+.production-setup p,
+.production-section__header p {
+  margin: 6px 0 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.production-setup {
+  padding: 4px 2px 12px;
+}
+.production-setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.production-section--attention {
+  border-color: var(--app-warning, #d9a441);
 }
 
 .production-section {

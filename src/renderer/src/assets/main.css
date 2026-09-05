@@ -58,7 +58,7 @@ h2 {
   --app-border-subtle: rgba(255, 255, 255, 0.065);
   --app-text-primary: rgba(255, 255, 255, 0.93);
   --app-text-muted: rgba(255, 255, 255, 0.62);
-  --app-text-subtle: rgba(255, 255, 255, 0.42);
+  --app-text-subtle: rgba(255, 255, 255, 0.56);
   --app-accent-blue: #69aef8;
   --app-success: #62d6a7;
   --app-warning: #e7b566;
@@ -76,7 +76,7 @@ h2 {
   --app-border-subtle: rgba(15, 23, 42, 0.075);
   --app-text-primary: rgba(15, 23, 42, 0.93);
   --app-text-muted: rgba(15, 23, 42, 0.64);
-  --app-text-subtle: rgba(15, 23, 42, 0.46);
+  --app-text-subtle: rgba(15, 23, 42, 0.6);
   --app-accent-blue: #2563eb;
   --app-success: #16845f;
   --app-warning: #9a5b00;

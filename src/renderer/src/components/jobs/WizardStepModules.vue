@@ -66,7 +66,7 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
 
 <template>
   <div>
-    <NGrid :cols="2" :x-gap="16">
+    <NGrid cols="1 540:2" :x-gap="16">
       <!-- Left: Module matrix -->
       <NGridItem>
         <div style="font-weight: 600; margin-bottom: 8px">

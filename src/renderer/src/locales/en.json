@@ -44,7 +44,11 @@
       "directory": "Output Directory",
       "browse": "Browse",
       "folderPattern": "Folder Structure Pattern",
-      "filePattern": "Filename Pattern"
+      "filePattern": "Filename Pattern",
+      "directoryPlaceholder": "Choose an output folder",
+      "exampleRoot": "Selected output folder",
+      "exampleTitle": "Example output path",
+      "exampleHint": "First PNG example for the Portraits job with Alice, Casual and Smile. Actual names, dates, extensions and duplicate suffixes depend on the generated output."
     },
     "general": {
       "title": "General",
@@ -113,6 +117,12 @@
         "remove": "Remove generated configs",
         "configPath": "Config file path"
       }
+    },
+    "sections": {
+      "connection": "Connection",
+      "output": "Output",
+      "general": "General",
+      "advanced": "Advanced · MCP"
     }
   },
   "workflow": {
@@ -304,8 +314,8 @@
       "failed": "Failed"
     },
     "wizard": {
-      "editTitle": "Edit Batch Job",
-      "createTitle": "New Batch Job",
+      "editTitle": "Edit generation",
+      "createTitle": "New generation",
       "namePlaceholder": "Batch job name",
       "nameExamplePlaceholder": "e.g., CharacterA Emotion Set",
       "workflowLabel": "Workflow",
@@ -326,7 +336,7 @@
       "slotSection": "Prompt Slot Mapping",
       "slotSectionShort": "Prompt Slots",
       "noSlots": "No prompt slots detected in workflow. Set variable roles in workflow details.",
-      "noSlotsShort": "No prompt slots detected. Set variable roles in workflow details.",
+      "noSlotsShort": "No prompt slots. Assign positive or negative prompt roles in the variable settings below.",
       "positive": "Positive",
       "negative": "Negative",
       "actionInject": "Inject Module Prompt",
@@ -388,7 +398,21 @@
       "prev": "← Previous",
       "next": "Next →"
     },
-    "copySuffix": "(copy)"
+    "copySuffix": "(copy)",
+    "editor": {
+      "hint": "Configure the workflow and combinations, review the image count, then save your job.",
+      "summary": "Generation summary",
+      "formula": "{combinations} combinations × {count} images each",
+      "selectItemsHint": "Select module items to calculate the image count.",
+      "saveHint": "Saving adds the job to your queue. Generation begins only when you start the job.",
+      "requiredHint": "A job name, workflow and at least one item combination are required.",
+      "editRoles": "Configure workflow variable roles",
+      "rolesHint": "Role changes are saved to the original workflow immediately. Your current job name and module selections are preserved.",
+      "roleLabel": "{name} role",
+      "roleSaveFailed": "Could not save the variable role.",
+      "variablesFailed": "Could not load workflow variables. Reload before saving.",
+      "outputSettings": "Output and advanced settings"
+    }
   },
   "queue": {
     "title": "Queue Monitor",
@@ -436,7 +460,8 @@
       "bulkDeleted": "{count} images removed from the gallery",
       "copiedToClipboard": "Copied to clipboard",
       "copyFailed": "Copy failed",
-      "imageDeleted": "Image removed from the gallery"
+      "imageDeleted": "Image removed from the gallery",
+      "loadFailed": "Could not load images. Please try again."
     },
     "ratingPlaceholder": "Rating",
     "favoriteOn": "♥ Favorite",
@@ -465,7 +490,11 @@
       "style": "Style",
       "file": "File"
     },
-    "promptInfo": "Prompt Info"
+    "promptInfo": "Prompt Info",
+    "emptyHint": "Compare and curate your generated images here. Start your first job in Production.",
+    "selectPage": "Select this page",
+    "jobFilterActive": "Showing results from the selected job.",
+    "showAllJobs": "All job results"
   },
   "common": {
     "save": "Save",
@@ -585,7 +614,15 @@
         "generation": "Generate",
         "postprocess": "Post-process",
         "save": "Save"
-      }
+      },
+      "readyHint": "Configure a new batch or start a job from the queue.",
+      "setupTitle": "Prepare your first generation",
+      "setupHint": "Import a workflow, prepare prompt modules if needed, then configure your combinations.",
+      "openWorkflows": "1. Prepare workflow",
+      "openModules": "2. Browse modules",
+      "configureBatch": "3. Configure batch",
+      "attentionHint": "Failed jobs and jobs with unconfirmed results appear here. Jobs with uncertain results cannot be rerun or deleted.",
+      "viewResults": "View results"
     }
   },
   "dashboard": {

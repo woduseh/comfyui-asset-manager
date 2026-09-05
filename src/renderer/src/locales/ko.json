@@ -44,7 +44,11 @@
       "directory": "출력 디렉토리",
       "browse": "찾아보기",
       "folderPattern": "폴더 구조 패턴",
-      "filePattern": "파일명 패턴"
+      "filePattern": "파일명 패턴",
+      "directoryPlaceholder": "출력 폴더를 선택하세요",
+      "exampleRoot": "선택한 출력 폴더",
+      "exampleTitle": "출력 경로 예시",
+      "exampleHint": "Portraits 작업의 Alice · Casual · Smile, 첫 번째 PNG 이미지 예시예요. 실제 이름·날짜·확장자와 중복 파일 번호는 생성 결과에 따라 달라져요."
     },
     "general": {
       "title": "일반",
@@ -113,6 +117,12 @@
         "remove": "생성한 설정 제거",
         "configPath": "설정 파일 경로"
       }
+    },
+    "sections": {
+      "connection": "연결",
+      "output": "출력",
+      "general": "일반",
+      "advanced": "고급 · MCP"
     }
   },
   "workflow": {
@@ -304,8 +314,8 @@
       "failed": "실패"
     },
     "wizard": {
-      "editTitle": "배치 작업 수정",
-      "createTitle": "새 배치 작업",
+      "editTitle": "생성 구성 편집",
+      "createTitle": "새 생성 구성",
       "namePlaceholder": "배치 작업 이름",
       "nameExamplePlaceholder": "예: 캐릭터A 감정 세트",
       "workflowLabel": "워크플로우",
@@ -326,7 +336,7 @@
       "slotSection": "프롬프트 슬롯 매핑",
       "slotSectionShort": "프롬프트 슬롯",
       "noSlots": "워크플로우에 감지된 프롬프트 슬롯이 없습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.",
-      "noSlotsShort": "워크플로우에서 프롬프트 슬롯이 감지되지 않았습니다. 워크플로우 상세에서 변수 역할을 설정해주세요.",
+      "noSlotsShort": "프롬프트 슬롯이 없습니다. 아래 변수 역할 설정에서 긍정·부정 프롬프트 역할을 지정하세요.",
       "positive": "긍정",
       "negative": "부정",
       "actionInject": "모듈 프롬프트 주입",
@@ -388,7 +398,21 @@
       "prev": "← 이전",
       "next": "다음 →"
     },
-    "copySuffix": "(복사)"
+    "copySuffix": "(복사)",
+    "editor": {
+      "hint": "워크플로우와 조합을 구성하고 예상 수량을 확인한 뒤 작업을 저장하세요.",
+      "summary": "생성 요약",
+      "formula": "{combinations}개 조합 × 조합당 {count}장",
+      "selectItemsHint": "모듈에서 사용할 아이템을 선택하면 예상 수량이 표시됩니다.",
+      "saveHint": "저장한 작업은 생성 대기열에 추가됩니다. 실제 생성은 작업을 시작할 때 실행됩니다.",
+      "requiredHint": "작업 이름, 워크플로우, 하나 이상의 아이템 조합이 필요합니다.",
+      "editRoles": "워크플로우 변수 역할 설정",
+      "rolesHint": "역할 변경은 원본 워크플로우에 즉시 저장됩니다. 현재 작성 중인 작업 이름과 모듈 선택은 유지됩니다.",
+      "roleLabel": "{name} 역할",
+      "roleSaveFailed": "변수 역할을 저장하지 못했습니다.",
+      "variablesFailed": "워크플로우 변수를 불러오지 못했습니다. 다시 불러온 뒤 저장하세요.",
+      "outputSettings": "출력과 고급 설정"
+    }
   },
   "queue": {
     "title": "큐 모니터",
@@ -436,7 +460,8 @@
       "bulkDeleted": "{count}장이 갤러리에서 제거됨",
       "copiedToClipboard": "클립보드에 복사됨",
       "copyFailed": "복사 실패",
-      "imageDeleted": "이미지가 갤러리에서 제거됨"
+      "imageDeleted": "이미지가 갤러리에서 제거됨",
+      "loadFailed": "이미지를 불러오지 못했어요. 다시 시도해주세요."
     },
     "ratingPlaceholder": "평점",
     "favoriteOn": "♥ 즐겨찾기",
@@ -465,7 +490,11 @@
       "style": "스타일",
       "file": "파일"
     },
-    "promptInfo": "프롬프트 정보"
+    "promptInfo": "프롬프트 정보",
+    "emptyHint": "생성한 이미지를 여기에서 비교하고 선별할 수 있어요. 프로덕션에서 첫 작업을 시작해보세요.",
+    "selectPage": "현재 페이지 선택",
+    "jobFilterActive": "선택한 작업의 결과를 보고 있어요.",
+    "showAllJobs": "모든 작업 결과"
   },
   "common": {
     "save": "저장",
@@ -585,7 +614,15 @@
         "generation": "이미지 생성",
         "postprocess": "후처리",
         "save": "저장"
-      }
+      },
+      "readyHint": "새 작업을 구성하거나 대기열의 작업을 시작하세요.",
+      "setupTitle": "첫 생성을 준비하세요",
+      "setupHint": "워크플로우를 가져오고, 필요하면 프롬프트 모듈을 준비한 뒤 생성할 조합을 구성하세요.",
+      "openWorkflows": "1. 워크플로우 준비",
+      "openModules": "2. 모듈 둘러보기",
+      "configureBatch": "3. 생성 구성",
+      "attentionHint": "실패한 작업과 결과 확인이 필요한 작업이에요. 결과가 불확실한 작업은 재실행하거나 삭제할 수 없어요.",
+      "viewResults": "결과 보기"
     }
   },
   "dashboard": {

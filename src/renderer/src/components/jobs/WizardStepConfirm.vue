@@ -17,6 +17,7 @@ import {
 import type { BatchResources, ModuleSelectionUI, TaskPreview, VariableOverride } from './types'
 
 defineProps<{
+  showSummary?: boolean
   moduleSelections: ModuleSelectionUI[]
   taskPreview: TaskPreview
   batchResources: BatchResources | null
@@ -33,7 +34,7 @@ const { t } = useI18n()
 <template>
   <div>
     <!-- Preview stats -->
-    <NGrid :cols="3" :x-gap="16" style="margin-bottom: 16px">
+    <NGrid v-if="showSummary !== false" :cols="3" :x-gap="16" style="margin-bottom: 16px">
       <NGridItem>
         <NStatistic
           :label="t('batch.wizard.moduleDimensions')"
@@ -60,7 +61,11 @@ const { t } = useI18n()
       </NGridItem>
     </NGrid>
 
-    <NAlert v-if="taskPreview.totalTasks > 10000" type="warning" style="margin-bottom: 12px">
+    <NAlert
+      v-if="showSummary !== false && taskPreview.totalTasks > 10000"
+      type="warning"
+      style="margin-bottom: 12px"
+    >
       {{
         t('batch.wizard.tooManyWarningShort', {
           count: taskPreview.totalTasks.toLocaleString()

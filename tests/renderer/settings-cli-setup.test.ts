@@ -76,6 +76,9 @@ describe('settings CLI setup', () => {
       }
     )
     await flushPromises()
+    const advancedTab = wrapper.findAll('.n-tabs-tab').at(3)!
+    await advancedTab.trigger('click')
+    await flushPromises()
     invokeIpc.mockClear()
     return wrapper
       .findAllComponents(NButton)
@@ -84,6 +87,24 @@ describe('settings CLI setup', () => {
           button.text() === (locale === 'ko' ? ko : en).settings.mcp.cliSetup.setupClaudeCode
       )!
   }
+
+  it('keeps connection edits when switching sections without writing CLI configuration', async () => {
+    await setupButton('en')
+    await wrapper!.findAll('.n-tabs-tab')[0].trigger('click')
+    await flushPromises()
+    const hostInput = wrapper!.find(`[aria-label="${en.settings.server.host}"] input`)
+    await hostInput.setValue('render-server.local')
+    await wrapper!.findAll('.n-tabs-tab')[1].trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('.output-example').text()).toContain(
+      'Portraits/Alice/Casual/Smile/Alice_Casual_Smile_0001.png'
+    )
+    await wrapper!.findAll('.n-tabs-tab')[0].trigger('click')
+    await flushPromises()
+    expect((hostInput.element as HTMLInputElement).value).toBe('render-server.local')
+    expect(invokeIpc).not.toHaveBeenCalled()
+    expect(vueError).not.toHaveBeenCalled()
+  })
 
   it('refreshes managed configuration once after successful setup', async () => {
     setup.mockImplementation(() => {

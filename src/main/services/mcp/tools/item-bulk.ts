@@ -1,3 +1,4 @@
+import { jsonError, jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleRepo, moduleItemRepo } from './shared'
@@ -34,25 +35,12 @@ export function registerItemBulkTools(server: McpServer): void {
     },
     async ({ module_id, items }) => {
       if (items.length > MAX_BULK_UPDATE_ITEMS) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                error: `Too many items: ${items.length}. Maximum: ${MAX_BULK_UPDATE_ITEMS}`
-              })
-            }
-          ],
-          isError: true
-        }
+        return jsonError(`Too many items: ${items.length}. Maximum: ${MAX_BULK_UPDATE_ITEMS}`)
       }
 
       const mod = moduleRepo.get(module_id)
       if (!mod) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-          isError: true
-        }
+        return jsonError('Module not found')
       }
 
       const preparedItems = items.map((item, index) => ({
@@ -67,24 +55,13 @@ export function registerItemBulkTools(server: McpServer): void {
 
       const result = moduleItemRepo.bulkCreate(preparedItems)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                total: items.length,
-                succeeded: result.succeeded,
-                failed: result.failed,
-                ids: result.ids,
-                errors: result.errors
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        total: items.length,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        ids: result.ids,
+        errors: result.errors
+      })
     }
   )
 }

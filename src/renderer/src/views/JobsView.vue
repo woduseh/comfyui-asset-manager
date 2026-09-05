@@ -42,7 +42,10 @@ let recentImagesRequestId = 0
 
 const statusLabels = computed(() => buildBatchStatusLabels(t))
 const runningJob = computed(
-  () => batchJobs.value.find((job) => job.status === 'running' || job.status === 'paused') || null
+  () =>
+    batchJobs.value.find((job) => job.status === 'running') ||
+    batchJobs.value.find((job) => job.status === 'paused') ||
+    null
 )
 const runningQueueJob = computed(() =>
   runningJob.value
@@ -50,7 +53,12 @@ const runningQueueJob = computed(() =>
     : null
 )
 const queuedJobs = computed(() =>
-  batchJobs.value.filter((job) => job.status === 'draft' || job.status === 'queued')
+  batchJobs.value.filter(
+    (job) =>
+      job.status === 'draft' ||
+      job.status === 'queued' ||
+      (job.status === 'paused' && job.id !== runningJob.value?.id)
+  )
 )
 const completedJobs = computed(() =>
   batchJobs.value.filter((job) =>
@@ -277,7 +285,7 @@ onUnmounted(() => {
         <JobStatusBar
           v-if="runningJob"
           :job="runningJob"
-          :is-paused="queueStatus.isPaused"
+          :is-paused="queueStatus.isPaused || runningJob.status === 'paused'"
           :is-connected="connectionStore.isConnected"
           :eta="runningJobEta"
           :avg-task-duration-ms="runningQueueJob?.avgTaskDurationMs"

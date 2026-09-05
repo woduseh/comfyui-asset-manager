@@ -4,6 +4,7 @@ import { NAlert, NForm, NFormItem, NGrid, NGridItem, NInput, NInputNumber, NSele
 import type { SeedMode } from './types'
 
 defineProps<{
+  disabled?: boolean
   workflowOptions: Array<{ label: string; value: string }>
   generationWorkflowHint: string | null
   seedModeOptions: Array<{ label: string; value: string }>
@@ -20,7 +21,7 @@ const fixedSeed = defineModel<number>('fixedSeed', { required: true })
 
 <template>
   <div>
-    <NForm label-placement="top">
+    <NForm label-placement="top" :disabled="disabled">
       <NGrid :cols="2" :x-gap="16">
         <NGridItem>
           <NFormItem :label="t('batch.wizard.jobNameLabel')" required>

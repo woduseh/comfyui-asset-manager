@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { GalleryQuery } from '@renderer/types/ipc'
+import type { GalleryQuery } from '@shared/ipc-contract'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { DEFAULT_GALLERY_PAGE_SIZE } from '@renderer/constants'

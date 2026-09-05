@@ -10,12 +10,7 @@ import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
 import { queueManager } from './services/batch/queue-manager'
 import { handleLocalAssetRequestFromSettings } from './services/assets/local-asset'
-import {
-  SettingsRepository,
-  BatchJobRepository,
-  BatchTaskRepository,
-  GeneratedImageRepository
-} from './services/database/repositories'
+import { SettingsRepository, GeneratedImageRepository } from './services/database/repositories'
 import { comfyuiManager } from './services/comfyui/manager'
 import {
   DEFAULT_MCP_PORT,
@@ -25,7 +20,7 @@ import {
   WINDOW_MIN_HEIGHT
 } from './constants'
 import { installCrashHandlers } from './crash-handler'
-import { parseIntegerOrFallback } from './utils/number'
+import { parseIntegerOrFallback } from '@shared/number'
 import { getOrCreateMcpAuthConfig } from './services/mcp/auth'
 import { isAllowedExternalUrl } from './utils/external-url'
 
@@ -70,6 +65,7 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
+      contextIsolation: true,
       webSecurity: true
     }
   })
@@ -122,7 +118,7 @@ app.whenReady().then(async () => {
   })
 
   // Recover jobs interrupted by previous crash/force-quit
-  queueManager.recoverInterruptedJobs()
+  await queueManager.recoverInterruptedJobs()
 
   // Register IPC handlers
   registerIpcHandlers()
@@ -157,12 +153,7 @@ app.on('window-all-closed', () => {
 async function performShutdown(): Promise<void> {
   // Clean up running job state so it can be recovered on next startup
   try {
-    if (queueManager.isProcessing && queueManager.currentJobId) {
-      const batchJobRepo = new BatchJobRepository()
-      const batchTaskRepo = new BatchTaskRepository()
-      batchTaskRepo.resetRunningTasksByJob(queueManager.currentJobId)
-      batchJobRepo.updateStatus(queueManager.currentJobId, 'paused')
-    }
+    await queueManager.shutdown()
   } catch (e) {
     log.warn('[before-quit] Failed to save running job state:', e)
   }

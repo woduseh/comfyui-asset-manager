@@ -1,49 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import type { BatchConfig } from '@shared/ipc-contract'
 import {
-  cartesianProduct,
-  expandBatchToTasks,
   expandBatchToTasksChunk,
   countTotalTasksFromData,
   calculateTaskCount,
-  resolveOutputPath,
-  type BatchConfig
+  resolveOutputPath
 } from '../../../../src/main/services/batch/task-generator'
 
 describe('Task Generator', () => {
-  describe('cartesianProduct', () => {
-    it('returns [[]] for empty input', () => {
-      expect(cartesianProduct([])).toEqual([[]])
-    })
-
-    it('handles single array', () => {
-      const result = cartesianProduct([['a', 'b', 'c']])
-      expect(result).toEqual([['a'], ['b'], ['c']])
-    })
-
-    it('produces all combinations of two arrays', () => {
-      const result = cartesianProduct([
-        ['a', 'b'],
-        ['1', '2']
-      ])
-      expect(result).toEqual([
-        ['a', '1'],
-        ['a', '2'],
-        ['b', '1'],
-        ['b', '2']
-      ])
-    })
-
-    it('produces correct count for three arrays', () => {
-      const result = cartesianProduct([['a', 'b'], ['1', '2', '3'], ['x']])
-      expect(result).toHaveLength(2 * 3 * 1)
-    })
-
-    it('handles array with single element', () => {
-      const result = cartesianProduct([['only']])
-      expect(result).toEqual([['only']])
-    })
-  })
-
   describe('calculateTaskCount', () => {
     it('returns correct count for simple selections', () => {
       const result = calculateTaskCount(
@@ -121,7 +85,7 @@ describe('Task Generator', () => {
     })
   })
 
-  describe('expandBatchToTasks', () => {
+  describe('task prompt generation', () => {
     const makeConfig = (overrides?: Partial<BatchConfig>): BatchConfig => ({
       name: 'Test Batch',
       workflowId: 'wf-1',
@@ -178,20 +142,20 @@ describe('Task Generator', () => {
 
     it('generates correct number of tasks', () => {
       const config = makeConfig()
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       // 1 character × 2 emotions × 2 per combo = 4
       expect(tasks).toHaveLength(4)
     })
 
     it('assigns correct sort orders', () => {
       const config = makeConfig()
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks.map((t) => t.sortOrder)).toEqual([0, 1, 2, 3])
     })
 
     it('extracts metadata correctly', () => {
       const config = makeConfig()
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks[0].metadata.characterName).toBe('Alice')
       expect(tasks[0].metadata.emotionName).toBe('Happy')
       expect(tasks[2].metadata.emotionName).toBe('Sad')
@@ -199,14 +163,14 @@ describe('Task Generator', () => {
 
     it('uses fixed seed mode', () => {
       const config = makeConfig({ seedMode: 'fixed', fixedSeed: 100 })
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks[0].promptData.seed).toBe(100)
       expect(tasks[1].promptData.seed).toBe(100)
     })
 
     it('uses incremental seed mode', () => {
       const config = makeConfig({ seedMode: 'incremental', fixedSeed: 100 })
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks[0].promptData.seed).toBe(100)
       expect(tasks[1].promptData.seed).toBe(101)
       expect(tasks[2].promptData.seed).toBe(102)
@@ -214,7 +178,7 @@ describe('Task Generator', () => {
 
     it('generates prompts from character before emotion', () => {
       const config = makeConfig()
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       // character comes before emotion in type order
       expect(tasks[0].promptData.positive).toContain('1girl, alice')
       expect(tasks[0].promptData.positive).toContain('happy, smile')
@@ -226,7 +190,7 @@ describe('Task Generator', () => {
           { moduleId: 'nonexistent', moduleType: 'character', selectedItemIds: ['x'] }
         ]
       })
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks).toEqual([])
     })
 
@@ -252,13 +216,13 @@ describe('Task Generator', () => {
           { moduleId: 'mod-char', moduleType: 'character', selectedItemIds: ['char-1'] }
         ]
       })
-      const tasks = expandBatchToTasks(config, disabledModuleData)
+      const tasks = expandBatchToTasksChunk(config, disabledModuleData, 0, Number.MAX_SAFE_INTEGER)
       expect(tasks).toEqual([])
     })
 
     it('sets combinationIndex and imageIndex correctly', () => {
       const config = makeConfig({ countPerCombination: 3 })
-      const tasks = expandBatchToTasks(config, moduleData)
+      const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
       // combo 0 (Alice + Happy): images 0, 1, 2
       expect(tasks[0].metadata.combinationIndex).toBe(0)
       expect(tasks[0].metadata.imageIndex).toBe(0)
@@ -312,7 +276,7 @@ describe('Task Generator', () => {
             }
           ]
         })
-        const tasks = expandBatchToTasks(config, variantModuleData)
+        const tasks = expandBatchToTasksChunk(config, variantModuleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(1)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde hair')
       })
@@ -339,7 +303,7 @@ describe('Task Generator', () => {
             }
           ]
         })
-        const tasks = expandBatchToTasks(config, variantModuleData)
+        const tasks = expandBatchToTasksChunk(config, variantModuleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(1)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain(
           '1girl, alice, blonde_hair, blue_dress'
@@ -369,7 +333,7 @@ describe('Task Generator', () => {
             }
           ]
         })
-        const tasks = expandBatchToTasks(config, variantModuleData)
+        const tasks = expandBatchToTasksChunk(config, variantModuleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(1)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice, blonde hair')
       })
@@ -396,7 +360,7 @@ describe('Task Generator', () => {
             }
           ]
         })
-        const tasks = expandBatchToTasks(config, variantModuleData)
+        const tasks = expandBatchToTasksChunk(config, variantModuleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(1)
         // Non-negative module's negative field is ignored by composition engine
         expect(tasks[0].promptData.slotPrompts!['n2:text']).not.toContain('bad_anatomy')
@@ -437,7 +401,7 @@ describe('Task Generator', () => {
             }
           ]
         })
-        const tasks = expandBatchToTasks(config, variantModuleData)
+        const tasks = expandBatchToTasksChunk(config, variantModuleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(1)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('A cute girl named Alice')
         expect(tasks[0].promptData.slotPrompts!['n2:text']).toContain('1girl, alice, blonde_hair')
@@ -463,7 +427,7 @@ describe('Task Generator', () => {
           ]
         })
         // moduleData has no prompt_variants on its items — should fall back gracefully
-        const tasks = expandBatchToTasks(config, moduleData)
+        const tasks = expandBatchToTasksChunk(config, moduleData, 0, Number.MAX_SAFE_INTEGER)
         expect(tasks).toHaveLength(2)
         expect(tasks[0].promptData.slotPrompts!['n1:text']).toContain('1girl, alice')
       })
@@ -566,20 +530,65 @@ describe('Task Generator', () => {
       expect(tasks[3].promptData.seed).toBe(103)
     })
 
-    it('matches full expansion results', () => {
-      // Verify chunk generation matches full expandBatchToTasks
-      const fullTasks = expandBatchToTasks(config, moduleData)
-      const chunk1 = expandBatchToTasksChunk(config, moduleData, 0, 6)
-      const chunk2 = expandBatchToTasksChunk(config, moduleData, 6, 6)
-      const allChunked = [...chunk1, ...chunk2]
+    it('preserves Cartesian order across chunk boundaries', () => {
+      const tasks = [
+        ...expandBatchToTasksChunk(config, moduleData, 0, 5),
+        ...expandBatchToTasksChunk(config, moduleData, 5, 7)
+      ]
+      expect(
+        tasks.map((task) => [
+          task.metadata.characterName,
+          task.metadata.emotionName,
+          task.metadata.imageIndex,
+          task.sortOrder,
+          task.promptData.seed
+        ])
+      ).toEqual([
+        ['Alice', 'Happy', 0, 0, 100],
+        ['Alice', 'Happy', 1, 1, 101],
+        ['Alice', 'Sad', 0, 2, 102],
+        ['Alice', 'Sad', 1, 3, 103],
+        ['Alice', 'Angry', 0, 4, 104],
+        ['Alice', 'Angry', 1, 5, 105],
+        ['Bob', 'Happy', 0, 6, 106],
+        ['Bob', 'Happy', 1, 7, 107],
+        ['Bob', 'Sad', 0, 8, 108],
+        ['Bob', 'Sad', 1, 9, 109],
+        ['Bob', 'Angry', 0, 10, 110],
+        ['Bob', 'Angry', 1, 11, 111]
+      ])
+    })
 
-      expect(allChunked).toHaveLength(fullTasks.length)
-      for (let i = 0; i < fullTasks.length; i++) {
-        expect(allChunked[i].metadata).toEqual(fullTasks[i].metadata)
-        expect(allChunked[i].sortOrder).toBe(fullTasks[i].sortOrder)
-        expect(allChunked[i].promptData.seed).toBe(fullTasks[i].promptData.seed)
-        expect(allChunked[i].promptData.positive).toBe(fullTasks[i].promptData.positive)
-      }
+    it('generates a small chunk from a billion combinations without expanding the product', () => {
+      const data = Array.from({ length: 3 }, (_, moduleIndex) => ({
+        moduleId: `module-${moduleIndex}`,
+        moduleType: ['character', 'emotion', 'style'][moduleIndex],
+        items: Array.from({ length: 1000 }, (_, itemIndex) => ({
+          id: `item-${itemIndex}`,
+          name: `${moduleIndex}-${itemIndex}`,
+          prompt: `tag_${moduleIndex}_${itemIndex}`,
+          negative: '',
+          weight: 1,
+          enabled: true
+        }))
+      }))
+      const largeConfig = makeChunkConfig({
+        moduleSelections: data.map((module) => ({
+          moduleId: module.moduleId,
+          moduleType: module.moduleType,
+          selectedItemIds: module.items.map((item) => item.id)
+        })),
+        countPerCombination: 1
+      })
+      const tasks = expandBatchToTasksChunk(largeConfig, data, 999_999_998, 50)
+      expect(tasks).toHaveLength(2)
+      expect(tasks.map((task) => task.sortOrder)).toEqual([999_999_998, 999_999_999])
+      expect(tasks[1].metadata).toMatchObject({
+        characterName: '0-999',
+        emotionName: '1-999',
+        styleName: '2-999'
+      })
+      expect(tasks[1].promptData.seed).toBe(1_000_000_099)
     })
   })
 })

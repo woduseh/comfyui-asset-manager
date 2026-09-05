@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import log from '../../logger'
 import { MAX_IMPORT_FILE_SIZE_BYTES } from '../../constants'
-import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
 export interface ParsedModuleItem {
   name: string

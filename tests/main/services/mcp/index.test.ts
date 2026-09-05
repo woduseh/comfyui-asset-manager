@@ -100,6 +100,24 @@ describe('McpServerManager origin policy', () => {
     expect(response.headers['access-control-allow-origin']).toBeUndefined()
   })
 
+  it.each(['GET', 'DELETE'])('rejects %s with an unknown session', async (method) => {
+    const port = await getAvailablePort()
+    await mcpServerManager.start(port, TEST_AUTH)
+
+    const response = await request(port, '/mcp', {
+      method,
+      headers: {
+        Authorization: `Bearer ${TEST_AUTH.token}`,
+        'Mcp-Session-Id': 'missing'
+      }
+    })
+
+    expect(response.statusCode).toBe(400)
+    expect(JSON.parse(response.body)).toMatchObject({
+      error: { code: -32000, message: 'Bad Request: No valid session ID provided' }
+    })
+  })
+
   it('allows localhost origins', async () => {
     const port = await getAvailablePort()
     await mcpServerManager.start(port)

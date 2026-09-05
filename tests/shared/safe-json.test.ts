@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { isJsonObject, safeJsonParse } from '../../src/renderer/src/utils/safe-json'
+import { isJsonObject, safeJsonParse } from '../../src/shared/safe-json'
 
-describe('renderer safeJsonParse', () => {
+describe('safeJsonParse', () => {
   it('returns a parsed value when JSON is valid and passes validation', () => {
     const result = safeJsonParse<Record<string, unknown>>('{"name":"Alice"}', {
-      context: 'Renderer payload',
+      context: 'Test payload',
       validate: isJsonObject,
-      invalidShapeMessage: 'Renderer payload must be an object'
+      invalidShapeMessage: 'Test payload must be an object'
     })
 
     expect(result).toEqual({
@@ -16,25 +16,25 @@ describe('renderer safeJsonParse', () => {
   })
 
   it('returns an error when JSON is invalid', () => {
-    const result = safeJsonParse('{', { context: 'Renderer payload' })
+    const result = safeJsonParse('{', { context: 'Test payload' })
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
-      expect(result.error).toContain('Renderer payload')
+      expect(result.error).toContain('Test payload')
       expect(result.error).toContain('valid JSON')
     }
   })
 
   it('returns an error when validation fails', () => {
     const result = safeJsonParse<Record<string, unknown>>('[]', {
-      context: 'Renderer payload',
+      context: 'Test payload',
       validate: isJsonObject,
-      invalidShapeMessage: 'Renderer payload must be an object'
+      invalidShapeMessage: 'Test payload must be an object'
     })
 
     expect(result).toEqual({
       ok: false,
-      error: 'Renderer payload must be an object'
+      error: 'Test payload must be an object'
     })
   })
 
@@ -43,11 +43,11 @@ describe('renderer safeJsonParse', () => {
     ['null', null],
     ['empty string', '']
   ])('rejects %s input', (_label, value) => {
-    const result = safeJsonParse(value, { context: 'Renderer payload' })
+    const result = safeJsonParse(value, { context: 'Test payload' })
 
     expect(result.ok).toBe(false)
     if (!result.ok) {
-      expect(result.error).toContain('Renderer payload')
+      expect(result.error).toContain('Test payload')
     }
   })
 })

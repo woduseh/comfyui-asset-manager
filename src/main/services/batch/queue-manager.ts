@@ -5,6 +5,7 @@
  * monitors via WebSocket, downloads results, and saves to disk.
  */
 
+import { existsSync } from 'fs'
 import { BrowserWindow } from 'electron'
 import { comfyuiManager } from '../comfyui/manager'
 import { resolveConfiguredOutputRoot } from '../output-root'
@@ -15,8 +16,8 @@ import {
   WorkflowRepository,
   SettingsRepository
 } from '../database/repositories'
-import { setBatchMode, withTransaction } from '../database'
-import { IPC_CHANNELS } from '../../ipc/channels'
+import { setBatchMode, withTransaction, flushDatabase } from '../database'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import log from '../../logger'
 import {
@@ -27,9 +28,10 @@ import {
   CLEAR_PROMPT_DATA_CHUNK_INTERVAL
 } from '../../constants'
 import { expandBatchToTasksChunk } from '../batch/task-generator'
-import type { BatchConfig, ModuleDataSnapshot } from '../batch/task-generator'
-import { isJsonObject } from '../../utils/safe-json'
-import { parseIntegerOrFallback } from '../../utils/number'
+import type { BatchConfig } from '@shared/ipc-contract'
+import type { ModuleDataSnapshot } from '../batch/task-generator'
+import { isJsonObject } from '@shared/safe-json'
+import { parseIntegerOrFallback } from '@shared/number'
 import {
   computeEta,
   isBatchConfig,
@@ -47,6 +49,13 @@ import {
   downloadTaskImages,
   type TaskImageRecord
 } from './task-output'
+import { beginTaskOutputJournal, recoverTaskOutputJournals } from './output-journal'
+import {
+  waitForPrompt,
+  PromptOutcomeUnknownError,
+  PromptExecutionError,
+  PromptWaitCancelledError
+} from './wait-for-prompt'
 import { injectPromptData } from './prompt-injection'
 
 const batchJobRepo = new BatchJobRepository()
@@ -54,14 +63,6 @@ const batchTaskRepo = new BatchTaskRepository()
 const imageRepo = new GeneratedImageRepository()
 const workflowRepo = new WorkflowRepository()
 const settingsRepo = new SettingsRepository()
-
-export interface QueueManagerEvents {
-  progress: (data: { jobId: string; taskId: string; value: number; max: number }) => void
-  taskComplete: (data: { jobId: string; taskId: string }) => void
-  taskFailed: (data: { jobId: string; taskId: string; error: string }) => void
-  jobComplete: (data: { jobId: string }) => void
-  statusChange: (data: { isProcessing: boolean }) => void
-}
 
 interface TaskRunResult {
   success: boolean
@@ -76,6 +77,9 @@ class QueueManager {
   private _isCancelled = false
   private _currentJobId: string | null = null
   private _maxRetries = 3
+  private recoveryError: string | null = null
+  private activeRun: Promise<void> | null = null
+  private stopping = false
 
   get isProcessing(): boolean {
     return this._isProcessing
@@ -93,17 +97,51 @@ class QueueManager {
    * Recover jobs that were interrupted by a crash or force-quit.
    * Finds orphaned 'running' jobs, resets their stuck tasks, and marks them as 'paused'.
    */
-  recoverInterruptedJobs(): void {
-    const runningJobs = batchJobRepo.list('running')
-    for (const job of runningJobs) {
-      const jobId = job.id as string
-      log.info(`[QueueManager] Recovering interrupted job: ${jobId}`)
-      batchTaskRepo.resetRunningTasksByJob(jobId)
-      batchJobRepo.updateStatus(jobId, 'paused')
+  async recoverInterruptedJobs(): Promise<void> {
+    try {
+      for (const entry of recoverTaskOutputJournals((entry) => {
+        const task = batchTaskRepo.get(entry.taskId)
+        return (
+          task?.status === 'completed' &&
+          entry.paths.every((path) => existsSync(path) && imageRepo.hasTrackedAssetPath(path))
+        )
+      })) {
+        const task = batchTaskRepo.get(entry.taskId)
+        if (!task) throw new Error('Output journal references a missing task: ' + entry.taskId)
+        batchTaskRepo.updateStatus(entry.taskId, 'uncertain', {
+          error_message: 'Output persistence was interrupted; retained files require reconciliation'
+        })
+        this.syncProgress(task.job_id as string)
+        if (batchJobRepo.get(task.job_id as string)?.status !== 'cancelled')
+          batchJobRepo.updateStatus(task.job_id as string, 'paused')
+      }
+      for (const job of batchJobRepo.list()) {
+        if (job.status !== 'running' && job.status !== 'paused') continue
+        batchTaskRepo.resetRunningTasksByJob(job.id as string)
+        this.syncProgress(job.id as string)
+        batchJobRepo.updateStatus(job.id as string, 'paused')
+      }
+      await flushDatabase()
+    } catch (error) {
+      this.recoveryError = String(error)
+      log.error('Queue recovery requires attention:', error)
     }
-    if (runningJobs.length > 0) {
-      log.info(`[QueueManager] Recovered ${runningJobs.length} interrupted job(s)`)
-    }
+  }
+
+  private syncProgress(jobId: string): void {
+    batchJobRepo.updateProgress(
+      jobId,
+      batchTaskRepo.countByJobStatus(jobId).completed ?? 0,
+      batchTaskRepo.countByJobStatus(jobId).failed ?? 0
+    )
+  }
+
+  async shutdown(): Promise<void> {
+    this.stopping = true
+    this._isCancelled = true
+    this._isPaused = false
+    await this.activeRun
+    await flushDatabase()
   }
 
   /**
@@ -113,6 +151,10 @@ class QueueManager {
     jobId: string,
     allowedStatuses: readonly string[] = ['draft', 'paused']
   ): { success: boolean; error?: string } {
+    if (this.stopping) return { success: false, error: 'Application is shutting down' }
+    if (this.recoveryError) return { success: false, error: this.recoveryError }
+    if ((batchTaskRepo.countByJobStatus(jobId).uncertain ?? 0) > 0)
+      return { success: false, error: 'Task outcome requires reconciliation before resuming' }
     if (this._isProcessing) {
       return { success: false, error: 'Queue is already processing a job' }
     }
@@ -141,14 +183,14 @@ class QueueManager {
     return { success: true }
   }
 
-  async startJob(jobId: string): Promise<void> {
-    if (this._isProcessing) {
-      throw new Error('Queue is already processing a job')
-    }
-    if (!comfyuiManager.isConnected) {
-      throw new Error('Not connected to ComfyUI server')
-    }
+  startJob(jobId: string): Promise<void> {
+    const check = this.preflightStart(jobId)
+    if (!check.success) return Promise.reject(new Error(check.error))
+    this.activeRun = this.runJob(jobId)
+    return this.activeRun
+  }
 
+  private async runJob(jobId: string): Promise<void> {
     this._isProcessing = true
     this._isPaused = false
     this._isCancelled = false
@@ -161,18 +203,32 @@ class QueueManager {
     this._maxRetries = parseIntegerOrFallback(retryStr, 3)
 
     batchJobRepo.updateStatus(jobId, 'running')
+    let persistenceError: unknown
 
     try {
       await this.processJob(jobId)
     } catch (error) {
       log.error('Job execution error:', error)
-      batchJobRepo.updateStatus(jobId, 'failed')
+      batchJobRepo.updateStatus(
+        jobId,
+        this._isCancelled ? (this.stopping ? 'paused' : 'cancelled') : 'failed'
+      )
     } finally {
-      this._isProcessing = false
-      this._currentJobId = null
-      setBatchMode(false)
-      this.sendStatusToRenderer()
+      if (this.stopping) batchJobRepo.updateStatus(jobId, 'paused')
+      try {
+        await flushDatabase()
+      } catch (error) {
+        this.recoveryError = 'Database durability requires attention: ' + String(error)
+        persistenceError = error
+      } finally {
+        this._isProcessing = false
+        this._isPaused = false
+        this._currentJobId = null
+        setBatchMode(false)
+        this.sendStatusToRenderer()
+      }
     }
+    if (persistenceError) throw persistenceError
   }
 
   /**
@@ -190,6 +246,9 @@ class QueueManager {
    * Supports "hot resume" (active loop paused) and "cold resume" (restart after crash).
    */
   async resume(jobId: string): Promise<void> {
+    if (this.stopping) throw new Error('Application is shutting down')
+    if ((batchTaskRepo.countByJobStatus(jobId).uncertain ?? 0) > 0)
+      throw new Error('Task outcome requires reconciliation before resuming')
     // Hot resume: currently paused in an active processing loop
     if (this._currentJobId && this._isPaused) {
       if (this._currentJobId !== jobId) {
@@ -206,6 +265,8 @@ class QueueManager {
       if (!job || job.status !== 'paused') {
         throw new Error(`Batch job is not paused: ${jobId}`)
       }
+      const check = this.preflightStart(jobId, ['paused'])
+      if (!check.success) throw new Error(check.error)
       log.info(`[QueueManager] Cold resuming job: ${jobId}`)
       void this.startJob(jobId).catch((error) => {
         log.error('[QueueManager] Cold resume failed:', error)
@@ -227,9 +288,6 @@ class QueueManager {
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'cancelled')
       batchTaskRepo.cancelRemainingTasksByJob(this._currentJobId)
-      comfyuiManager.restClient.interrupt().catch((e) => {
-        log.debug('[Queue] ComfyUI interrupt failed during cancel:', e)
-      })
       return
     }
 
@@ -266,13 +324,12 @@ class QueueManager {
       'Batch job config has an invalid shape'
     )
 
-    let completedCount = (job.completed_tasks as number) || 0
-    let failedCount = (job.failed_tasks as number) || 0
+    let completedCount = batchTaskRepo.countByJobStatus(jobId).completed ?? 0
+    let failedCount = batchTaskRepo.countByJobStatus(jobId).failed ?? 0
     const totalTasks = (job.total_tasks as number) || 0
 
     // ETA tracking — limited to moving average window to avoid O(n²) accumulation
     const taskDurations: number[] = []
-    const CHUNK_SIZE = TASK_CHUNK_SIZE
     let chunksSinceLastClear = 0
 
     const executeTrackedTask = async (task: Record<string, unknown>): Promise<void> => {
@@ -310,87 +367,59 @@ class QueueManager {
       })
     }
 
-    // Determine execution mode: lazy (has snapshot) or legacy (pre-created tasks)
-    const hasSnapshot = !!job.module_data_snapshot
-    let moduleDataSnapshot: ModuleDataSnapshot | null = null
-    if (hasSnapshot) {
-      moduleDataSnapshot = parseRequiredJson<ModuleDataSnapshot>(
-        job.module_data_snapshot as string,
-        'Batch module snapshot',
-        isModuleDataSnapshot,
-        'Batch module snapshot must be an array'
-      )
-    }
-
-    if (hasSnapshot && moduleDataSnapshot) {
-      // Lazy expansion: generate tasks on-the-fly
-      let startIndex = completedCount + failedCount
-
-      while (startIndex < totalTasks) {
-        const generatedTasks = expandBatchToTasksChunk(
-          jobConfig,
-          moduleDataSnapshot,
-          startIndex,
-          CHUNK_SIZE
+    const moduleDataSnapshot = job.module_data_snapshot
+      ? parseRequiredJson<ModuleDataSnapshot>(
+          job.module_data_snapshot as string,
+          'Batch module snapshot',
+          isModuleDataSnapshot,
+          'Batch module snapshot must be an array'
         )
-        if (generatedTasks.length === 0) break
+      : null
 
-        for (const genTask of generatedTasks) {
-          while (this._isPaused) {
-            await this.sleep(PAUSE_CHECK_INTERVAL_MS)
-            if (this._isCancelled) break
-          }
-          if (this._isCancelled) break
-
-          // Create a single task row just-in-time
-          const taskId = batchTaskRepo.createSingle({
-            job_id: jobId,
-            prompt_data: JSON.stringify(genTask.promptData),
-            sort_order: genTask.sortOrder,
-            metadata: JSON.stringify(genTask.metadata)
+    while (!this._isCancelled) {
+      let tasks = batchTaskRepo.listByJobPending(jobId, TASK_CHUNK_SIZE)
+      if (tasks.length === 0 && moduleDataSnapshot) {
+        const startIndex = batchTaskRepo.nextSortOrder(jobId)
+        if (startIndex < totalTasks) {
+          const generated = expandBatchToTasksChunk(
+            jobConfig,
+            moduleDataSnapshot,
+            startIndex,
+            TASK_CHUNK_SIZE
+          )
+          withTransaction(() => {
+            for (const task of generated)
+              batchTaskRepo.createSingle({
+                job_id: jobId,
+                prompt_data: JSON.stringify(task.promptData),
+                metadata: JSON.stringify(task.metadata),
+                sort_order: task.sortOrder
+              })
           })
-
-          const taskRecord: Record<string, unknown> = {
-            id: taskId,
-            prompt_data: JSON.stringify(genTask.promptData),
-            metadata: JSON.stringify(genTask.metadata),
-            retry_count: 0
-          }
-
-          await executeTrackedTask(taskRecord)
-        }
-
-        startIndex = completedCount + failedCount
-        if (this._isCancelled) break
-
-        // Periodically clear prompt_data from completed tasks to free DB space
-        chunksSinceLastClear++
-        if (chunksSinceLastClear >= CLEAR_PROMPT_DATA_CHUNK_INTERVAL) {
-          batchTaskRepo.clearPromptDataForCompleted(jobId)
-          chunksSinceLastClear = 0
+          tasks = batchTaskRepo.listByJobPending(jobId, TASK_CHUNK_SIZE)
         }
       }
-    } else {
-      // Legacy mode: process pre-created tasks from DB
-      while (true) {
-        const tasks = batchTaskRepo.listByJobPending(jobId, CHUNK_SIZE)
-        if (tasks.length === 0) break
+      if (tasks.length === 0) break
 
-        for (const task of tasks) {
-          while (this._isPaused) {
-            await this.sleep(PAUSE_CHECK_INTERVAL_MS)
-            if (this._isCancelled) break
-          }
-          if (this._isCancelled) break
-
-          await executeTrackedTask(task)
+      for (const task of tasks) {
+        while (this._isPaused && !this._isCancelled) {
+          await this.sleep(PAUSE_CHECK_INTERVAL_MS)
         }
-
         if (this._isCancelled) break
+
+        await executeTrackedTask(task)
+      }
+
+      if (this._isCancelled) break
+      if (moduleDataSnapshot && ++chunksSinceLastClear >= CLEAR_PROMPT_DATA_CHUNK_INTERVAL) {
+        batchTaskRepo.clearPromptDataForCompleted(jobId)
+        chunksSinceLastClear = 0
       }
     }
 
     if (!this._isCancelled) {
+      if (completedCount + failedCount !== totalTasks)
+        throw new Error('Task counts do not cover the job')
       batchJobRepo.updateStatus(jobId, 'completed')
       this.sendToRenderer(IPC_CHANNELS.QUEUE_JOB_COMPLETED, { jobId })
     }
@@ -439,6 +468,22 @@ class QueueManager {
         }
       } catch (error) {
         const taskError = error instanceof Error ? error : new Error(String(error))
+        if (
+          taskError instanceof PromptOutcomeUnknownError ||
+          taskError instanceof PromptWaitCancelledError
+        ) {
+          batchTaskRepo.updateStatus(
+            taskId,
+            this.stopping && taskError instanceof PromptWaitCancelledError && task.comfyui_prompt_id
+              ? 'pending'
+              : 'uncertain',
+            { error_message: taskError.message }
+          )
+          this.syncProgress(jobId)
+          this._isCancelled = true
+          if (batchJobRepo.get(jobId)?.status !== 'cancelled')
+            batchJobRepo.updateStatus(jobId, 'paused')
+        }
         if (this._isCancelled || taskError.message === 'Cancelled') {
           return {
             success: false,
@@ -458,9 +503,18 @@ class QueueManager {
           }
         }
 
+        if (taskError instanceof PromptExecutionError) {
+          task.comfyui_prompt_id = null
+        }
+        while (this._isPaused && !this._isCancelled) await this.sleep(PAUSE_CHECK_INTERVAL_MS)
+        if (this._isCancelled)
+          return { success: false, cancelled: true, durationMs: Date.now() - startedAt }
         retryCount++
         task.retry_count = retryCount
-        batchTaskRepo.updateStatus(taskId, 'retrying', { error_message: taskError.message })
+        batchTaskRepo.updateStatus(taskId, 'retrying', {
+          error_message: taskError.message,
+          ...(taskError instanceof PromptExecutionError ? { comfyui_prompt_id: null } : {})
+        })
       }
     }
   }
@@ -486,24 +540,34 @@ class QueueManager {
       'Batch task metadata has an invalid shape'
     )
 
-    batchTaskRepo.updateStatus(taskId, 'running')
-
-    // Clone the workflow and inject prompt data
     const workflowJson = structuredClone(baseApiJson)
     injectPromptData(workflowJson, promptData)
-
-    // Submit to ComfyUI
-    const result = await comfyuiManager.restClient.queuePrompt(
-      workflowJson,
-      comfyuiManager.clientId
-    )
-    const promptId = result.prompt_id
-
+    let promptId = task.comfyui_prompt_id as string | undefined
+    if (!promptId) {
+      batchTaskRepo.updateStatus(taskId, 'submitting')
+      await flushDatabase()
+      if (this._isCancelled) throw new PromptWaitCancelledError()
+      try {
+        const result = await comfyuiManager.restClient.queuePrompt(
+          workflowJson,
+          comfyuiManager.clientId
+        )
+        promptId = result.prompt_id
+        if (!promptId) throw new Error('Missing prompt ID')
+      } catch (error) {
+        throw new PromptOutcomeUnknownError('Submission outcome unknown: ' + String(error))
+      }
+      task.comfyui_prompt_id = promptId
+    }
     batchTaskRepo.updateStatus(taskId, 'running', { comfyui_prompt_id: promptId })
-
-    // Wait for completion via polling history
+    try {
+      await flushDatabase()
+    } catch (error) {
+      throw new PromptOutcomeUnknownError('Could not persist accepted request: ' + String(error))
+    }
     const historyResult = await this.waitForCompletion(promptId)
-
+    const journal = beginTaskOutputJournal(taskId, promptId)
+    let committed = false
     const target: { savedPaths: string[]; imageRecords: TaskImageRecord[] } = {
       savedPaths: [],
       imageRecords: []
@@ -522,168 +586,61 @@ class QueueManager {
         jobId,
         getImage: (filename, subfolder, type) =>
           comfyuiManager.restClient.getImage(filename, subfolder, type),
-        target
+        target,
+        journal
       })
 
       if (target.imageRecords.length === 0) {
         throw new Error(`ComfyUI prompt ${promptId} completed without output images`)
       }
 
+      if (this._isCancelled) throw new Error('Cancelled')
       withTransaction(() => {
         for (const imageRecord of target.imageRecords) {
           imageRepo.create(imageRecord)
         }
         batchTaskRepo.updateStatus(taskId, 'completed', { result_path: target.savedPaths[0] })
+        this.syncProgress(jobId)
       })
+      committed = true
+      await flushDatabase()
     } catch (error) {
-      for (const failure of cleanupPartialOutputFiles(target.savedPaths)) {
-        log.warn(`[QueueManager] Failed to remove partial output ${failure.path}:`, failure.error)
-      }
+      if (committed)
+        throw new PromptOutcomeUnknownError('Output commit durability unknown: ' + String(error))
+      const failures = cleanupPartialOutputFiles(target.savedPaths)
+      if (failures.length)
+        throw new PromptOutcomeUnknownError(
+          'Partial output cleanup failed: ' + String(failures[0].error)
+        )
+      journal.discard()
+      if (this._isCancelled)
+        batchTaskRepo.updateStatus(taskId, this.stopping ? 'pending' : 'cancelled')
       throw error
-    } finally {
-      // Clean up ComfyUI history to free server memory, including failed download/persistence attempts.
-      try {
-        await comfyuiManager.restClient.deleteFromHistory([promptId])
-      } catch (error) {
-        log.debug('[QueueManager] Failed to clear ComfyUI history after task attempt:', error)
-      }
+    }
+    try {
+      journal.discard()
+    } catch (error) {
+      log.warn('Committed output journal cleanup failed:', error)
+    }
+    try {
+      await comfyuiManager.restClient.deleteFromHistory([promptId])
+    } catch (error) {
+      log.debug('Failed to clear committed ComfyUI history:', error)
     }
   }
 
-  /**
-   * Wait for ComfyUI prompt completion using WebSocket events (primary)
-   * with REST polling as fallback when WebSocket is disconnected.
-   */
-  private async waitForCompletion(
+  private waitForCompletion(
     promptId: string,
     timeoutMs = TASK_EXECUTION_TIMEOUT_MS
-  ): Promise<{ outputs: Record<string, unknown> } | null> {
-    const ws = comfyuiManager.webSocket
-
-    if (ws.isConnected) {
-      // Primary: WebSocket event-based detection (no polling overhead)
-      return this.waitForCompletionViaWebSocket(promptId, timeoutMs)
-    } else {
-      // Fallback: REST polling with longer interval
-      return this.waitForCompletionViaPolling(promptId, timeoutMs)
-    }
-  }
-
-  /**
-   * WebSocket-based completion detection — zero polling overhead.
-   * Listens for executionComplete/executionError events matching our promptId.
-   */
-  private waitForCompletionViaWebSocket(
-    promptId: string,
-    timeoutMs: number
-  ): Promise<{ outputs: Record<string, unknown> } | null> {
-    return new Promise((resolve, reject) => {
-      const ws = comfyuiManager.webSocket
-      let timer: ReturnType<typeof setTimeout> | null = null
-      let cancelTimer: ReturnType<typeof setInterval> | null = null
-      let settled = false
-
-      const cleanup = (): void => {
-        if (settled) return
-        settled = true
-        ws.removeListener('executionComplete', onComplete)
-        ws.removeListener('executionError', onError)
-        ws.removeListener('disconnected', onDisconnect)
-        if (timer) clearTimeout(timer)
-        if (cancelTimer) clearInterval(cancelTimer)
-      }
-
-      const onComplete = (data: { promptId: string }): void => {
-        if (data.promptId !== promptId) return
-        cleanup()
-        // Fetch outputs from history (single request, not polling)
-        comfyuiManager.restClient
-          .getHistoryEntry(promptId)
-          .then((entry) => {
-            if (entry) {
-              const e = entry as { outputs?: Record<string, unknown> }
-              resolve(e.outputs ? { outputs: e.outputs } : null)
-            } else {
-              resolve(null)
-            }
-          })
-          .catch(() => resolve(null))
-      }
-
-      const onError = (data: { promptId: string; message: string }): void => {
-        if (data.promptId !== promptId) return
-        cleanup()
-        reject(new Error(`ComfyUI execution error: ${data.message}`))
-      }
-
-      const onDisconnect = (): void => {
-        // WebSocket dropped — fall back to REST polling for this prompt
-        cleanup()
-        this.waitForCompletionViaPolling(promptId, timeoutMs).then(resolve).catch(reject)
-      }
-
-      ws.on('executionComplete', onComplete)
-      ws.on('executionError', onError)
-      ws.on('disconnected', onDisconnect)
-
-      // Timeout
-      timer = setTimeout(() => {
-        cleanup()
-        reject(new Error(`Timeout waiting for prompt ${promptId}`))
-      }, timeoutMs)
-
-      // Periodically check if job was cancelled
-      cancelTimer = setInterval(() => {
-        if (this._isCancelled) {
-          cleanup()
-          reject(new Error('Cancelled'))
-        }
-      }, PAUSE_CHECK_INTERVAL_MS)
+  ): Promise<{ outputs: Record<string, unknown> }> {
+    return waitForPrompt({
+      client: comfyuiManager.restClient,
+      webSocket: comfyuiManager.webSocket,
+      promptId,
+      timeoutMs,
+      pollIntervalMs: COMPLETION_POLL_INTERVAL_MS,
+      isCancelled: () => this._isCancelled
     })
-  }
-
-  /**
-   * REST polling fallback — used when WebSocket is unavailable.
-   * Polls at 5-second intervals to minimize server load.
-   */
-  private async waitForCompletionViaPolling(
-    promptId: string,
-    timeoutMs: number
-  ): Promise<{ outputs: Record<string, unknown> } | null> {
-    const startTime = Date.now()
-    const POLL_INTERVAL = COMPLETION_POLL_INTERVAL_MS
-
-    while (Date.now() - startTime < timeoutMs) {
-      if (this._isCancelled) throw new Error('Cancelled')
-
-      try {
-        const history = await comfyuiManager.restClient.getHistory(promptId)
-        if (history && history[promptId]) {
-          const entry = history[promptId] as {
-            status?: { status_str?: string; completed: boolean }
-            outputs?: Record<string, unknown>
-          }
-
-          if (entry.status?.status_str === 'error') {
-            throw new Error('ComfyUI execution error')
-          }
-
-          if (entry.status?.completed && entry.outputs) {
-            return { outputs: entry.outputs }
-          }
-
-          if (entry.outputs && Object.keys(entry.outputs).length > 0) {
-            return { outputs: entry.outputs }
-          }
-        }
-      } catch (e) {
-        if ((e as Error).message === 'ComfyUI execution error') throw e
-      }
-
-      await this.sleep(POLL_INTERVAL)
-    }
-
-    throw new Error(`Timeout waiting for prompt ${promptId}`)
   }
 
   private sleep(ms: number): Promise<void> {

@@ -1,18 +1,13 @@
 import * as pty from 'node-pty'
 import { BrowserWindow } from 'electron'
 import { homedir } from 'os'
-import { IPC_CHANNELS } from '../../ipc/channels'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import { mcpServerManager } from '../mcp'
 import { MAX_TERMINAL_INSTANCES } from '../../constants'
 
-interface TerminalInstance {
-  pty: pty.IPty
-  id: string
-}
-
 class PtyManager {
-  private terminals = new Map<string, TerminalInstance>()
+  private terminals = new Map<string, pty.IPty>()
   private nextId = 1
 
   create(cols: number, rows: number): string {
@@ -49,34 +44,28 @@ class PtyManager {
       this.terminals.delete(id)
     })
 
-    this.terminals.set(id, { pty: ptyProcess, id })
+    this.terminals.set(id, ptyProcess)
     return id
   }
 
   write(id: string, data: string): void {
-    const terminal = this.terminals.get(id)
-    if (terminal) {
-      terminal.pty.write(data)
-    }
+    this.terminals.get(id)?.write(data)
   }
 
   resize(id: string, cols: number, rows: number): void {
-    const terminal = this.terminals.get(id)
-    if (terminal) {
-      terminal.pty.resize(cols, rows)
-    }
+    this.terminals.get(id)?.resize(cols, rows)
   }
 
   destroy(id: string): void {
     const terminal = this.terminals.get(id)
     if (terminal) {
-      terminal.pty.kill()
+      terminal.kill()
       this.terminals.delete(id)
     }
   }
 
   destroyAll(): void {
-    for (const [id] of this.terminals) {
+    for (const id of this.terminals.keys()) {
       this.destroy(id)
     }
   }

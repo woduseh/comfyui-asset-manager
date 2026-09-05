@@ -112,6 +112,17 @@ describe('database transactions', () => {
 
     expect(getRows()).toEqual(['after', 'before'])
   })
+
+  it('rejects a flush before its transaction commits', async () => {
+    let prematureFlush: Promise<void> | undefined
+    databaseModule.withTransaction(() => {
+      databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('uncommitted')")
+      prematureFlush = databaseModule.flushDatabase()
+    })
+
+    await expect(prematureFlush).rejects.toThrow('uncommitted transaction')
+    await databaseModule.flushDatabase()
+  })
 })
 
 describe('database persistence queue', () => {
@@ -154,9 +165,59 @@ describe('database persistence queue', () => {
 
     databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('unsaved')")
     databaseModule.saveDatabase()
-    await databaseModule.flushDatabase()
+    await expect(databaseModule.flushDatabase()).rejects.toThrow('locked')
 
     expect(renameSpy).toHaveBeenCalledTimes(4)
     expect(readFileSync(databasePath)).toEqual(previousSnapshot)
+  })
+
+  it('persists the failed revision when an explicit retry succeeds', async () => {
+    const databasePath = join(testDirectory, 'data', 'comfyui_asset_manager.db')
+    const renameSpy = vi
+      .spyOn(fsPromises, 'rename')
+      .mockRejectedValueOnce(new Error('injected replacement failure'))
+
+    databaseModule.withTransaction(() => {
+      databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('retry-me')")
+    })
+    await expect(databaseModule.flushDatabase()).rejects.toThrow('injected replacement failure')
+    await databaseModule.flushDatabase()
+
+    const { default: initSqlJs } = await import('sql.js')
+    const SQL = await initSqlJs()
+    const persisted = new SQL.Database(readFileSync(databasePath))
+    try {
+      expect(persisted.exec('SELECT value FROM transaction_test')[0].values).toEqual([['retry-me']])
+      expect(renameSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      persisted.close()
+    }
+  })
+
+  it('retains background retries after an explicit flush rejects', async () => {
+    const originalRename = fsPromises.rename.bind(fsPromises)
+    let notifyReplacement: (() => void) | undefined
+    const replaced = new Promise<void>((resolveReplacement) => {
+      notifyReplacement = resolveReplacement
+    })
+    const renameSpy = vi
+      .spyOn(fsPromises, 'rename')
+      .mockRejectedValueOnce(new Error('temporary replacement failure'))
+      .mockImplementationOnce(async (oldPath, newPath) => {
+        await originalRename(oldPath, newPath)
+        notifyReplacement?.()
+      })
+    databaseModule.withTransaction(() => {
+      databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('background-retry')")
+    })
+
+    await expect(databaseModule.flushDatabase()).rejects.toThrow('temporary replacement failure')
+    await replaced
+    await databaseModule.flushDatabase()
+
+    expect(renameSpy).toHaveBeenCalledTimes(2)
+    await databaseModule.closeDatabase()
+    await databaseModule.initDatabase()
+    expect(getRows()).toEqual(['background-retry'])
   })
 })

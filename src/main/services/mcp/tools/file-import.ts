@@ -1,3 +1,4 @@
+import { jsonError, jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleRepo, moduleItemRepo } from './shared'
@@ -26,10 +27,7 @@ export function registerFileImportTools(server: McpServer): void {
     async ({ module_id, file_path, format, dry_run }) => {
       const mod = moduleRepo.get(module_id)
       if (!mod) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-          isError: true
-        }
+        return jsonError('Module not found')
       }
 
       let parseResult
@@ -37,10 +35,7 @@ export function registerFileImportTools(server: McpServer): void {
         parseResult = parseModuleItemsFile(file_path, format)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: msg }) }],
-          isError: true
-        }
+        return jsonError(msg)
       }
 
       const preview = parseResult.items.slice(0, 10).map((item) => ({
@@ -49,27 +44,16 @@ export function registerFileImportTools(server: McpServer): void {
       }))
 
       if (dry_run) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  dry_run: true,
-                  file_path,
-                  format: parseResult.format,
-                  total_parsed: parseResult.items.length,
-                  succeeded: 0,
-                  failed: 0,
-                  items_preview: preview,
-                  parse_errors: parseResult.errors
-                },
-                null,
-                2
-              )
-            }
-          ]
-        }
+        return jsonResult({
+          dry_run: true,
+          file_path,
+          format: parseResult.format,
+          total_parsed: parseResult.items.length,
+          succeeded: 0,
+          failed: 0,
+          items_preview: preview,
+          parse_errors: parseResult.errors
+        })
       }
 
       const preparedItems = parseResult.items.map((item, index) => ({
@@ -83,29 +67,18 @@ export function registerFileImportTools(server: McpServer): void {
 
       const result = moduleItemRepo.bulkCreate(preparedItems)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                dry_run: false,
-                file_path,
-                format: parseResult.format,
-                total_parsed: parseResult.items.length,
-                succeeded: result.succeeded,
-                failed: result.failed,
-                ids: result.ids,
-                items_preview: preview,
-                parse_errors: parseResult.errors,
-                create_errors: result.errors
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        dry_run: false,
+        file_path,
+        format: parseResult.format,
+        total_parsed: parseResult.items.length,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        ids: result.ids,
+        items_preview: preview,
+        parse_errors: parseResult.errors,
+        create_errors: result.errors
+      })
     }
   )
 }

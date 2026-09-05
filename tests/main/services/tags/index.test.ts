@@ -10,9 +10,7 @@ vi.mock('electron', () => ({
 vi.mock('../../../../src/main/services/tags/danbooru-api', () => ({
   validateTagOnline: vi.fn(),
   searchTagsOnline: vi.fn(),
-  checkOnlineAvailability: vi.fn(),
-  clearApiCache: vi.fn(),
-  resetOnlineStatus: vi.fn()
+  checkOnlineAvailability: vi.fn()
 }))
 
 import { tagService, CATEGORY_NAMES, CATEGORY_IDS } from '../../../../src/main/services/tags/index'

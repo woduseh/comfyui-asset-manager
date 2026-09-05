@@ -85,6 +85,7 @@ export interface BatchJobRecord extends Record<string, unknown> {
   total_tasks: number
   completed_tasks: number
   failed_tasks: number
+  uncertain_tasks?: number
   pipeline_config: string | null
   created_at: string
   started_at: string | null
@@ -93,6 +94,8 @@ export interface BatchJobRecord extends Record<string, unknown> {
 
 export type BatchTaskStatus =
   | 'pending'
+  | 'submitting'
+  | 'uncertain'
   | 'queued'
   | 'running'
   | 'completed'
@@ -179,18 +182,6 @@ export interface BatchConfig {
   pipelineConfig?: {
     steps: Array<{ workflowId: string; variableMappings: Record<string, string> }>
   }
-}
-
-export type BatchJobConfig = BatchConfig
-
-export interface ModuleSlotMapping {
-  variableId: string
-  moduleId: string
-}
-
-export interface MatrixSelection {
-  moduleId: string
-  selectedItemIds: string[]
 }
 
 export type GallerySortBy = 'created_at' | 'rating' | 'file_size'

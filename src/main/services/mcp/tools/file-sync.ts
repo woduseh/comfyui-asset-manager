@@ -1,3 +1,4 @@
+import { jsonError, jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleRepo, moduleItemRepo } from './shared'
@@ -5,6 +6,17 @@ import { parseModuleItemsFile } from '../file-parser'
 import type { ParsedModuleItem } from '../file-parser'
 import { writeModuleItemsFile } from '../file-serializer'
 import { diffModuleWithItems } from '../diff-engine'
+import { validatePromptVariants } from '../../../ipc/validators'
+
+function toParsedModuleItem(item: Record<string, unknown>): ParsedModuleItem {
+  const variants = validatePromptVariants(item.prompt_variants)
+  return {
+    name: (item.name as string) || '',
+    prompt: (item.prompt as string) || '',
+    negative: (item.negative as string) || undefined,
+    prompt_variants: Object.keys(variants).length ? variants : undefined
+  }
+}
 
 export function registerFileSyncTools(server: McpServer): void {
   // === Export / Diff / Sync ===
@@ -23,58 +35,24 @@ export function registerFileSyncTools(server: McpServer): void {
     async ({ module_id, file_path, format }) => {
       const mod = moduleRepo.get(module_id)
       if (!mod) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-          isError: true
-        }
+        return jsonError('Module not found')
       }
 
       const items = moduleItemRepo.list(module_id)
-      const parsedItems: ParsedModuleItem[] = items.map((item) => {
-        const parsed: ParsedModuleItem = {
-          name: (item.name as string) || '',
-          prompt: (item.prompt as string) || ''
-        }
-        const neg = item.negative as string
-        if (neg) parsed.negative = neg
-        const variantsStr = item.prompt_variants as string
-        if (variantsStr && variantsStr !== '{}') {
-          try {
-            parsed.prompt_variants = JSON.parse(variantsStr)
-          } catch (error) {
-            void error
-            // Skip invalid persisted variants so export can continue with the base item fields.
-          }
-        }
-        return parsed
-      })
+      const parsedItems: ParsedModuleItem[] = items.map(toParsedModuleItem)
 
       try {
         const result = writeModuleItemsFile(parsedItems, file_path, format)
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  file_path: result.filePath,
-                  format: result.format,
-                  items_exported: parsedItems.length,
-                  file_size_bytes: result.size,
-                  module_name: mod.name
-                },
-                null,
-                2
-              )
-            }
-          ]
-        }
+        return jsonResult({
+          file_path: result.filePath,
+          format: result.format,
+          items_exported: parsedItems.length,
+          file_size_bytes: result.size,
+          module_name: mod.name
+        })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: msg }) }],
-          isError: true
-        }
+        return jsonError(msg)
       }
     }
   )
@@ -93,10 +71,7 @@ export function registerFileSyncTools(server: McpServer): void {
     async ({ module_id, file_path, format }) => {
       const mod = moduleRepo.get(module_id)
       if (!mod) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-          isError: true
-        }
+        return jsonError('Module not found')
       }
 
       let parseResult
@@ -104,68 +79,40 @@ export function registerFileSyncTools(server: McpServer): void {
         parseResult = parseModuleItemsFile(file_path, format)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: msg }) }],
-          isError: true
-        }
+        return jsonError(msg)
       }
 
       const items = moduleItemRepo.list(module_id)
       const moduleItems = items.map((item) => ({
         id: item.id as string,
-        name: (item.name as string) || '',
-        prompt: (item.prompt as string) || '',
-        negative: (item.negative as string) || '',
-        prompt_variants: (() => {
-          const str = item.prompt_variants as string
-          if (str && str !== '{}') {
-            try {
-              return JSON.parse(str)
-            } catch (error) {
-              void error
-              return undefined
-            }
-          }
-          return undefined
-        })()
+        ...toParsedModuleItem(item)
       }))
 
       const diff = diffModuleWithItems(moduleItems, parseResult.items)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                module_name: mod.name,
-                file_path,
-                format: parseResult.format,
-                parse_errors: parseResult.errors,
-                summary: diff.summary,
-                added: diff.added.map((i) => ({
-                  name: i.name,
-                  prompt_preview: i.prompt.substring(0, 80)
-                })),
-                removed: diff.removed.map((i) => ({
-                  name: i.name,
-                  prompt_preview: i.prompt.substring(0, 80)
-                })),
-                modified: diff.modified.map((m) => ({
-                  name: m.name,
-                  module_item_id: m.module_item_id,
-                  added_tags: m.prompt_diff.added_tags,
-                  removed_tags: m.prompt_diff.removed_tags,
-                  negative_changed: !!m.negative_diff,
-                  variants_changed: m.variants_changed
-                }))
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        module_name: mod.name,
+        file_path,
+        format: parseResult.format,
+        parse_errors: parseResult.errors,
+        summary: diff.summary,
+        added: diff.added.map((i) => ({
+          name: i.name,
+          prompt_preview: i.prompt.substring(0, 80)
+        })),
+        removed: diff.removed.map((i) => ({
+          name: i.name,
+          prompt_preview: i.prompt.substring(0, 80)
+        })),
+        modified: diff.modified.map((m) => ({
+          name: m.name,
+          module_item_id: m.module_item_id,
+          added_tags: m.prompt_diff.added_tags,
+          removed_tags: m.prompt_diff.removed_tags,
+          negative_changed: !!m.negative_diff,
+          variants_changed: m.variants_changed
+        }))
+      })
     }
   )
 
@@ -193,10 +140,7 @@ export function registerFileSyncTools(server: McpServer): void {
     async ({ module_id, file_path, format, dry_run, delete_missing }) => {
       const mod = moduleRepo.get(module_id)
       if (!mod) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-          isError: true
-        }
+        return jsonError('Module not found')
       }
 
       let parseResult
@@ -204,62 +148,34 @@ export function registerFileSyncTools(server: McpServer): void {
         parseResult = parseModuleItemsFile(file_path, format)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: msg }) }],
-          isError: true
-        }
+        return jsonError(msg)
       }
 
       const items = moduleItemRepo.list(module_id)
       const moduleItems = items.map((item) => ({
         id: item.id as string,
-        name: (item.name as string) || '',
-        prompt: (item.prompt as string) || '',
-        negative: (item.negative as string) || '',
-        prompt_variants: (() => {
-          const str = item.prompt_variants as string
-          if (str && str !== '{}') {
-            try {
-              return JSON.parse(str)
-            } catch (error) {
-              void error
-              return undefined
-            }
-          }
-          return undefined
-        })()
+        ...toParsedModuleItem(item)
       }))
 
       const diff = diffModuleWithItems(moduleItems, parseResult.items)
 
       if (dry_run) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  dry_run: true,
-                  summary: {
-                    ...diff.summary,
-                    will_create: diff.added.length,
-                    will_update: diff.modified.length,
-                    will_delete: delete_missing ? diff.removed.length : 0
-                  },
-                  to_create: diff.added.map((i) => ({ name: i.name })),
-                  to_update: diff.modified.map((m) => ({
-                    name: m.name,
-                    added_tags: m.prompt_diff.added_tags.length,
-                    removed_tags: m.prompt_diff.removed_tags.length
-                  })),
-                  to_delete: delete_missing ? diff.removed.map((i) => ({ name: i.name })) : []
-                },
-                null,
-                2
-              )
-            }
-          ]
-        }
+        return jsonResult({
+          dry_run: true,
+          summary: {
+            ...diff.summary,
+            will_create: diff.added.length,
+            will_update: diff.modified.length,
+            will_delete: delete_missing ? diff.removed.length : 0
+          },
+          to_create: diff.added.map((i) => ({ name: i.name })),
+          to_update: diff.modified.map((m) => ({
+            name: m.name,
+            added_tags: m.prompt_diff.added_tags.length,
+            removed_tags: m.prompt_diff.removed_tags.length
+          })),
+          to_delete: delete_missing ? diff.removed.map((i) => ({ name: i.name })) : []
+        })
       }
 
       // Apply changes
@@ -330,25 +246,14 @@ export function registerFileSyncTools(server: McpServer): void {
         }
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                dry_run: false,
-                summary: diff.summary,
-                created,
-                updated,
-                deleted,
-                errors
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        dry_run: false,
+        summary: diff.summary,
+        created,
+        updated,
+        deleted,
+        errors
+      })
     }
   )
 }

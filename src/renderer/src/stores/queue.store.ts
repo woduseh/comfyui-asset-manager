@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { QueueProgress } from '@renderer/types/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { invokeIpc } from '@renderer/utils/ipc'
 
@@ -18,8 +17,7 @@ export interface QueueJobInfo {
 
 export const useQueueStore = defineStore('queue', () => {
   const activeJobs = ref<QueueJobInfo[]>([])
-  const currentProgress = ref<QueueProgress | null>(null)
-  const isProcessing = ref(false)
+  const isProcessing = computed(() => activeJobs.value.some((job) => job.status === 'running'))
 
   const totalProgress = computed(() => {
     if (!activeJobs.value.length) return 0
@@ -29,8 +27,10 @@ export const useQueueStore = defineStore('queue', () => {
   })
 
   async function loadActiveJobs(): Promise<void> {
-    const running = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'running' })
-    const queued = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'queued' })
+    const [running, queued] = await Promise.all([
+      invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'running' }),
+      invokeIpc(IPC_CHANNELS.BATCH_LIST, { status: 'queued' })
+    ])
     activeJobs.value = [...(running || []), ...(queued || [])].map(
       (j: Record<string, unknown>) => ({
         id: j.id as string,
@@ -42,11 +42,6 @@ export const useQueueStore = defineStore('queue', () => {
         startedAt: j.started_at as string | null
       })
     )
-    isProcessing.value = activeJobs.value.some((j) => j.status === 'running')
-  }
-
-  function updateProgress(progress: QueueProgress): void {
-    currentProgress.value = progress
   }
 
   function onTaskCompleted(data: {
@@ -75,16 +70,13 @@ export const useQueueStore = defineStore('queue', () => {
     if (idx !== -1) {
       activeJobs.value.splice(idx, 1)
     }
-    isProcessing.value = activeJobs.value.some((j) => j.status === 'running')
   }
 
   return {
     activeJobs,
-    currentProgress,
     isProcessing,
     totalProgress,
     loadActiveJobs,
-    updateProgress,
     onTaskCompleted,
     onTaskFailed,
     onJobCompleted

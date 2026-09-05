@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => {
     batchCreate: vi.fn(() => 'batch-id'),
     batchUpdateDraft: vi.fn(),
     batchDeleteTasks: vi.fn(),
+    batchDelete: vi.fn(),
+    batchTaskCounts: vi.fn(() => ({}) as Record<string, number>),
     batchUpdateProgress: vi.fn(),
     batchUpdateStatus: vi.fn(),
     batchServiceCreate: vi.fn(() => ({ jobId: 'batch-id', totalTasks: 1 })),
@@ -87,13 +89,14 @@ vi.mock('../../../src/main/services/database/repositories', () => ({
     get = vi.fn(() => null)
     create = mocks.batchCreate
     updateDraft = mocks.batchUpdateDraft
-    delete = vi.fn()
+    delete = mocks.batchDelete
     reorder = vi.fn()
     updateProgress = mocks.batchUpdateProgress
     updateStatus = mocks.batchUpdateStatus
   },
   BatchTaskRepository: class {
     listByJob = vi.fn(() => [])
+    countByJobStatus = mocks.batchTaskCounts
     deleteByJob = mocks.batchDeleteTasks
   },
   GeneratedImageRepository: class {
@@ -196,6 +199,7 @@ describe('registerIpcHandlers validation boundary', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.batchTaskCounts.mockReturnValue({})
   })
 
   it('keeps workflow selection and path consumption in the main process', async () => {
@@ -309,6 +313,30 @@ describe('registerIpcHandlers validation boundary', () => {
     expect(mocks.batchUpdateStatus).toHaveBeenCalledWith('job-id', 'draft')
     expect(mocks.queueRequestStart).toHaveBeenCalledWith('job-id')
   })
+
+  it.each([IPC_CHANNELS.BATCH_DELETE, IPC_CHANNELS.BATCH_DELETE_TASKS, IPC_CHANNELS.BATCH_RERUN])(
+    'preserves uncertain execution evidence through %s',
+    (channel) => {
+      mocks.batchTaskCounts.mockReturnValue({ uncertain: 1 })
+      const handler = getHandler(channel)
+      expect(() => handler({}, { id: 'job-id', jobId: 'job-id' })).toThrow('requires result review')
+      expect(mocks.batchDelete).not.toHaveBeenCalled()
+      expect(mocks.batchDeleteTasks).not.toHaveBeenCalled()
+      expect(mocks.withTransaction).not.toHaveBeenCalled()
+      expect(mocks.queueRequestStart).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['submitting', 'running'])(
+    'does not delete task evidence while a %s attempt may complete',
+    (status) => {
+      mocks.batchTaskCounts.mockReturnValue({ [status]: 1 })
+      expect(() => getHandler(IPC_CHANNELS.BATCH_DELETE_TASKS)({}, { jobId: 'job-id' })).toThrow(
+        'still has an active attempt'
+      )
+      expect(mocks.batchDeleteTasks).not.toHaveBeenCalled()
+    }
+  )
 
   it('validates and forwards the selected job for resume and cancel', async () => {
     const resumeHandler = getHandler(IPC_CHANNELS.BATCH_RESUME)

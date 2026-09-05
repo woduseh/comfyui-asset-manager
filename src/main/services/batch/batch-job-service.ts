@@ -6,11 +6,8 @@ import {
 } from '../database/repositories'
 import { validateBatchConfig, validatePromptVariants } from '../../ipc/validators'
 import { buildPrompt } from '../prompt/composition-engine'
-import {
-  countTotalTasksFromData,
-  type BatchConfig,
-  type ModuleDataSnapshot
-} from './task-generator'
+import type { BatchConfig } from '@shared/ipc-contract'
+import { countTotalTasksFromData, type ModuleDataSnapshot } from './task-generator'
 
 export interface PreparedBatchJob {
   data: BatchJobWriteData

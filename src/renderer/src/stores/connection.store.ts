@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ComfyUIStatus } from '@renderer/types/ipc'
+import type { ComfyUIStatus } from '@shared/ipc-contract'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { invokeIpc } from '@renderer/utils/ipc'
-import { parseIntegerOrFallback } from '@renderer/utils/number'
+import { parseIntegerOrFallback } from '@shared/number'
 
 export const useConnectionStore = defineStore('connection', () => {
   const status = ref<ComfyUIStatus>({

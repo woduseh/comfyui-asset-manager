@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+/* eslint-disable vue/one-component-per-file -- Each scenario mounts its own test host. */
 
 import { defineComponent } from 'vue'
 import { createPinia } from 'pinia'
@@ -8,13 +9,15 @@ import { NButton, NMessageProvider } from 'naive-ui'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
-import JobCard from '@renderer/components/jobs/JobCard.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
 import ProductionJobTable from '@renderer/components/jobs/ProductionJobTable.vue'
 import WizardStepWorkflow from '@renderer/components/jobs/WizardStepWorkflow.vue'
 import WizardStepModules from '@renderer/components/jobs/WizardStepModules.vue'
+import WizardStepConfirm from '@renderer/components/jobs/WizardStepConfirm.vue'
 import ConfirmActionButton from '@renderer/components/common/ConfirmActionButton'
 import OverflowActionMenu from '@renderer/components/common/OverflowActionMenu.vue'
+import ko from '@renderer/locales/ko.json'
+import en from '@renderer/locales/en.json'
 
 const invokeIpcMock = vi.hoisted(() => vi.fn())
 
@@ -90,67 +93,27 @@ beforeEach(() => {
   })
 })
 
-describe('JobCard', () => {
-  it('emits primary and overflow actions without changing job data', async () => {
-    const job = {
-      id: 'job-1',
-      name: 'Example',
-      status: 'draft',
-      total_tasks: 2,
-      completed_tasks: 0,
-      failed_tasks: 0
-    }
-    const wrapper = mount(JobCard, {
-      props: {
-        job,
-        statusLabel: 'Draft',
-        isConnected: true,
-        isProcessing: false
-      },
-      global: { plugins: [createTestI18n()] }
-    })
-
-    const startButton = wrapper
-      .findAllComponents(NButton)
-      .find((button) => button.text().includes('start'))
-    await startButton!.trigger('click')
-    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'edit')
-    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'clone')
-    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'delete')
-
-    expect(wrapper.emitted('start')).toHaveLength(1)
-    expect(wrapper.emitted('edit')).toHaveLength(1)
-    expect(wrapper.emitted('clone')).toHaveLength(1)
-    expect(wrapper.emitted('delete')).toHaveLength(1)
-    expect(job.status).toBe('draft')
-  })
-
-  it('offers in-place editing only for draft jobs', () => {
-    const wrapper = mount(JobCard, {
-      props: {
-        job: {
-          id: 'job-1',
-          name: 'Completed',
-          status: 'completed',
-          total_tasks: 1,
-          completed_tasks: 1,
-          failed_tasks: 0
-        },
-        statusLabel: 'Completed',
-        isConnected: true,
-        isProcessing: false
-      },
-      global: { plugins: [createTestI18n()] }
-    })
-
-    const actions = wrapper.findComponent(OverflowActionMenu).props('actions') as Array<{
-      key: string
-    }>
-    expect(actions.map((action) => action.key)).toEqual(['clone', 'delete'])
-  })
-})
-
 describe('JobStatusBar', () => {
+  it.each(['ko', 'en'])('explains an uncertain task and blocks resume in %s', async (locale) => {
+    const messages = locale === 'ko' ? ko : en
+    const wrapper = mount(JobStatusBar, {
+      props: {
+        job: { name: 'Uncertain', completed_tasks: 0, total_tasks: 1, uncertain_tasks: 1 },
+        isPaused: true,
+        isConnected: true,
+        eta: null
+      },
+      global: { plugins: [createI18n({ legacy: false, locale, messages: { ko, en } })] }
+    })
+    expect(wrapper.text()).toContain(messages.jobs.production.needsReviewHint)
+    const resume = wrapper
+      .findAllComponents(NButton)
+      .find((button) => button.text() === messages.batch.actions.resume)!
+    expect(resume.props('disabled')).toBe(true)
+    await resume.trigger('click')
+    expect(wrapper.emitted('resume')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('emits pause and cancel controls for a running job', async () => {
     const wrapper = mount(JobStatusBar, {
       props: {
@@ -234,6 +197,29 @@ describe('JobStatusBar', () => {
 })
 
 describe('ProductionJobTable', () => {
+  it('keeps cancelled uncertain output visible and blocks rerun while preserving explicit clone', async () => {
+    const job = { id: 'uncertain', name: 'Needs review', status: 'cancelled', uncertain_tasks: 1 }
+    const wrapper = mount(ProductionJobTable, {
+      props: { jobs: [job], statusLabels: {}, isConnected: true, isProcessing: false },
+      global: { plugins: [createTestI18n()] }
+    })
+    expect(wrapper.get('[role="status"]').text()).toContain('jobs.production.needsReviewHint')
+    const rerun = wrapper
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('rerun'))!
+    expect(rerun.props('disabled')).toBe(true)
+    await rerun.trigger('click')
+    expect(wrapper.emitted('rerun')).toBeUndefined()
+    expect(
+      wrapper
+        .findComponent(OverflowActionMenu)
+        .props('actions')
+        .find((action) => action.key === 'delete')?.disabled
+    ).toBe(true)
+    wrapper.findComponent(OverflowActionMenu).vm.$emit('select', 'clone')
+    expect(wrapper.emitted('clone')).toEqual([[job]])
+    wrapper.unmount()
+  })
   it('keeps the production queue actions wired to the existing job payload', async () => {
     const job = {
       id: 'job-queue-1',
@@ -299,6 +285,198 @@ describe('ProductionJobTable', () => {
 })
 
 describe('BatchWizard', () => {
+  it.each(
+    [
+      IPC_CHANNELS.MODULE_LIST,
+      IPC_CHANNELS.WORKFLOW_VARIABLES,
+      IPC_CHANNELS.COMFYUI_MODELS,
+      IPC_CHANNELS.MODULE_ITEM_LIST
+    ].flatMap((pendingChannel) => [
+      { pendingChannel, oldResponseFirst: true },
+      { pendingChannel, oldResponseFirst: false }
+    ])
+  )(
+    'ignores cancelled $pendingChannel initialization (old response first: $oldResponseFirst)',
+    async ({ pendingChannel, oldResponseFirst }) => {
+      const pending: Array<() => void> = []
+      const defaultInvoke = invokeIpcMock.getMockImplementation()!
+      invokeIpcMock.mockImplementation((channel: string, args: unknown) => {
+        const result =
+          channel === IPC_CHANNELS.WORKFLOW_VARIABLES
+            ? [
+                {
+                  id: 'prompt',
+                  node_id: '1',
+                  field_name: 'text',
+                  display_name: 'Prompt',
+                  role: 'prompt_positive',
+                  var_type: 'string',
+                  default_val: ''
+                }
+              ]
+            : defaultInvoke(channel, args)
+        return channel === pendingChannel
+          ? new Promise((resolve) => pending.push(() => resolve(result)))
+          : Promise.resolve(result)
+      })
+      function job(name: string): Record<string, unknown> {
+        return {
+          id: name,
+          name,
+          config: JSON.stringify({
+            workflowId: 'workflow-1',
+            moduleSelections: [{ moduleId: 'module-1', selectedItemIds: ['item-1'] }],
+            slotMappings: [{ nodeId: '1', fieldName: 'text', prefixText: name }]
+          })
+        }
+      }
+      const Host = defineComponent({
+        components: { BatchWizard, NMessageProvider },
+        props: { show: Boolean, sourceJob: Object },
+        template:
+          '<NMessageProvider><BatchWizard :show="show" mode="edit" :source-job="sourceJob" /></NMessageProvider>'
+      })
+      const wrapper = mount(Host, {
+        props: { show: true, sourceJob: job('Old') },
+        global: {
+          plugins: [createPinia(), createTestI18n()],
+          stubs: {
+            NModal: { template: '<div><slot /><slot name="footer" /></div>' },
+            NScrollbar: { template: '<div><slot /></div>' }
+          }
+        }
+      })
+      await flushPromises()
+      await wrapper.setProps({ show: false })
+      await wrapper.setProps({ sourceJob: job('Current') })
+      await wrapper.setProps({ show: true })
+      await flushPromises()
+      expect(pending).toHaveLength(2)
+      const wizard = wrapper.findComponent(BatchWizard)
+      pending[oldResponseFirst ? 0 : 1]()
+      await flushPromises()
+      expect(
+        wizard
+          .findAllComponents(NButton)
+          .find((button) => button.text().includes('wizard.next'))!
+          .props('disabled')
+      ).toBe(oldResponseFirst)
+      pending[oldResponseFirst ? 1 : 0]()
+      await flushPromises()
+      expect(wizard.findComponent(WizardStepWorkflow).props('batchName')).toBe('Current')
+      expect(wizard.findComponent(WizardStepModules).props('slotMappings')).toEqual([
+        expect.objectContaining({ prefixText: 'Current' })
+      ])
+      expect(wizard.findComponent(WizardStepModules).props('moduleSelections')).toHaveLength(1)
+      wrapper.unmount()
+    }
+  )
+
+  it('restores saved values after workflow loading and resets them when reopening the same workflow', async () => {
+    let resolveVariables!: (value: unknown[]) => void
+    const defaultInvoke = invokeIpcMock.getMockImplementation()!
+    invokeIpcMock.mockImplementation((channel: string, args: unknown) => {
+      if (channel === IPC_CHANNELS.WORKFLOW_VARIABLES) {
+        return new Promise((resolve) => {
+          resolveVariables = resolve
+        })
+      }
+      return defaultInvoke(channel, args)
+    })
+    const variables = [
+      {
+        id: 'prompt',
+        node_id: '1',
+        field_name: 'text',
+        display_name: 'Prompt',
+        role: 'prompt_positive',
+        var_type: 'string',
+        default_val: 'default'
+      },
+      {
+        id: 'steps',
+        node_id: '2',
+        field_name: 'steps',
+        display_name: 'Steps',
+        role: 'other',
+        var_type: 'number',
+        default_val: '20'
+      }
+    ]
+    const sourceJob = {
+      id: 'job-1',
+      name: 'Saved',
+      config: JSON.stringify({
+        workflowId: 'workflow-1',
+        fixedSeed: 0,
+        slotMappings: [
+          {
+            nodeId: '1',
+            fieldName: 'text',
+            prefixText: 'resolved prefix',
+            userPrefixText: 'original prefix',
+            promptVariant: 'portrait'
+          }
+        ],
+        variableOverrides: [{ nodeId: '2', fieldName: 'steps', value: '35' }]
+      })
+    }
+    const Host = defineComponent({
+      components: { BatchWizard, NMessageProvider },
+      props: { show: Boolean, mode: { type: String, default: 'edit' } },
+      setup: () => ({ sourceJob }),
+      template:
+        '<NMessageProvider><BatchWizard :show="show" :mode="mode" :source-job="sourceJob" /></NMessageProvider>'
+    })
+    const wrapper = mount(Host, {
+      props: { show: true },
+      global: {
+        plugins: [createPinia(), createTestI18n()],
+        stubs: {
+          NModal: { template: '<div><slot /><slot name="footer" /></div>' },
+          NScrollbar: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    await flushPromises()
+    const wizard = wrapper.findComponent(BatchWizard)
+    expect(wizard.findComponent(WizardStepModules).props('slotMappings')).toEqual([])
+    expect(
+      wizard.findComponent(WizardStepWorkflow).find('input').attributes('disabled')
+    ).toBeDefined()
+    expect(
+      wizard
+        .findAllComponents(NButton)
+        .find((button) => button.text().includes('wizard.next'))!
+        .props('disabled')
+    ).toBe(true)
+    resolveVariables(variables)
+    await flushPromises()
+    expect(wizard.findComponent(WizardStepModules).props('slotMappings')).toEqual([
+      expect.objectContaining({ prefixText: 'original prefix', promptVariant: 'portrait' })
+    ])
+    expect(wizard.findComponent(WizardStepConfirm).props('variableOverrides')).toEqual([
+      expect.objectContaining({ enabled: true, value: '35' })
+    ])
+    expect(wizard.findComponent(WizardStepWorkflow).props('fixedSeed')).toBe(0)
+    expect(
+      wizard.findComponent(WizardStepWorkflow).find('input').attributes('disabled')
+    ).toBeUndefined()
+
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true, mode: 'create' })
+    await flushPromises()
+    resolveVariables(variables)
+    await flushPromises()
+    expect(wizard.findComponent(WizardStepModules).props('slotMappings')).toEqual([
+      expect.objectContaining({ prefixText: '', promptVariant: '' })
+    ])
+    expect(wizard.findComponent(WizardStepConfirm).props('variableOverrides')).toEqual([
+      expect.objectContaining({ enabled: false, value: '20' })
+    ])
+    wrapper.unmount()
+  })
+
   it('gates navigation and emits the unchanged batch payload after submit', async () => {
     const Host = defineComponent({
       components: { BatchWizard, NMessageProvider },

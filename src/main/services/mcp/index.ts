@@ -316,28 +316,10 @@ class McpServerManager {
       return
     }
 
-    if (req.method === 'GET') {
-      // SSE stream — requires existing session
-      if (sessionId && this.sessions.has(sessionId)) {
-        const session = this.sessions.get(sessionId)!
-        session.lastActivity = Date.now()
-        await session.transport.handleRequest(req, res)
-      } else {
-        res.writeHead(400, { 'Content-Type': 'application/json' })
-        res.end(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
-            id: null
-          })
-        )
-      }
-      return
-    }
-
-    if (req.method === 'DELETE') {
-      if (sessionId && this.sessions.has(sessionId)) {
-        const session = this.sessions.get(sessionId)!
+    if (req.method === 'GET' || req.method === 'DELETE') {
+      const session = sessionId ? this.sessions.get(sessionId) : undefined
+      if (session) {
+        if (req.method === 'GET') session.lastActivity = Date.now()
         await session.transport.handleRequest(req, res)
       } else {
         res.writeHead(400, { 'Content-Type': 'application/json' })

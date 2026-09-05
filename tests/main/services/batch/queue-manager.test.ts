@@ -3,11 +3,13 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
 import { existsSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
+import { PromptExecutionError } from '../../../../src/main/services/batch/wait-for-prompt'
 
 let mockDb: SqlJsDatabase
 
 const databaseMocks = vi.hoisted(() => ({
   saveDatabase: vi.fn(),
+  flushDatabase: vi.fn().mockResolvedValue(undefined),
   setBatchMode: vi.fn()
 }))
 
@@ -15,9 +17,14 @@ const electronMocks = vi.hoisted(() => ({
   getAllWindows: vi.fn(() => [] as Array<Record<string, unknown>>)
 }))
 
+const journalMocks = vi.hoisted(() => ({
+  recover: vi.fn(() => [] as Array<{ taskId: string; promptId: string; paths: string[] }>)
+}))
+
 vi.mock('../../../../src/main/services/database/index', () => ({
   getDatabase: () => mockDb,
   saveDatabase: databaseMocks.saveDatabase,
+  flushDatabase: databaseMocks.flushDatabase,
   setBatchMode: databaseMocks.setBatchMode,
   withTransaction: <T>(fn: () => T): T => {
     mockDb.run('BEGIN TRANSACTION')
@@ -36,6 +43,11 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: electronMocks.getAllWindows }
 }))
 
+vi.mock('../../../../src/main/services/batch/output-journal', () => ({
+  beginTaskOutputJournal: () => ({ plan: vi.fn(), discard: vi.fn() }),
+  recoverTaskOutputJournals: journalMocks.recover
+}))
+
 vi.mock('../../../../src/main/services/comfyui/manager', () => ({
   comfyuiManager: {
     isConnected: false,
@@ -47,18 +59,6 @@ vi.mock('../../../../src/main/services/comfyui/manager', () => ({
       deleteFromHistory: vi.fn()
     },
     wsClient: null
-  }
-}))
-
-vi.mock('../../../../src/main/ipc/channels', () => ({
-  IPC_CHANNELS: {
-    COMFYUI_CONNECTION_CHANGED: 'comfyui:connection-changed',
-    QUEUE_PROGRESS: 'queue:progress',
-    QUEUE_TASK_COMPLETED: 'queue:task-completed',
-    QUEUE_TASK_FAILED: 'queue:task-failed',
-    QUEUE_JOB_COMPLETED: 'queue:job-completed',
-    QUEUE_STATUS_CHANGED: 'queue:status-changed',
-    COMFYUI_PREVIEW: 'comfyui:preview'
   }
 }))
 
@@ -149,11 +149,19 @@ describe('QueueManager Recovery', () => {
       _isPaused: false,
       _isCancelled: false,
       _currentJobId: null,
-      _maxRetries: 3
+      _maxRetries: 3,
+      recoveryError: null,
+      stopping: false,
+      activeRun: null
     })
     ;(comfyuiManager as { isConnected: boolean }).isConnected = false
     vi.mocked(comfyuiManager.restClient.interrupt).mockReset().mockResolvedValue(undefined)
     databaseMocks.saveDatabase.mockClear()
+    databaseMocks.flushDatabase.mockReset().mockResolvedValue(undefined)
+    journalMocks.recover.mockReset().mockReturnValue([])
+    vi.mocked(comfyuiManager.restClient.queuePrompt).mockReset()
+    vi.mocked(comfyuiManager.restClient.getImage).mockReset()
+    vi.mocked(comfyuiManager.restClient.deleteFromHistory).mockReset()
     databaseMocks.setBatchMode.mockClear()
     electronMocks.getAllWindows.mockReset().mockReturnValue([])
   })
@@ -169,13 +177,13 @@ describe('QueueManager Recovery', () => {
       const jobId = jobRepo.create({ name: 'Test Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
 
-      queueManager.recoverInterruptedJobs()
+      await queueManager.recoverInterruptedJobs()
 
       const job = jobRepo.get(jobId)
       expect(job?.status).toBe('paused')
     })
 
-    it('resets stuck running tasks to pending', async () => {
+    it('recovers stuck tasks without losing the accepted remote request', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
       const jobId = jobRepo.create({ name: 'Test Job', config: '{}' })
@@ -190,12 +198,12 @@ describe('QueueManager Recovery', () => {
       taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
       // tasks[2] stays pending
 
-      queueManager.recoverInterruptedJobs()
+      await queueManager.recoverInterruptedJobs()
 
       const updated = taskRepo.listByJob(jobId)
       expect(updated[0].status).toBe('completed')
       expect(updated[1].status).toBe('pending')
-      expect(updated[1].comfyui_prompt_id).toBeNull()
+      expect(updated[1].comfyui_prompt_id).toBe('p-1')
       expect(updated[2].status).toBe('pending')
     })
 
@@ -207,7 +215,7 @@ describe('QueueManager Recovery', () => {
       const cancelledId = jobRepo.create({ name: 'Cancelled Job', config: '{}' })
       jobRepo.updateStatus(cancelledId, 'cancelled')
 
-      queueManager.recoverInterruptedJobs()
+      await queueManager.recoverInterruptedJobs()
 
       expect(jobRepo.get(completedId)?.status).toBe('completed')
       expect(jobRepo.get(cancelledId)?.status).toBe('cancelled')
@@ -221,10 +229,39 @@ describe('QueueManager Recovery', () => {
       jobRepo.updateStatus(job1, 'running')
       jobRepo.updateStatus(job2, 'running')
 
-      queueManager.recoverInterruptedJobs()
+      await queueManager.recoverInterruptedJobs()
 
       expect(jobRepo.get(job1)?.status).toBe('paused')
       expect(jobRepo.get(job2)?.status).toBe('paused')
+    })
+
+    it('reconciles progress when a cancelled job has an uncommitted output journal', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const jobId = jobRepo.create({
+        name: 'Cancelled output commit',
+        config: '{}',
+        total_tasks: 1
+      })
+      const taskId = taskRepo.createSingle({
+        job_id: jobId,
+        prompt_data: '{}',
+        sort_order: 0,
+        metadata: '{}'
+      })
+      taskRepo.updateStatus(taskId, 'completed', { comfyui_prompt_id: 'remote' })
+      jobRepo.updateProgress(jobId, 1, 0)
+      jobRepo.updateStatus(jobId, 'cancelled')
+      journalMocks.recover.mockReturnValue([{ taskId, promptId: 'remote', paths: [] }])
+
+      await queueManager.recoverInterruptedJobs()
+
+      expect(taskRepo.get(taskId)?.status).toBe('uncertain')
+      expect(jobRepo.get(jobId)).toMatchObject({
+        status: 'cancelled',
+        completed_tasks: 0,
+        failed_tasks: 0,
+        uncertain_tasks: 1
+      })
     })
   })
 
@@ -353,7 +390,7 @@ describe('QueueManager Recovery', () => {
       expect(jobRepo.get(jobId)?.status).toBe('running')
     })
 
-    it('hot-cancels remaining tasks and tolerates interrupt failure', async () => {
+    it('hot-cancels unsubmitted tasks without globally interrupting unrelated server work', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
       const jobId = jobRepo.create({ name: 'Active Job', config: '{}' })
@@ -364,9 +401,6 @@ describe('QueueManager Recovery', () => {
         _isPaused: true,
         _currentJobId: jobId
       })
-      vi.mocked(comfyuiManager.restClient.interrupt).mockRejectedValueOnce(
-        new Error('interrupt unavailable')
-      )
 
       expect(() => queueManager.cancel(jobId)).not.toThrow()
       await Promise.resolve()
@@ -374,7 +408,7 @@ describe('QueueManager Recovery', () => {
       expect(queueManager.isPaused).toBe(false)
       expect(jobRepo.get(jobId)?.status).toBe('cancelled')
       expect(taskRepo.listByJob(jobId)[0].status).toBe('cancelled')
-      expect(comfyuiManager.restClient.interrupt).toHaveBeenCalledOnce()
+      expect(comfyuiManager.restClient.interrupt).not.toHaveBeenCalled()
     })
   })
 
@@ -440,6 +474,15 @@ describe('QueueManager Recovery', () => {
   })
 
   describe('cold resume', () => {
+    it('rejects a disconnected cold resume and preserves the paused job', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const jobId = jobRepo.create({ name: 'Disconnected resume', config: '{}' })
+      jobRepo.updateStatus(jobId, 'paused')
+
+      await expect(queueManager.resume(jobId)).rejects.toThrow('Not connected to ComfyUI server')
+      expect(jobRepo.get(jobId)?.status).toBe('paused')
+      expect(queueManager.isProcessing).toBe(false)
+    })
     it('does nothing when no paused jobs exist', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
 
@@ -450,6 +493,8 @@ describe('QueueManager Recovery', () => {
 
     it('starts only the selected paused job when no loop is active', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
       const firstId = jobRepo.create({ name: 'Paused Job 1', config: '{}' })
       const secondId = jobRepo.create({ name: 'Paused Job 2', config: '{}' })
       jobRepo.updateStatus(firstId, 'paused')
@@ -535,37 +580,158 @@ describe('QueueManager Recovery', () => {
       expect(updated.retry_count).toBe(2)
     })
 
-    it('reports success when a retry eventually completes', async () => {
-      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
-      const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
-      taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
-      const task = taskRepo.listByJob(jobId)[0]
-      const processTask = vi
-        .spyOn(
-          queueManager as unknown as {
-            processTask: (...args: unknown[]) => Promise<void>
-          },
-          'processTask'
-        )
-        .mockRejectedValueOnce(new Error('transient failure'))
-        .mockResolvedValueOnce(undefined)
-      const manager = queueManager as unknown as {
-        _maxRetries: number
-        processTaskWithRetries: (
-          task: Record<string, unknown>,
-          workflow: Record<string, unknown>,
-          jobId: string,
-          config: Record<string, unknown>,
-          outputRoot: string
-        ) => Promise<{ success: boolean; cancelled: boolean }>
+    it.each(['local', 'remote'])(
+      'counts one %s failure as one retry when the next attempt completes',
+      async (failureType) => {
+        const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+        const jobId = jobRepo.create({ name: 'Retry Job', config: '{}' })
+        taskRepo.createBulk([{ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' }])
+        const task = taskRepo.listByJob(jobId)[0]
+        if (failureType === 'remote') {
+          taskRepo.updateStatus(task.id as string, 'running', {
+            comfyui_prompt_id: 'failed-remote'
+          })
+          task.comfyui_prompt_id = 'failed-remote'
+        }
+        const processTask = vi
+          .spyOn(
+            queueManager as unknown as {
+              processTask: (...args: unknown[]) => Promise<void>
+            },
+            'processTask'
+          )
+          .mockRejectedValueOnce(
+            failureType === 'remote'
+              ? new PromptExecutionError('remote execution failed')
+              : new Error('transient failure')
+          )
+          .mockResolvedValueOnce(undefined)
+        const manager = queueManager as unknown as {
+          _maxRetries: number
+          processTaskWithRetries: (
+            task: Record<string, unknown>,
+            workflow: Record<string, unknown>,
+            jobId: string,
+            config: Record<string, unknown>,
+            outputRoot: string
+          ) => Promise<{ success: boolean; cancelled: boolean }>
+        }
+        manager._maxRetries = 2
+
+        const result = await manager.processTaskWithRetries(task, {}, jobId, {}, 'C:\\output')
+
+        expect(processTask).toHaveBeenCalledTimes(2)
+        expect(result.success).toBe(true)
+        expect(taskRepo.listByJob(jobId)[0].retry_count).toBe(1)
+        if (failureType === 'remote') {
+          expect(taskRepo.get(task.id as string)?.comfyui_prompt_id).toBeNull()
+        }
       }
-      manager._maxRetries = 2
+    )
+  })
 
-      const result = await manager.processTaskWithRetries(task, {}, jobId, {}, 'C:\\output')
+  describe.each(['snapshot', 'legacy'] as const)('%s task execution', (mode) => {
+    async function prepareJob(): Promise<{
+      queueManager: typeof import('../../../../src/main/services/batch/queue-manager').queueManager
+      manager: { processTask: (task: Record<string, unknown>) => Promise<void> }
+      jobId: string
+      expandBatchToTasksChunk: typeof import('../../../../src/main/services/batch/task-generator').expandBatchToTasksChunk
+    }> {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      const { expandBatchToTasksChunk } =
+        await import('../../../../src/main/services/batch/task-generator')
+      const config = {
+        name: 'Execution Job',
+        workflowId: 'workflow-id',
+        moduleSelections: [],
+        countPerCombination: 1,
+        seedMode: 'fixed',
+        outputFolderPattern: '{job}',
+        fileNamePattern: '{index}'
+      }
+      mockDb.run("INSERT INTO workflows (id, name, api_json) VALUES ('workflow-id', 'Test', '{}')")
+      const jobId = jobRepo.create({
+        name: config.name,
+        config: JSON.stringify(config),
+        workflow_id: config.workflowId,
+        total_tasks: 3,
+        module_data_snapshot: mode === 'snapshot' ? '[]' : undefined
+      })
+      const generated = [0, 1, 2].map((index) => ({
+        promptData: { positive: 'prompt', negative: '', seed: index, extraVariables: {} },
+        sortOrder: index,
+        metadata: { combinationIndex: index, imageIndex: 0, totalInCombination: 1 }
+      }))
+      vi.mocked(expandBatchToTasksChunk)
+        .mockReset()
+        .mockImplementation((_config, _data, start) => generated.slice(start, start + 2))
+      if (mode === 'legacy') {
+        taskRepo.createBulk(
+          generated.map((task) => ({
+            job_id: jobId,
+            prompt_data: JSON.stringify(task.promptData),
+            metadata: JSON.stringify(task.metadata),
+            sort_order: task.sortOrder
+          }))
+        )
+      }
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      settingsRepo.set('max_retries', '0')
+      const manager = queueManager as unknown as {
+        processTask: (task: Record<string, unknown>) => Promise<void>
+      }
+      return { queueManager, manager, jobId, expandBatchToTasksChunk }
+    }
 
-      expect(processTask).toHaveBeenCalledTimes(2)
-      expect(result.success).toBe(true)
-      expect(taskRepo.listByJob(jobId)[0].retry_count).toBe(1)
+    it('continues after a failed task and persists aggregate progress', async () => {
+      const { queueManager, manager, jobId, expandBatchToTasksChunk } = await prepareJob()
+      const processed: number[] = []
+      vi.spyOn(manager, 'processTask').mockImplementation(async (task) => {
+        const order = task.sort_order as number
+        processed.push(order)
+        if (order === 1) throw new Error('Task failed')
+        taskRepo.updateStatus(task.id as string, 'completed')
+      })
+
+      await queueManager.startJob(jobId)
+
+      expect(processed).toEqual([0, 1, 2])
+      expect(taskRepo.listByJob(jobId).map((task) => task.status)).toEqual([
+        'completed',
+        'failed',
+        'completed'
+      ])
+      expect(jobRepo.get(jobId)).toMatchObject({
+        status: 'completed',
+        completed_tasks: 2,
+        failed_tasks: 1
+      })
+      if (mode === 'snapshot') {
+        expect(vi.mocked(expandBatchToTasksChunk).mock.calls.map((call) => call[2])).toEqual([0, 2])
+      } else {
+        expect(expandBatchToTasksChunk).not.toHaveBeenCalled()
+      }
+    })
+
+    it('stops executing on cancellation and cancels the already allocated chunk', async () => {
+      const { queueManager, manager, jobId } = await prepareJob()
+      const processTask = vi.spyOn(manager, 'processTask').mockImplementation(async () => {
+        queueManager.cancel(jobId)
+        throw new Error('Cancelled')
+      })
+
+      await queueManager.startJob(jobId)
+
+      expect(processTask).toHaveBeenCalledTimes(1)
+      expect(jobRepo.get(jobId)).toMatchObject({
+        status: 'cancelled',
+        completed_tasks: 0,
+        failed_tasks: 0
+      })
+      const tasks = taskRepo.listByJob(jobId)
+      expect(tasks).toHaveLength(mode === 'snapshot' ? 2 : 3)
+      expect(tasks.every((task) => task.status === 'cancelled')).toBe(true)
     })
   })
 
@@ -631,7 +797,7 @@ describe('QueueManager Recovery', () => {
           manager.processTask(task, {}, jobId, makeConfig(), outputRoot)
         ).rejects.toThrow('completed without output images')
         expect(new GeneratedImageRepository().list({ page: 1, pageSize: 10 }).total).toBe(0)
-        expect(comfyuiManager.restClient.deleteFromHistory).toHaveBeenCalledWith(['prompt-1'])
+        expect(comfyuiManager.restClient.deleteFromHistory).not.toHaveBeenCalled()
       } finally {
         rmSync(outputRoot, { recursive: true, force: true })
       }

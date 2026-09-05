@@ -34,6 +34,7 @@ const { t } = useI18n()
 const total = computed(() => Number(props.job.total_tasks) || 0)
 const completed = computed(() => Number(props.job.completed_tasks) || 0)
 const failed = computed(() => Number(props.job.failed_tasks) || 0)
+const needsReview = computed(() => Number(props.job.uncertain_tasks) > 0)
 const isDisconnected = computed(() => !props.isConnected)
 const percentage = computed(() =>
   total.value > 0 ? Math.round((completed.value / total.value) * 100) : 0
@@ -57,7 +58,8 @@ const elapsed = computed(() => {
 })
 
 const stages = computed(() => {
-  const currentState = isDisconnected.value ? 'interrupted' : props.isPaused ? 'paused' : 'active'
+  const currentState =
+    isDisconnected.value || needsReview.value ? 'interrupted' : props.isPaused ? 'paused' : 'active'
   if (percentage.value >= 100) {
     return [
       { key: 'prompt', label: t('jobs.production.stages.prompt'), state: 'complete' },
@@ -98,16 +100,18 @@ const stages = computed(() => {
         <div class="active-run__title-row">
           <h2>{{ job.name }}</h2>
           <NTag
-            :type="isDisconnected ? 'warning' : isPaused ? 'default' : 'info'"
+            :type="isDisconnected || needsReview ? 'warning' : isPaused ? 'default' : 'info'"
             size="small"
             :bordered="false"
           >
             {{
-              isDisconnected
-                ? t('jobs.production.interrupted')
-                : isPaused
-                  ? t('queue.statusPaused')
-                  : t('queue.statusRunning')
+              needsReview
+                ? t('jobs.production.needsReview')
+                : isDisconnected
+                  ? t('jobs.production.interrupted')
+                  : isPaused
+                    ? t('queue.statusPaused')
+                    : t('queue.statusRunning')
             }}
           </NTag>
         </div>
@@ -117,7 +121,12 @@ const stages = computed(() => {
         </p>
       </div>
       <div class="active-run__actions">
-        <NButton v-if="!isPaused" secondary :disabled="isDisconnected" @click="$emit('pause')">
+        <NButton
+          v-if="!isPaused"
+          secondary
+          :disabled="isDisconnected || needsReview"
+          @click="$emit('pause')"
+        >
           <template #icon><NIcon :component="PauseOutline" /></template>
           {{ t('batch.actions.pause') }}
         </NButton>
@@ -125,7 +134,7 @@ const stages = computed(() => {
           v-else
           secondary
           type="primary"
-          :disabled="isDisconnected"
+          :disabled="isDisconnected || needsReview"
           @click="$emit('resume')"
         >
           <template #icon><NIcon :component="PlayOutline" /></template>
@@ -142,6 +151,16 @@ const stages = computed(() => {
         </ConfirmActionButton>
       </div>
     </header>
+
+    <NAlert
+      v-if="needsReview"
+      class="active-run__connection-alert"
+      type="warning"
+      :title="t('jobs.production.needsReview')"
+      :bordered="false"
+    >
+      {{ t('jobs.production.needsReviewHint') }}
+    </NAlert>
 
     <NAlert
       v-if="isDisconnected"

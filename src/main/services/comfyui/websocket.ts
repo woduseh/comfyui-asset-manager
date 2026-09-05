@@ -7,27 +7,7 @@ import {
   WS_MAX_RECONNECT_INTERVAL_MS,
   WS_BACKOFF_MULTIPLIER
 } from '../../constants'
-import { safeJsonParse } from '../../utils/safe-json'
-
-export interface ComfyUIWebSocketEvents {
-  connected: () => void
-  disconnected: () => void
-  error: (error: Error) => void
-  progress: (data: { promptId: string; node: string; value: number; max: number }) => void
-  executionStart: (data: { promptId: string }) => void
-  executing: (data: { promptId: string; node: string | null }) => void
-  executed: (data: { promptId: string; node: string; output: Record<string, unknown> }) => void
-  executionComplete: (data: { promptId: string }) => void
-  executionError: (data: {
-    promptId: string
-    nodeId: string
-    message: string
-    type: string
-  }) => void
-  executionInterrupted: (data: { promptId: string }) => void
-  preview: (data: Buffer) => void
-  queueRemaining: (count: number) => void
-}
+import { safeJsonParse } from '@shared/safe-json'
 
 export class ComfyUIWebSocket extends EventEmitter {
   private ws: WebSocket | null = null

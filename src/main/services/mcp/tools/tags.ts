@@ -1,3 +1,4 @@
+import { jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { tagService } from '../../tags'
@@ -44,23 +45,12 @@ export function registerTagTools(server: McpServer): void {
       if (unverifiedCount > 0)
         summary += `, ${unverifiedCount} unverified (not in local DB, online unavailable)`
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                summary,
-                online_available: onlineAvailable,
-                local_tag_count: tagService.getTagCount(),
-                results
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        summary,
+        online_available: onlineAvailable,
+        local_tag_count: tagService.getTagCount(),
+        results
+      })
     }
   )
 
@@ -94,22 +84,11 @@ export function registerTagTools(server: McpServer): void {
       const clampedLimit = Math.min(limit ?? 20, 50)
       const results = await tagService.searchWithOnline(query, category, clampedLimit)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                query,
-                count: results.length,
-                tags: tagService.formatTagsForDisplay(results)
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        query,
+        count: results.length,
+        tags: tagService.formatTagsForDisplay(results)
+      })
     }
   )
 
@@ -150,42 +129,20 @@ export function registerTagTools(server: McpServer): void {
 
       if (group_by_semantic) {
         const groups = tagService.getPopularGrouped()
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(
-                {
-                  description:
-                    'Popular Danbooru tags grouped by semantic category. Use these as reference when writing prompts.',
-                  groups
-                },
-                null,
-                2
-              )
-            }
-          ]
-        }
+        return jsonResult({
+          description:
+            'Popular Danbooru tags grouped by semantic category. Use these as reference when writing prompts.',
+          groups
+        })
       }
 
       const clampedLimit = Math.min(limit ?? 100, 500)
       const results = tagService.getPopular(category, clampedLimit)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                count: results.length,
-                tags: tagService.formatTagsForDisplay(results)
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        count: results.length,
+        tags: tagService.formatTagsForDisplay(results)
+      })
     }
   )
 

@@ -613,9 +613,13 @@ export interface BatchJobWriteData {
 }
 
 export class BatchJobRepository {
+  private static readonly SELECT_WITH_UNCERTAIN = `SELECT batch_jobs.*,
+    (SELECT COUNT(*) FROM batch_tasks WHERE batch_tasks.job_id = batch_jobs.id
+      AND batch_tasks.status = 'uncertain') AS uncertain_tasks FROM batch_jobs`
+
   list(status?: string): Record<string, unknown>[] {
     const db = getDatabase()
-    let query = 'SELECT * FROM batch_jobs'
+    let query = BatchJobRepository.SELECT_WITH_UNCERTAIN
     const params: unknown[] = []
     if (status) {
       query += ' WHERE status = ?'
@@ -634,7 +638,7 @@ export class BatchJobRepository {
 
   get(id: string): Record<string, unknown> | null {
     const db = getDatabase()
-    const stmt = db.prepare('SELECT * FROM batch_jobs WHERE id = ?')
+    const stmt = db.prepare(`${BatchJobRepository.SELECT_WITH_UNCERTAIN} WHERE id = ?`)
     stmt.bind([id])
     if (stmt.step()) {
       const row = stmt.getAsObject()
@@ -742,6 +746,29 @@ export class BatchJobRepository {
 }
 
 export class BatchTaskRepository {
+  get(id: string): Record<string, unknown> | null {
+    const stmt = getDatabase().prepare('SELECT * FROM batch_tasks WHERE id = ?')
+    try {
+      stmt.bind([id])
+      return stmt.step() ? stmt.getAsObject() : null
+    } finally {
+      stmt.free()
+    }
+  }
+
+  nextSortOrder(jobId: string): number {
+    const stmt = getDatabase().prepare(
+      'SELECT COALESCE(MAX(sort_order) + 1, 0) AS next FROM batch_tasks WHERE job_id = ?'
+    )
+    try {
+      stmt.bind([jobId])
+      stmt.step()
+      return Number(stmt.getAsObject().next)
+    } finally {
+      stmt.free()
+    }
+  }
+
   listByJob(jobId: string): Record<string, unknown>[] {
     const db = getDatabase()
     const stmt = db.prepare('SELECT * FROM batch_tasks WHERE job_id = ? ORDER BY sort_order ASC')
@@ -807,13 +834,13 @@ export class BatchTaskRepository {
   updateStatus(
     id: string,
     status: string,
-    extra?: { comfyui_prompt_id?: string; result_path?: string; error_message?: string }
+    extra?: { comfyui_prompt_id?: string | null; result_path?: string; error_message?: string }
   ): void {
     const db = getDatabase()
     let query = 'UPDATE batch_tasks SET status = ?'
     const params: (string | null)[] = [status]
 
-    if (extra?.comfyui_prompt_id) {
+    if (extra?.comfyui_prompt_id !== undefined) {
       query += ', comfyui_prompt_id = ?'
       params.push(extra.comfyui_prompt_id)
     }
@@ -894,7 +921,10 @@ export class BatchTaskRepository {
   resetRunningTasksByJob(jobId: string): void {
     const db = getDatabase()
     db.run(
-      "UPDATE batch_tasks SET status = 'pending', comfyui_prompt_id = NULL WHERE job_id = ? AND status = 'running'",
+      `UPDATE batch_tasks SET status = CASE
+        WHEN status = 'running' AND NULLIF(comfyui_prompt_id, '') IS NOT NULL THEN 'pending'
+        ELSE 'uncertain' END
+       WHERE job_id = ? AND status IN ('running', 'submitting')`,
       [jobId]
     )
     saveDatabase()
@@ -903,7 +933,10 @@ export class BatchTaskRepository {
   cancelRemainingTasksByJob(jobId: string): void {
     const db = getDatabase()
     db.run(
-      "UPDATE batch_tasks SET status = 'cancelled' WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')",
+      `UPDATE batch_tasks SET status = CASE
+        WHEN status IN ('pending', 'retrying') AND NULLIF(comfyui_prompt_id, '') IS NULL THEN 'cancelled'
+        ELSE 'uncertain' END
+       WHERE job_id = ? AND status IN ('pending', 'retrying', 'running', 'submitting')`,
       [jobId]
     )
     saveDatabase()

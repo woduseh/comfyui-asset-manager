@@ -538,6 +538,8 @@
       "newGeneration": "New Generation",
       "activeRun": "Active Run",
       "interrupted": "Disconnected",
+      "needsReview": "Result review required",
+      "needsReviewHint": "Server execution or saved output could not be confirmed. Automatic resume is blocked.",
       "connectionLost": "The ComfyUI connection was lost, so progress cannot be verified",
       "connectionLostHint": "The displayed progress is the last saved value. Reconnect before continuing the job.",
       "reconnect": "Reconnect",

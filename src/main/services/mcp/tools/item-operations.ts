@@ -1,3 +1,4 @@
+import { jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleItemRepo } from './shared'
@@ -58,23 +59,12 @@ export function registerItemOperationTools(server: McpServer): void {
       })
 
       const result = moduleItemRepo.bulkUpdate(updates)
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                total: items.length,
-                succeeded: result.succeeded,
-                failed: result.failed,
-                errors: result.errors
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        total: items.length,
+        succeeded: result.succeeded,
+        failed: result.failed,
+        errors: result.errors
+      })
     }
   )
 
@@ -169,23 +159,12 @@ export function registerItemOperationTools(server: McpServer): void {
         moduleItemRepo.bulkUpdate(updates)
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                dry_run: isDryRun,
-                total_items: items.length,
-                modified_items: modifications.length,
-                modifications
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        dry_run: isDryRun,
+        total_items: items.length,
+        modified_items: modifications.length,
+        modifications
+      })
     }
   )
 
@@ -327,25 +306,14 @@ export function registerItemOperationTools(server: McpServer): void {
         }
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                total_items: items.length,
-                total_unique_tags: uniqueTags.length,
-                summary: { valid: validCount, invalid: invalidCount, unverified: unverifiedCount },
-                online_available: onlineAvailable,
-                local_tag_count: tagService.getTagCount(),
-                issues
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        total_items: items.length,
+        total_unique_tags: uniqueTags.length,
+        summary: { valid: validCount, invalid: invalidCount, unverified: unverifiedCount },
+        online_available: onlineAvailable,
+        local_tag_count: tagService.getTagCount(),
+        issues
+      })
     }
   )
 
@@ -423,14 +391,7 @@ export function registerItemOperationTools(server: McpServer): void {
         }
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ total: matches.length, matches }, null, 2)
-          }
-        ]
-      }
+      return jsonResult({ total: matches.length, matches })
     }
   )
 }

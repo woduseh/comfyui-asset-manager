@@ -1,3 +1,4 @@
+import { jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleRepo, moduleItemRepo } from './shared'
@@ -11,9 +12,7 @@ export function registerModuleCoreTools(server: McpServer): void {
     { type: z.string().optional().describe('Module type filter') },
     async ({ type }) => {
       const modules = moduleRepo.list(type)
-      return {
-        content: [{ type: 'text', text: JSON.stringify(modules, null, 2) }]
-      }
+      return jsonResult(modules)
     }
   )
 
@@ -30,9 +29,7 @@ export function registerModuleCoreTools(server: McpServer): void {
         }
       }
       const items = moduleItemRepo.list(id)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ module: mod, items }, null, 2) }]
-      }
+      return jsonResult({ module: mod, items })
     }
   )
 
@@ -58,9 +55,7 @@ export function registerModuleCoreTools(server: McpServer): void {
     },
     async ({ name, type, description }) => {
       const id = moduleRepo.create({ name, type, description })
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ id, name, type }, null, 2) }]
-      }
+      return jsonResult({ id, name, type })
     }
   )
 
@@ -77,9 +72,7 @@ export function registerModuleCoreTools(server: McpServer): void {
       if (name !== undefined) data.name = name
       if (description !== undefined) data.description = description
       moduleRepo.update(id, data)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, id }) }]
-      }
+      return jsonResult({ success: true, id })
     }
   )
 
@@ -89,9 +82,7 @@ export function registerModuleCoreTools(server: McpServer): void {
     { id: z.string().describe('Module ID') },
     async ({ id }) => {
       moduleRepo.delete(id)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, id }) }]
-      }
+      return jsonResult({ success: true, id })
     }
   )
 }

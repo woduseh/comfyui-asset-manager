@@ -10,7 +10,7 @@ import {
   MAX_TERMINAL_DIMENSION,
   MAX_TERMINAL_INPUT_LENGTH
 } from '../constants'
-import type { BatchConfig, BatchModuleSelection } from '../services/batch/task-generator'
+import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
 
 // IPC input validation utilities
 // Protects against malicious or malformed input from the renderer process

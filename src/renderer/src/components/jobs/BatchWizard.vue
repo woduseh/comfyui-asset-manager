@@ -1,18 +1,13 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NModal, NScrollbar, NSpace, NStep, NSteps, useMessage } from 'naive-ui'
-import { useModuleStore, type PromptModule } from '@renderer/stores/module.store'
+import { useModuleStore, type ModuleItem, type PromptModule } from '@renderer/stores/module.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
-import { isJsonObject, safeJsonParse } from '@renderer/utils/safe-json'
-import {
-  restoreModuleSelections,
-  restoreSlotMappings,
-  restoreVariableOverrides
-} from '@renderer/composables/useBatchWizard'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 import {
   buildBatchSeedModeOptions,
   buildWorkflowVarTypeLabels,
@@ -48,6 +43,9 @@ const moduleStore = useModuleStore()
 const settingsStore = useSettingsStore()
 const workflowStore = useWorkflowStore()
 const currentStep = ref(1)
+const initializing = ref(false)
+let wizardGeneration = 0
+let workflowRequest = 0
 const editingJobId = ref<string | null>(null)
 const batchName = ref('')
 const batchDescription = ref('')
@@ -115,8 +113,22 @@ function isRestorableJobConfig(value: unknown): value is RestorableJobConfig {
   )
 }
 
-async function loadWorkflowVariables(workflowId: string): Promise<void> {
+function isCurrentWizard(generation: number): boolean {
+  return props.show && generation === wizardGeneration
+}
+
+async function loadWorkflowVariables(
+  workflowId: string | null,
+  generation = wizardGeneration
+): Promise<void> {
+  const request = ++workflowRequest
+  const isCurrent = (): boolean => isCurrentWizard(generation) && request === workflowRequest
+  slotMappings.value = []
+  variableOverrides.value = []
+  batchResources.value = null
+  if (!workflowId) return
   const variables = await invokeIpc(IPC_CHANNELS.WORKFLOW_VARIABLES, { workflowId })
+  if (!isCurrent()) return
   slotMappings.value = variables
     .filter(
       (variable) => variable.role === 'prompt_positive' || variable.role === 'prompt_negative'
@@ -136,13 +148,6 @@ async function loadWorkflowVariables(workflowId: string): Promise<void> {
       promptVariant: ''
     }))
 
-  try {
-    batchResources.value = await invokeIpc(IPC_CHANNELS.COMFYUI_MODELS)
-  } catch (error) {
-    void error
-    batchResources.value = null
-  }
-
   variableOverrides.value = variables
     .filter(
       (variable) =>
@@ -161,30 +166,28 @@ async function loadWorkflowVariables(workflowId: string): Promise<void> {
       value: variable.default_val || '',
       defaultValue: variable.default_val || ''
     }))
+  try {
+    const resources = await invokeIpc(IPC_CHANNELS.COMFYUI_MODELS)
+    if (isCurrent()) batchResources.value = resources
+  } catch {
+    // Model suggestions are optional; manual overrides remain available offline.
+  }
 }
 
-watch(selectedWorkflowId, async (workflowId) => {
-  if (!workflowId) {
-    slotMappings.value = []
-    variableOverrides.value = []
-    return
-  }
-  await loadWorkflowVariables(workflowId)
-})
-
-async function loadWizardSources(): Promise<void> {
+async function loadWizardSources(generation: number): Promise<void> {
   await Promise.all([
     moduleStore.loadModules(),
     workflowStore.loadWorkflows(),
     settingsStore.loaded ? Promise.resolve() : settingsStore.loadSettings()
   ])
-  availableModules.value = moduleStore.modules
+  if (isCurrentWizard(generation)) availableModules.value = moduleStore.modules
 }
 
-async function initializeCreate(): Promise<void> {
+async function initializeCreate(generation: number): Promise<void> {
   editingJobId.value = null
   currentStep.value = 1
-  await loadWizardSources()
+  await loadWizardSources(generation)
+  if (!isCurrentWizard(generation)) return
   moduleSelections.value = []
   variableOverrides.value = []
   batchResources.value = null
@@ -197,9 +200,14 @@ async function initializeCreate(): Promise<void> {
   filePattern.value = settingsStore.settings.filename_pattern
   showOverrides.value = false
   selectedWorkflowId.value = workflowOptions.value[0]?.value ?? null
+  await loadWorkflowVariables(selectedWorkflowId.value, generation)
 }
 
-async function initializeFromJob(job: Record<string, unknown>, clone: boolean): Promise<void> {
+async function initializeFromJob(
+  job: Record<string, unknown>,
+  clone: boolean,
+  generation: number
+): Promise<void> {
   const parsedConfig = safeJsonParse<RestorableJobConfig>(job.config as string, {
     context: 'Batch job config',
     validate: isRestorableJobConfig,
@@ -208,7 +216,8 @@ async function initializeFromJob(job: Record<string, unknown>, clone: boolean): 
   if (!parsedConfig.ok) throw new Error(parsedConfig.error)
 
   const config = parsedConfig.value
-  await loadWizardSources()
+  await loadWizardSources(generation)
+  if (!isCurrentWizard(generation)) return
   currentStep.value = 1
   editingJobId.value = clone ? null : (job.id as string)
   batchName.value = clone ? `${job.name as string} ${t('batch.copySuffix')}` : (job.name as string)
@@ -216,42 +225,94 @@ async function initializeFromJob(job: Record<string, unknown>, clone: boolean): 
   selectedWorkflowId.value = config.workflowId || null
   countPerCombination.value = config.countPerCombination || 1
   seedMode.value = config.seedMode || 'random'
-  fixedSeed.value = config.fixedSeed || 42
+  fixedSeed.value = config.fixedSeed ?? 42
   outputPattern.value = config.outputFolderPattern || '{job}/{character}/{outfit}/{emotion}'
   filePattern.value = config.fileNamePattern || '{character}_{outfit}_{emotion}_{index}'
 
-  await restoreModuleSelections(config, moduleSelections, availableModules, moduleStore)
-  restoreSlotMappings(config.slotMappings, slotMappings, { useUserPrefixText: true })
-  restoreVariableOverrides(config.variableOverrides, variableOverrides, showOverrides)
+  await loadWorkflowVariables(selectedWorkflowId.value, generation)
+  if (!isCurrentWizard(generation)) return
+  moduleSelections.value = []
+  for (const selection of config.moduleSelections ?? []) {
+    const module = availableModules.value.find((entry) => entry.id === selection.moduleId)
+    if (!module) continue
+    const items = (await invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, {
+      moduleId: module.id
+    })) as ModuleItem[]
+    if (!isCurrentWizard(generation)) return
+    moduleSelections.value.push({
+      moduleId: module.id,
+      moduleName: module.name,
+      moduleType: selection.moduleType || module.type,
+      items,
+      selectedItemIds: selection.selectedItemIds ?? items.map((item) => item.id)
+    })
+  }
+  for (const saved of config.slotMappings ?? []) {
+    const slot = slotMappings.value.find(
+      (entry) => entry.nodeId === saved.nodeId && entry.fieldName === saved.fieldName
+    )
+    if (!slot) continue
+    slot.action = saved.action === 'fixed' ? 'fixed' : 'inject'
+    slot.fixedValue = (saved.fixedValue as string) || ''
+    slot.assignedModuleIds = (saved.assignedModuleIds as string[]) || []
+    slot.prefixModuleIds = (saved.prefixModuleIds as string[]) || []
+    slot.prefixText = (saved.userPrefixText as string) ?? (saved.prefixText as string) ?? ''
+    slot.suffixText = (saved.suffixText as string) || ''
+    slot.promptVariant = (saved.promptVariant as string) || ''
+  }
+  showOverrides.value = Boolean(config.variableOverrides?.length)
+  for (const saved of config.variableOverrides ?? []) {
+    const variable = variableOverrides.value.find(
+      (entry) => entry.nodeId === saved.nodeId && entry.fieldName === saved.fieldName
+    )
+    if (!variable) continue
+    variable.enabled = true
+    variable.value = (saved.value as string) || ''
+  }
 }
 
-async function initializeWizard(): Promise<void> {
+async function initializeWizard(generation: number): Promise<void> {
+  initializing.value = true
   try {
     if (props.mode === 'create') {
-      await initializeCreate()
+      await initializeCreate(generation)
     } else if (props.sourceJob) {
-      await initializeFromJob(props.sourceJob, props.mode === 'clone')
+      await initializeFromJob(props.sourceJob, props.mode === 'clone', generation)
     }
   } catch (error) {
+    if (!isCurrentWizard(generation)) return
     message.error(
       t('batch.msg.restoreFailed', {
         error: error instanceof Error ? error.message : String(error)
       })
     )
     showWizard.value = false
+  } finally {
+    if (isCurrentWizard(generation)) initializing.value = false
   }
 }
 
 watch(
-  () => props.show,
-  (show) => {
-    if (show) void initializeWizard()
+  () => [props.show, props.mode, props.sourceJob] as const,
+  ([show]) => {
+    const generation = ++wizardGeneration
+    if (show) void initializeWizard(generation)
   },
-  { immediate: true }
+  { immediate: true, flush: 'sync' }
 )
 
+onBeforeUnmount(() => {
+  wizardGeneration++
+})
+
 async function handleCreateBatch(): Promise<void> {
-  if (!batchName.value || !selectedWorkflowId.value || taskPreview.value.totalTasks === 0) return
+  if (
+    initializing.value ||
+    !batchName.value ||
+    !selectedWorkflowId.value ||
+    taskPreview.value.totalTasks === 0
+  )
+    return
 
   try {
     const config = {
@@ -342,6 +403,8 @@ async function handleCreateBatch(): Promise<void> {
         :workflow-options="workflowOptions"
         :generation-workflow-hint="generationWorkflowHint"
         :seed-mode-options="seedModeOptions"
+        :disabled="initializing"
+        @update:selected-workflow-id="loadWorkflowVariables"
       />
       <WizardStepModules
         v-show="currentStep === 2"
@@ -374,7 +437,7 @@ async function handleCreateBatch(): Promise<void> {
           <NButton
             v-if="currentStep < 3"
             type="primary"
-            :disabled="currentStep === 1 ? !canGoStep2 : !canGoStep3"
+            :disabled="initializing || (currentStep === 1 ? !canGoStep2 : !canGoStep3)"
             @click="currentStep++"
           >
             {{ t('batch.wizard.next') }}
@@ -382,7 +445,7 @@ async function handleCreateBatch(): Promise<void> {
           <NButton
             v-else
             type="primary"
-            :disabled="taskPreview.totalTasks === 0"
+            :disabled="initializing || taskPreview.totalTasks === 0"
             @click="handleCreateBatch"
           >
             {{ editingJobId ? t('batch.wizard.submitEdit') : t('batch.wizard.submitCreate') }}

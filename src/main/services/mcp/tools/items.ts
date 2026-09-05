@@ -1,3 +1,4 @@
+import { jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleItemRepo } from './shared'
@@ -30,9 +31,7 @@ export function registerItemCoreTools(server: McpServer): void {
         response.offset = options.offset
         response.has_more = options.offset + items.length < total
       }
-      return {
-        content: [{ type: 'text', text: JSON.stringify(response, null, 2) }]
-      }
+      return jsonResult(response)
     }
   )
 
@@ -67,9 +66,7 @@ export function registerItemCoreTools(server: McpServer): void {
         weight: weight ?? 1.0,
         prompt_variants: prompt_variants ? JSON.stringify(prompt_variants) : '{}'
       })
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ id, name, module_id }) }]
-      }
+      return jsonResult({ id, name, module_id })
     }
   )
 
@@ -101,9 +98,7 @@ export function registerItemCoreTools(server: McpServer): void {
       if (weight !== undefined) data.weight = weight
       if (prompt_variants !== undefined) data.prompt_variants = JSON.stringify(prompt_variants)
       moduleItemRepo.update(id, data)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, id }) }]
-      }
+      return jsonResult({ success: true, id })
     }
   )
 
@@ -113,9 +108,7 @@ export function registerItemCoreTools(server: McpServer): void {
     { id: z.string().describe('Item ID') },
     async ({ id }) => {
       moduleItemRepo.delete(id)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, id }) }]
-      }
+      return jsonResult({ success: true, id })
     }
   )
 
@@ -134,9 +127,7 @@ export function registerItemCoreTools(server: McpServer): void {
       if (typeof item.prompt_variants === 'string') {
         item.prompt_variants = validatePromptVariants(item.prompt_variants)
       }
-      return {
-        content: [{ type: 'text', text: JSON.stringify(item, null, 2) }]
-      }
+      return jsonResult(item)
     }
   )
 }

@@ -1,3 +1,4 @@
+import { jsonError, jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleRepo, moduleItemRepo } from './shared'
@@ -15,29 +16,15 @@ export function registerModuleAnalysisTools(server: McpServer): void {
     async ({ module_id, new_name }) => {
       const result = moduleRepo.duplicate(module_id, new_name)
       if (!result) {
-        return {
-          content: [{ type: 'text', text: JSON.stringify({ error: 'Source module not found' }) }],
-          isError: true
-        }
+        return jsonError('Source module not found')
       }
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                source_module_id: module_id,
-                new_module_id: result.newModuleId,
-                new_name,
-                items_copied: result.itemsCopied
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        source_module_id: module_id,
+        new_module_id: result.newModuleId,
+        new_name,
+        items_copied: result.itemsCopied
+      })
     }
   )
 
@@ -79,35 +66,19 @@ export function registerModuleAnalysisTools(server: McpServer): void {
       if (module_id) {
         const mod = moduleRepo.get(module_id)
         if (!mod) {
-          return {
-            content: [{ type: 'text', text: JSON.stringify({ error: 'Module not found' }) }],
-            isError: true
-          }
+          return jsonError('Module not found')
         }
         const stats = getModuleStats(mod)
-        return {
-          content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }]
-        }
+        return jsonResult(stats)
       }
 
       const modules = moduleRepo.list()
       const moduleStats = modules.map(getModuleStats)
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              {
-                total_modules: modules.length,
-                modules: moduleStats
-              },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({
+        total_modules: modules.length,
+        modules: moduleStats
+      })
     }
   )
 }

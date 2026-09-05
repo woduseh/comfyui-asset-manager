@@ -64,4 +64,44 @@ describe('ptyManager', () => {
 
     ptyManager.destroyAll()
   })
+
+  it('routes input and resize to the selected terminal and stops after destruction', async () => {
+    const { ptyManager } = await import('../../../../src/main/services/terminal/pty-manager')
+    const firstId = ptyManager.create(80, 24)
+    const secondId = ptyManager.create(80, 24)
+    const first = spawnMock.mock.results[0].value
+    const second = spawnMock.mock.results[1].value
+
+    ptyManager.write(secondId, 'hello')
+    ptyManager.resize(secondId, 120, 40)
+    expect(first.write).not.toHaveBeenCalled()
+    expect(first.resize).not.toHaveBeenCalled()
+    expect(second.write).toHaveBeenCalledWith('hello')
+    expect(second.resize).toHaveBeenCalledWith(120, 40)
+
+    ptyManager.destroy(secondId)
+    ptyManager.write(secondId, 'ignored')
+    ptyManager.resize(secondId, 80, 24)
+    ptyManager.destroy(secondId)
+    expect(second.kill).toHaveBeenCalledTimes(1)
+    expect(second.write).toHaveBeenCalledTimes(1)
+    expect(second.resize).toHaveBeenCalledTimes(1)
+    expect(ptyManager.getActiveIds()).toEqual([firstId])
+    ptyManager.destroyAll()
+    expect(first.kill).toHaveBeenCalledTimes(1)
+    expect(ptyManager.getActiveIds()).toEqual([])
+  })
+
+  it('removes an exited terminal without affecting another session', async () => {
+    const { ptyManager } = await import('../../../../src/main/services/terminal/pty-manager')
+    ptyManager.create(80, 24)
+    const remainingId = ptyManager.create(80, 24)
+    const exited = spawnMock.mock.results[0].value
+
+    exited.onExit.mock.calls[0][0]({ exitCode: 0 })
+
+    expect(ptyManager.getActiveIds()).toEqual([remainingId])
+    ptyManager.destroyAll()
+    expect(exited.kill).not.toHaveBeenCalled()
+  })
 })

@@ -1,5 +1,5 @@
 import { VARIABLE_NODE_TYPES, type ComfyUINode } from './types'
-import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
 export interface ParsedVariable {
   nodeId: string

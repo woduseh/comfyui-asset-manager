@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import log from '../../logger'
-import { safeJsonParse } from '../../utils/safe-json'
+import { safeJsonParse } from '@shared/safe-json'
 
 const MCP_SERVER_NAME = 'comfyui-asset-manager'
 const TOML_SECTION_HEADER = `[mcp_servers."${MCP_SERVER_NAME}"]`

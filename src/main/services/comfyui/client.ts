@@ -1,5 +1,5 @@
 import { ofetch } from 'ofetch'
-import { COMFYUI_PING_TIMEOUT_MS } from '../../constants'
+import { COMFYUI_PING_TIMEOUT_MS, COMFYUI_REQUEST_TIMEOUT_MS } from '../../constants'
 import log from '../../logger'
 import type {
   ComfyUIPromptRequest,
@@ -9,6 +9,11 @@ import type {
   ComfyUISystemStats,
   ComfyUIObjectInfo
 } from './types'
+
+interface HistoryRequestOptions {
+  timeout?: number
+  signal?: AbortSignal
+}
 
 export class ComfyUIClient {
   private baseUrl: string
@@ -68,7 +73,9 @@ export class ComfyUIClient {
     }
     return await ofetch(`${this.baseUrl}/prompt`, {
       method: 'POST',
-      body
+      body,
+      retry: 0,
+      timeout: COMFYUI_REQUEST_TIMEOUT_MS
     })
   }
 
@@ -78,14 +85,20 @@ export class ComfyUIClient {
   }
 
   /** Get execution history */
-  async getHistory(promptId?: string): Promise<Record<string, ComfyUIHistoryEntry>> {
+  async getHistory(
+    promptId?: string,
+    options?: HistoryRequestOptions
+  ): Promise<Record<string, ComfyUIHistoryEntry>> {
     const url = promptId ? `${this.baseUrl}/history/${promptId}` : `${this.baseUrl}/history`
-    return await ofetch(url)
+    return await ofetch(url, { timeout: COMFYUI_REQUEST_TIMEOUT_MS, ...options, retry: 0 })
   }
 
   /** Get a specific history entry */
-  async getHistoryEntry(promptId: string): Promise<ComfyUIHistoryEntry | null> {
-    const history = await this.getHistory(promptId)
+  async getHistoryEntry(
+    promptId: string,
+    options?: HistoryRequestOptions
+  ): Promise<ComfyUIHistoryEntry | null> {
+    const history = await this.getHistory(promptId, options)
     return history[promptId] || null
   }
 
@@ -97,7 +110,8 @@ export class ComfyUIClient {
   ): Promise<Buffer> {
     const params = new URLSearchParams({ filename, subfolder, type })
     const response = await ofetch(`${this.baseUrl}/view?${params.toString()}`, {
-      responseType: 'arrayBuffer'
+      responseType: 'arrayBuffer',
+      timeout: COMFYUI_REQUEST_TIMEOUT_MS
     })
     return Buffer.from(response)
   }
@@ -146,6 +160,8 @@ export class ComfyUIClient {
   async deleteFromHistory(ids: string[]): Promise<void> {
     await ofetch(`${this.baseUrl}/history`, {
       method: 'POST',
+      timeout: COMFYUI_REQUEST_TIMEOUT_MS,
+      retry: 0,
       body: { delete: ids }
     })
   }
@@ -168,68 +184,18 @@ export class ComfyUIClient {
     schedulers: string[]
   }> {
     const objectInfo = await this.getObjectInfo()
-    const result = {
-      checkpoints: [] as string[],
-      loras: [] as string[],
-      vaes: [] as string[],
-      upscaleModels: [] as string[],
-      samplers: [] as string[],
-      schedulers: [] as string[]
+    const options = (nodeType: string, inputName: string): string[] => {
+      const values = objectInfo[nodeType]?.input?.required?.[inputName]?.[0]
+      return Array.isArray(values) ? (values as string[]) : []
     }
 
-    // Extract checkpoint names
-    const ckptLoader = objectInfo['CheckpointLoaderSimple']
-    if (ckptLoader?.input?.required?.['ckpt_name']) {
-      const options = ckptLoader.input.required['ckpt_name']
-      if (Array.isArray(options[0])) {
-        result.checkpoints = options[0] as string[]
-      }
+    return {
+      checkpoints: options('CheckpointLoaderSimple', 'ckpt_name'),
+      loras: options('LoraLoader', 'lora_name'),
+      vaes: options('VAELoader', 'vae_name'),
+      upscaleModels: options('UpscaleModelLoader', 'model_name'),
+      samplers: options('KSampler', 'sampler_name'),
+      schedulers: options('KSampler', 'scheduler')
     }
-
-    // Extract LoRA names
-    const loraLoader = objectInfo['LoraLoader']
-    if (loraLoader?.input?.required?.['lora_name']) {
-      const options = loraLoader.input.required['lora_name']
-      if (Array.isArray(options[0])) {
-        result.loras = options[0] as string[]
-      }
-    }
-
-    // Extract VAE names
-    const vaeLoader = objectInfo['VAELoader']
-    if (vaeLoader?.input?.required?.['vae_name']) {
-      const options = vaeLoader.input.required['vae_name']
-      if (Array.isArray(options[0])) {
-        result.vaes = options[0] as string[]
-      }
-    }
-
-    // Extract upscale model names
-    const upscaleLoader = objectInfo['UpscaleModelLoader']
-    if (upscaleLoader?.input?.required?.['model_name']) {
-      const options = upscaleLoader.input.required['model_name']
-      if (Array.isArray(options[0])) {
-        result.upscaleModels = options[0] as string[]
-      }
-    }
-
-    // Extract sampler names
-    const ksampler = objectInfo['KSampler']
-    if (ksampler?.input?.required?.['sampler_name']) {
-      const options = ksampler.input.required['sampler_name']
-      if (Array.isArray(options[0])) {
-        result.samplers = options[0] as string[]
-      }
-    }
-
-    // Extract scheduler names
-    if (ksampler?.input?.required?.['scheduler']) {
-      const options = ksampler.input.required['scheduler']
-      if (Array.isArray(options[0])) {
-        result.schedulers = options[0] as string[]
-      }
-    }
-
-    return result
   }
 }

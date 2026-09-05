@@ -28,6 +28,7 @@ let writePromise: Promise<void> | null = null
 let requestedSaveRevision = 0
 let persistedSaveRevision = 0
 let consecutiveSaveFailures = 0
+let lastSaveError: unknown
 let batchMode = false
 let isClosing = false
 let transactionDepth = 0
@@ -137,6 +138,7 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
   requestedSaveRevision = 0
   persistedSaveRevision = 0
   consecutiveSaveFailures = 0
+  lastSaveError = undefined
   transactionDepth = 0
   savepointCounter = 0
 
@@ -219,14 +221,15 @@ function ensureSaveLoop(): Promise<void> {
   writePromise = (async () => {
     while (db && persistedSaveRevision < requestedSaveRevision) {
       const snapshotRevision = requestedSaveRevision
-      const buffer = Buffer.from(db.export())
-
       try {
+        const buffer = Buffer.from(db.export())
         await writeDatabaseSnapshot(buffer)
         persistedSaveRevision = snapshotRevision
         consecutiveSaveFailures = 0
+        lastSaveError = undefined
       } catch (error) {
         consecutiveSaveFailures++
+        lastSaveError = error
         log.error('[Database] Failed to persist database snapshot:', error)
         scheduleSaveRetry()
         return
@@ -241,11 +244,18 @@ function ensureSaveLoop(): Promise<void> {
 
 export async function flushDatabase(): Promise<void> {
   if (!db) return
+  if (transactionDepth > 0) {
+    throw new Error('Cannot flush database inside an uncommitted transaction')
+  }
+  const requiredRevision = requestedSaveRevision
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
   await ensureSaveLoop()
+  if (persistedSaveRevision < requiredRevision) {
+    throw lastSaveError ?? new Error('Database snapshot was not persisted')
+  }
 }
 
 export function saveDatabaseSync(): void {
@@ -258,6 +268,7 @@ export function saveDatabaseSync(): void {
   writeDatabaseSnapshotSync(Buffer.from(db.export()))
   persistedSaveRevision = snapshotRevision
   consecutiveSaveFailures = 0
+  lastSaveError = undefined
 }
 
 export async function closeDatabase(): Promise<void> {

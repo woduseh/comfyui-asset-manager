@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'fs'
 import { basename, extname, isAbsolute } from 'path'
 import { MAX_WORKFLOW_FILE_SIZE_BYTES } from '../../constants'
 import { withTransaction } from '../database'
-import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 import { parseWorkflow } from './workflow-parser'
 
 interface WorkflowImportRepository {

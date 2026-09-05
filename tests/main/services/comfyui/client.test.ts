@@ -66,7 +66,9 @@ describe('ComfyUI REST Client', () => {
         'http://localhost:8188/prompt',
         expect.objectContaining({
           method: 'POST',
-          body: { prompt, client_id: 'client-1' }
+          body: { prompt, client_id: 'client-1' },
+          retry: 0,
+          timeout: 30_000
         })
       )
     })
@@ -85,7 +87,10 @@ describe('ComfyUI REST Client', () => {
     it('fetches all history when no promptId', async () => {
       mockFetch.mockResolvedValueOnce({})
       await client.getHistory()
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8188/history')
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8188/history', {
+        timeout: 30_000,
+        retry: 0
+      })
     })
 
     it('fetches specific prompt history', async () => {
@@ -100,6 +105,17 @@ describe('ComfyUI REST Client', () => {
       const result = await client.getHistoryEntry('nonexistent')
       expect(result).toBeNull()
     })
+
+    it('propagates the waiter deadline and abort signal without a hidden retry', async () => {
+      const signal = new AbortController().signal
+      mockFetch.mockResolvedValueOnce({})
+      await client.getHistoryEntry('abc-123', { timeout: 42, signal })
+      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8188/history/abc-123', {
+        timeout: 42,
+        signal,
+        retry: 0
+      })
+    })
   })
 
   describe('getImage', () => {
@@ -107,7 +123,10 @@ describe('ComfyUI REST Client', () => {
       const buffer = Buffer.from('fake-image-data')
       mockFetch.mockResolvedValueOnce(buffer)
       await client.getImage('output.png', 'subfolder', 'output')
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/view?'), expect.any(Object))
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/view?'), {
+        responseType: 'arrayBuffer',
+        timeout: 30_000
+      })
     })
   })
 
@@ -151,6 +170,22 @@ describe('ComfyUI REST Client', () => {
   })
 
   describe('getAvailableModels', () => {
+    it('returns empty lists when loaders or option lists are unavailable', async () => {
+      mockFetch.mockResolvedValueOnce({
+        CheckpointLoaderSimple: { input: { required: { ckpt_name: ['STRING'] } } },
+        LoraLoader: { input: {} },
+        KSampler: { input: { required: { sampler_name: [], scheduler: ['STRING'] } } }
+      })
+      expect(await client.getAvailableModels()).toEqual({
+        checkpoints: [],
+        loras: [],
+        vaes: [],
+        upscaleModels: [],
+        samplers: [],
+        schedulers: []
+      })
+    })
+
     it('extracts model lists from object info', async () => {
       mockFetch.mockResolvedValueOnce({
         CheckpointLoaderSimple: {

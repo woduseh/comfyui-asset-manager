@@ -21,15 +21,6 @@ const apiCache = new Map<string, DanbooruApiTag | null>()
 let onlineAvailable: boolean | null = null
 let onlineCheckedAt = 0
 
-export function clearApiCache(): void {
-  apiCache.clear()
-}
-
-export function resetOnlineStatus(): void {
-  onlineAvailable = null
-  onlineCheckedAt = 0
-}
-
 export async function checkOnlineAvailability(): Promise<boolean> {
   const now = Date.now()
   if (onlineAvailable !== null && now - onlineCheckedAt < DANBOORU_ONLINE_CACHE_TTL_MS) {
@@ -75,9 +66,6 @@ export async function validateTagOnline(name: string): Promise<DanbooruApiTag | 
 }
 
 export async function searchTagsOnline(query: string, limit = 20): Promise<DanbooruApiTag[]> {
-  const key = `search:${query}:${limit}`
-  if (apiCache.has(key)) return [apiCache.get(key)!].filter(Boolean)
-
   try {
     const nameMatch = query.includes('*') ? query : `*${query}*`
     const results = await ofetch<DanbooruApiTag[]>(`${DANBOORU_BASE}/tags.json`, {

@@ -1,6 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, shell, clipboard, nativeImage } from 'electron'
 import { existsSync } from 'fs'
-import { IPC_CHANNELS } from './channels'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import log from '../logger'
 import {
   validateGalleryQuery,
@@ -48,7 +48,7 @@ import {
   rotateMcpAuthToken,
   setMcpAuthRequired
 } from '../services/mcp/auth'
-import { isJsonObject, safeJsonParse } from '../utils/safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 import { resolveDirectAssetPathFromSettings } from '../services/assets/local-asset'
 import { registerBatchHandlers } from './handlers/batch'
 

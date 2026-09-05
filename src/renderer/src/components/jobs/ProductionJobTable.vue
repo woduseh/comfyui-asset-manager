@@ -71,6 +71,7 @@ function actionsFor(job: Record<string, unknown>): OverflowAction[] {
       label: t('batch.actions.delete'),
       icon: TrashOutline,
       danger: true,
+      disabled: Number(job.uncertain_tasks) > 0,
       confirmText: t('batch.confirmDelete')
     }
   )
@@ -106,6 +107,9 @@ function handleAction(action: string, job: Record<string, unknown>): void {
           >{{ Number(job.total_tasks || 0).toLocaleString()
           }}{{ t('jobs.production.imagesUnit') }}</span
         >
+        <span v-if="Number(job.uncertain_tasks) > 0" role="status">
+          {{ t('jobs.production.needsReview') }}: {{ t('jobs.production.needsReviewHint') }}
+        </span>
       </div>
       <div role="cell">
         <NTag :type="getJobStatusType(job.status as string)" size="small" :bordered="false">
@@ -153,7 +157,7 @@ function handleAction(action: string, job: Record<string, unknown>): void {
           size="small"
           secondary
           type="primary"
-          :disabled="!isConnected || isProcessing"
+          :disabled="!isConnected || isProcessing || Number(job.uncertain_tasks) > 0"
           @click="$emit('start', job.id as string)"
         >
           <template #icon><NIcon :component="PlayOutline" /></template>
@@ -165,7 +169,7 @@ function handleAction(action: string, job: Record<string, unknown>): void {
           "
           size="small"
           quaternary
-          :disabled="isProcessing"
+          :disabled="isProcessing || Number(job.uncertain_tasks) > 0"
           @click="$emit('rerun', job)"
         >
           {{ t('batch.actions.rerun') }}

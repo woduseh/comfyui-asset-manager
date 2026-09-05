@@ -1,6 +1,7 @@
 import { MAX_DURATION_SAMPLES } from '../../constants'
-import { isJsonObject, safeJsonParse } from '../../utils/safe-json'
-import type { BatchConfig, GeneratedTask, ModuleDataSnapshot } from './task-generator'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
+import type { BatchConfig } from '@shared/ipc-contract'
+import type { GeneratedTask, ModuleDataSnapshot } from './task-generator'
 
 export type TaskPromptData = GeneratedTask['promptData']
 export type TaskMetadata = GeneratedTask['metadata']

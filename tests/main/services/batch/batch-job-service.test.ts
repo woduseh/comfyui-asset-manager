@@ -3,7 +3,7 @@ import {
   BatchJobService,
   type PreparedBatchJob
 } from '../../../../src/main/services/batch/batch-job-service'
-import type { BatchConfig } from '../../../../src/main/services/batch/task-generator'
+import type { BatchConfig } from '@shared/ipc-contract'
 
 function makeConfig(overrides: Partial<BatchConfig> = {}): BatchConfig {
   return {

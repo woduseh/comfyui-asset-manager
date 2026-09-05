@@ -744,7 +744,7 @@ describe('Database Repositories', () => {
       expect(taskRepo.listByJob(jobId)).toHaveLength(0)
     })
 
-    it('resetRunningTasksByJob resets only running tasks to pending', () => {
+    it('preserves prompt IDs when recovering known running requests', () => {
       taskRepo.createBulk([
         { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
@@ -760,12 +760,12 @@ describe('Database Repositories', () => {
       const updated = taskRepo.listByJob(jobId)
       expect(updated[0].status).toBe('completed')
       expect(updated[1].status).toBe('pending')
-      expect(updated[1].comfyui_prompt_id).toBeNull()
+      expect(updated[1].comfyui_prompt_id).toBe('p-1')
       expect(updated[2].status).toBe('pending')
-      expect(updated[2].comfyui_prompt_id).toBeNull()
+      expect(updated[2].comfyui_prompt_id).toBe('p-2')
     })
 
-    it('cancelRemainingTasksByJob cancels all non-completed tasks', () => {
+    it('cancels unsubmitted tasks while preserving failures and unresolved execution', () => {
       taskRepo.createBulk([
         { job_id: jobId, prompt_data: '{"a":1}', sort_order: 0, metadata: '{}' },
         { job_id: jobId, prompt_data: '{"a":2}', sort_order: 1, metadata: '{}' },
@@ -782,9 +782,77 @@ describe('Database Repositories', () => {
 
       const updated = taskRepo.listByJob(jobId)
       expect(updated[0].status).toBe('completed')
-      expect(updated[1].status).toBe('cancelled')
-      expect(updated[2].status).toBe('cancelled')
+      expect(updated[1].status).toBe('uncertain')
+      expect(updated[2].status).toBe('failed')
       expect(updated[3].status).toBe('cancelled')
+    })
+
+    it('quarantines submissions without a confirmed response on recovery', () => {
+      for (const status of ['submitting', 'running', 'uncertain']) {
+        const id = taskRepo.createSingle({
+          job_id: jobId,
+          prompt_data: '{}',
+          sort_order: 0,
+          metadata: '{}'
+        })
+        taskRepo.updateStatus(id, status)
+      }
+      taskRepo.resetRunningTasksByJob(jobId)
+      expect(taskRepo.countByJobStatus(jobId)).toEqual({ uncertain: 3 })
+      expect(taskRepo.listByJobPending(jobId, 50)).toEqual([])
+      expect(jobRepo.get(jobId)?.uncertain_tasks).toBe(3)
+      expect(jobRepo.list().find((job) => job.id === jobId)?.uncertain_tasks).toBe(3)
+    })
+
+    it('never converts a remotely submitted or uncertain task into confirmed cancellation', () => {
+      const states = [
+        'pending',
+        'retrying',
+        'running',
+        'submitting',
+        'uncertain',
+        'completed',
+        'failed'
+      ]
+      const ids = states.map((status, index) => {
+        const id = taskRepo.createSingle({
+          job_id: jobId,
+          prompt_data: '{}',
+          sort_order: index,
+          metadata: '{}'
+        })
+        taskRepo.updateStatus(id, status, { comfyui_prompt_id: `remote-${index}` })
+        return id
+      })
+      taskRepo.cancelRemainingTasksByJob(jobId)
+      expect(ids.map((id) => taskRepo.get(id)?.status)).toEqual([
+        'uncertain',
+        'uncertain',
+        'uncertain',
+        'uncertain',
+        'uncertain',
+        'completed',
+        'failed'
+      ])
+      expect(ids.map((id) => taskRepo.get(id)?.comfyui_prompt_id)).toEqual(
+        states.map((_, index) => `remote-${index}`)
+      )
+      expect(jobRepo.get(jobId)?.uncertain_tasks).toBe(5)
+    })
+
+    it('derives lazy expansion position from allocated indexes, including unresolved tasks', () => {
+      expect(taskRepo.nextSortOrder(jobId)).toBe(0)
+      const id = taskRepo.createSingle({
+        job_id: jobId,
+        prompt_data: '{}',
+        sort_order: 7,
+        metadata: '{}'
+      })
+      taskRepo.updateStatus(id, 'uncertain', { comfyui_prompt_id: 'remote' })
+      expect(taskRepo.nextSortOrder(jobId)).toBe(8)
+      expect(taskRepo.get('missing')).toBeNull()
+      taskRepo.updateStatus(id, 'retrying', { comfyui_prompt_id: null })
+      expect(taskRepo.get(id)?.comfyui_prompt_id).toBeNull()
     })
   })
 

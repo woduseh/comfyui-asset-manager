@@ -1,4 +1,4 @@
-import { isJsonObject, safeJsonParse } from './safe-json'
+import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
 export function formatGalleryFileSize(bytes: number | null): string {
   if (!bytes) return '-'

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseIntegerOrFallback } from '../../../src/main/utils/number'
+import { parseIntegerOrFallback } from '../../src/shared/number'
 
 describe('parseIntegerOrFallback', () => {
   it('parses valid base-10 integer strings', () => {
@@ -11,6 +11,7 @@ describe('parseIntegerOrFallback', () => {
   })
 
   it('returns the fallback for blank values', () => {
+    expect(parseIntegerOrFallback('', 7)).toBe(7)
     expect(parseIntegerOrFallback('   ', 7)).toBe(7)
   })
 })

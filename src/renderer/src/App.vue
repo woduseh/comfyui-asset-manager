@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, lightTheme } from 'naive-ui'
-import type { GlobalTheme } from 'naive-ui'
 import AppLayout from './components/layout/AppLayout.vue'
 import { useSettingsStore } from './stores/settings.store'
 import { useConnectionStore } from './stores/connection.store'
 import { useQueueStore } from './stores/queue.store'
-import type { QueueProgress, QueueTaskCompletedEvent, QueueTaskFailedEvent } from './types/ipc'
-import { parseIntegerOrFallback } from './utils/number'
+import type { QueueTaskCompletedEvent, QueueTaskFailedEvent } from '@shared/ipc-contract'
+import { parseIntegerOrFallback } from '@shared/number'
 import { onIpc } from './utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { darkThemeOverrides, lightThemeOverrides } from './theme-overrides'
@@ -17,7 +16,7 @@ const settingsStore = useSettingsStore()
 const connectionStore = useConnectionStore()
 const queueStore = useQueueStore()
 const { locale } = useI18n()
-const theme = ref<GlobalTheme | null>(darkTheme)
+const theme = computed(() => (settingsStore.settings.theme === 'light' ? lightTheme : darkTheme))
 const themeOverrides = computed(() =>
   settingsStore.settings.theme === 'light' ? lightThemeOverrides : darkThemeOverrides
 )
@@ -26,10 +25,6 @@ const eventCleanups: Array<() => void> = []
 
 const onConnectionChanged = (connected: boolean): void => {
   connectionStore.setConnectionChanged(connected)
-}
-
-const onQueueProgress = (data: QueueProgress): void => {
-  queueStore.updateProgress(data)
 }
 
 const onTaskCompleted = (data: QueueTaskCompletedEvent): void => {
@@ -49,12 +44,10 @@ const onJobCompleted = (data: { jobId: string }): void => {
 onMounted(async () => {
   await settingsStore.loadSettings()
   locale.value = settingsStore.settings.language || 'ko'
-  updateTheme(settingsStore.settings.theme)
 
   // Listen for main→renderer events
   eventCleanups.push(
     onIpc(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, onConnectionChanged),
-    onIpc(IPC_CHANNELS.QUEUE_PROGRESS, onQueueProgress),
     onIpc(IPC_CHANNELS.QUEUE_TASK_COMPLETED, onTaskCompleted),
     onIpc(IPC_CHANNELS.QUEUE_TASK_FAILED, onTaskFailed),
     onIpc(IPC_CHANNELS.QUEUE_JOB_COMPLETED, onJobCompleted)
@@ -72,15 +65,6 @@ onUnmounted(() => {
     cleanup()
   }
 })
-
-watch(
-  () => settingsStore.settings.theme,
-  (val) => updateTheme(val)
-)
-
-function updateTheme(value: string): void {
-  theme.value = value === 'light' ? lightTheme : darkTheme
-}
 </script>
 
 <template>

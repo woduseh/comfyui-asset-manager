@@ -1,7 +1,8 @@
+import { jsonResult } from './response'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { moduleItemRepo, workflowRepo, batchJobRepo, batchTaskRepo } from './shared'
-import type { BatchConfig } from '../../batch/task-generator'
+import type { BatchConfig } from '@shared/ipc-contract'
 import { batchJobService } from '../../batch/batch-job-service'
 import { queueManager } from '../../batch/queue-manager'
 
@@ -14,9 +15,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
     { category: z.string().optional().describe('Category filter') },
     async ({ category }) => {
       const workflows = workflowRepo.list(category)
-      return {
-        content: [{ type: 'text', text: JSON.stringify(workflows, null, 2) }]
-      }
+      return jsonResult(workflows)
     }
   )
 
@@ -33,9 +32,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
         }
       }
       const variables = workflowRepo.getVariables(id)
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ workflow, variables }, null, 2) }]
-      }
+      return jsonResult({ workflow, variables })
     }
   )
 
@@ -145,9 +142,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
 
       const { jobId, totalTasks } = batchJobService.create(config)
 
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ jobId, totalTasks, name }) }]
-      }
+      return jsonResult({ jobId, totalTasks, name })
     }
   )
 
@@ -163,9 +158,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
           isError: true
         }
       }
-      return {
-        content: [{ type: 'text', text: JSON.stringify({ success: true, job_id }) }]
-      }
+      return jsonResult({ success: true, job_id })
     }
   )
 
@@ -175,9 +168,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
     { status: z.string().optional().describe('Status filter') },
     async ({ status }) => {
       const jobs = batchJobRepo.list(status)
-      return {
-        content: [{ type: 'text', text: JSON.stringify(jobs, null, 2) }]
-      }
+      return jsonResult(jobs)
     }
   )
 
@@ -194,18 +185,7 @@ export function registerWorkflowAndBatchTools(server: McpServer): void {
         }
       }
       const tasks = batchTaskRepo.listByJob(id)
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(
-              { job, taskCount: tasks.length, tasks: tasks.slice(0, 10) },
-              null,
-              2
-            )
-          }
-        ]
-      }
+      return jsonResult({ job, taskCount: tasks.length, tasks: tasks.slice(0, 10) })
     }
   )
 }

@@ -2,7 +2,7 @@
 
 ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트로 생성·관리하는 데스크탑 애플리케이션입니다.
 
-![Electron](https://img.shields.io/badge/Electron-39-47848F?logo=electron)
+![Electron](https://img.shields.io/badge/Electron-47848F?logo=electron)
 ![Vue 3](https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
@@ -36,16 +36,26 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 ### 🔄 배치 작업
 
 - **매트릭스 빌더**: 모듈 조합의 카르테시안 곱으로 대량 이미지 생성
+- **청크 생성**: 전체 조합 배열을 메모리에 만들지 않고 실행할 조합만 계산
 - **프롬프트 슬롯 매핑**: 멀티 모델 워크플로우에서 슬롯별 모듈 할당
 - 일시정지 / 재개 / 취소, draft 작업 수정 / 재실행 / 복제. 실행 이력이 있는 작업은 복제로 안전하게 재구성
 - 카드당 시작/재실행 한 개만 우선 노출하고 보조 동작은 오버플로 메뉴로 정리
 - 취소 / 삭제 같은 파괴적 동작은 확인 후 실행
 - 배치 위자드가 생성 카테고리 워크플로우만 노출하며, 숨겨진 비생성 워크플로우 수를 안내
+- 편집·복제 설정은 데이터 로드 완료 후 복원하며, 복원 중에는 다음 단계와 생성을 잠금
 - 설정에 저장한 출력 폴더·파일명 패턴을 새 작업의 기본값으로 적용하고 출력 루트 밖 경로는 거부
 - 실패 태스크는 설정된 횟수만큼 재시도하며, 이미지가 없거나 결과 저장이 중간 실패하면 성공으로 기록하지 않음
 - 재실행은 ComfyUI 연결과 작업 상태를 먼저 확인하며, 검증 실패 시 기존 결과·진행 상태를 유지
 - 실시간 진행률 + ETA, 앱 종료 시 자동 복구
 - 실행 중 연결이 끊기면 마지막 저장 진행률과 연결 중단 상태를 구분해 표시하고 즉시 재연결 가능
+
+요청 응답 유실이나 저장 중 종료로 결과를 확정할 수 없으면 **결과 확인 필요**로 표시하고 자동
+재개·재실행·삭제를 막습니다. 요청 ID가 저장된 일반 중단은 같은 요청의 서버 히스토리로 복구하며,
+이미지 다운로드 실패는 새 이미지를 생성하지 않고 기존 결과를 다시 내려받습니다.
+취소는 앱의 후속 처리를 중단하며 서버의 실행 중단을 보장하지 않습니다.
+미확정 결과를 자동으로 대조·해결하는 UI는 아직 없으므로 서버 결과와 보존된 파일을 확인해야 합니다.
+복제는 별도 생성 요청이며 이전 요청이 실행됐다면 중복 결과가 생길 수 있습니다.
+실패 주입 결과와 제약은 [배치 정합성 감사](docs/batch-consistency-audit.md)에 기록합니다.
 
 ### 🖼️ 갤러리
 
@@ -82,7 +92,7 @@ ComfyUI 서버에 연결하여 대량의 이미지를 모듈화된 프롬프트�
 
 ### 필수 조건
 
-- [Node.js](https://nodejs.org/) 22 LTS 권장 (CI 기준)
+- [Node.js](https://nodejs.org/) 버전은 `.node-version` 참조 (로컬·CI·릴리스 공통)
 - [ComfyUI](https://github.com/comfyanonymous/ComfyUI) Portable 서버 실행 중 (기본: `localhost:8188`)
 
 ### 설치 & 실행
@@ -205,19 +215,26 @@ npm run dev        # 개발 모드 (HMR)
 
 ## 개발
 
+### Codex 작업 안내
+
+저장소의 에이전트 지침은 [AGENTS.md](AGENTS.md)에서 Codex용으로 관리합니다.
+과거 계획은 [개선 작업 회고](docs/history/2026-07-hardening.md), 작업·감사 증거는
+`work/`와 `docs/`에 보존하며 현재 실행 지침으로 사용하지 않습니다.
+앱의 MCP 클라이언트 연동 지원과 저장소의 에이전트 지침 지원은 별개입니다.
+
 ### 기술 스택
 
 | 영역          | 기술                                        |
 | ------------- | ------------------------------------------- |
-| 프레임워크    | Electron 39 + electron-vite                 |
+| 프레임워크    | Electron + electron-vite                    |
 | 프론트엔드    | Vue 3, Pinia, Vue Router, Vue I18n          |
 | UI 라이브러리 | Naive UI                                    |
 | 터미널        | xterm.js, node-pty                          |
 | MCP 서버      | @modelcontextprotocol/sdk (Streamable HTTP) |
-| 언어          | TypeScript 5.9                              |
+| 언어          | TypeScript                                  |
 | 데이터베이스  | sql.js (in-memory SQLite, WASM)             |
 | HTTP / WS     | ofetch, ws                                  |
-| 빌드          | Vite 7, electron-builder                    |
+| 빌드          | Vite, electron-builder                      |
 | 테스트        | Vitest                                      |
 | 코드 품질     | ESLint, Prettier, husky + lint-staged       |
 
@@ -274,7 +291,7 @@ src/
 - 갤러리 조회 IPC 검증 + SQL `ORDER BY` 화이트리스트로 정렬 입력 하드닝
 - MCP HTTP 표면은 loopback origin과 기본 Bearer 인증을 요구하며, Settings opt-in일 때만 자동 시작
 - 구조화 로깅 (`electron-log`, 5MB 로테이션)
-- 운영·개발 의존성은 `npm audit` 0건을 유지하며 Electron 보안 패치 계열을 사용
+- 의존성 버전은 `package.json`과 `package-lock.json`, 취약점 현황은 `npm audit`로 확인합니다.
 
 ### 테스트 현황
 

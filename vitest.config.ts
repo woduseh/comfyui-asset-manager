@@ -13,6 +13,7 @@ export default defineConfig({
       include: [
         'src/main/services/**/*.ts',
         'src/main/ipc/handlers.ts',
+        'src/main/ipc/handlers/**/*.ts',
         'src/main/ipc/validators.ts',
         'src/main/utils/*.ts',
         'src/main/crash-handler.ts',
@@ -22,26 +23,34 @@ export default defineConfig({
         'src/renderer/src/stores/settings.store.ts',
         'src/renderer/src/stores/terminal.store.ts'
       ],
-      exclude: [
-        // websocket.ts: depends on 'ws' native WebSocket — requires live server for meaningful tests
-        'src/main/services/comfyui/websocket.ts'
-      ],
       thresholds: {
         statements: 55,
         branches: 50,
         functions: 59,
         lines: 55,
         'src/main/services/batch/queue-manager.ts': {
-          statements: 20,
-          branches: 8,
-          functions: 30,
-          lines: 20
+          statements: 85,
+          branches: 75,
+          functions: 85,
+          lines: 90
         },
         'src/main/ipc/validators.ts': {
           statements: 80,
           branches: 68,
           functions: 85,
           lines: 80
+        },
+        'src/main/ipc/handlers/batch.ts': {
+          statements: 70,
+          branches: 70,
+          functions: 50,
+          lines: 70
+        },
+        'src/main/services/comfyui/websocket.ts': {
+          statements: 60,
+          branches: 40,
+          functions: 70,
+          lines: 60
         },
         'src/main/services/comfyui/workflow-import.ts': {
           statements: 80,

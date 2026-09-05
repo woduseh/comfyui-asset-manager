@@ -28,7 +28,7 @@ import ActionableEmptyState from '@renderer/components/common/ActionableEmptySta
 import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
-import { safeJsonParse } from '@renderer/utils/safe-json'
+import { safeJsonParse } from '@shared/safe-json'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { groupWorkflowVariables } from '@renderer/utils/workflow-variable-groups'

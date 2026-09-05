@@ -1,9 +1,19 @@
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'fs'
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  unlinkSync,
+  writeFileSync
+} from 'fs'
 import { basename, dirname, extname, join } from 'path'
 import { MAX_DUPLICATE_FILE_SUFFIX } from '../../constants'
-import { resolveOutputPath, type BatchConfig } from './task-generator'
+import type { BatchConfig } from '@shared/ipc-contract'
+import { resolveOutputPath } from './task-generator'
 import { resolveFileName, type TaskMetadata, type TaskPromptData } from './queue-utils'
 import { resolveSafeOutputDirectory, resolveSafeOutputFile } from './output-path'
+import type { TaskOutputJournal } from './output-journal'
 
 interface ComfyImage {
   filename: string
@@ -70,6 +80,7 @@ export async function downloadTaskImages(options: {
   jobId: string
   getImage: (filename: string, subfolder: string, type: string) => Promise<Buffer>
   target: { savedPaths: string[]; imageRecords: TaskImageRecord[] }
+  journal?: TaskOutputJournal
 }): Promise<void> {
   for (const nodeOutput of Object.values(options.outputs ?? {})) {
     const images = (nodeOutput as { images?: ComfyImage[] }).images ?? []
@@ -84,8 +95,15 @@ export async function downloadTaskImages(options: {
       const savePath = allocateUniqueOutputPath(
         resolveSafeOutputFile(options.outputRoot, options.outputDirectory, fileName)
       )
-      writeFileSync(savePath, imageData)
+      options.journal?.plan(savePath)
+      const descriptor = openSync(savePath, 'wx')
       options.target.savedPaths.push(savePath)
+      try {
+        writeFileSync(descriptor, imageData)
+        fsyncSync(descriptor)
+      } finally {
+        closeSync(descriptor)
+      }
       options.target.imageRecords.push({
         task_id: options.taskId,
         job_id: options.jobId,

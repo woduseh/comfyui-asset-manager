@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { IPC_CHANNELS } from '../channels'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import {
   validateBatchPreviewInput,
   validateEnum,
@@ -11,10 +11,28 @@ import { withTransaction } from '../../services/database'
 import { batchJobService } from '../../services/batch/batch-job-service'
 import { queueManager } from '../../services/batch/queue-manager'
 import { calculateTaskCount } from '../../services/batch/task-generator'
-import type { BatchConfig, BatchModuleSelection } from '../../services/batch/task-generator'
+import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
+
+function assertExecutionEvidenceCanBeRemoved(jobId: string): void {
+  const counts = batchTaskRepo.countByJobStatus(jobId)
+  if (counts.uncertain > 0) {
+    throw new Error(
+      'This job requires result review; its execution evidence cannot be deleted or rerun'
+    )
+  }
+  if (
+    counts.submitting > 0 ||
+    counts.running > 0 ||
+    (queueManager.isProcessing && queueManager.currentJobId === jobId)
+  ) {
+    throw new Error(
+      'This job still has an active attempt; its execution evidence cannot be removed'
+    )
+  }
+}
 
 export function registerBatchHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.BATCH_LIST, (_event, args?: { status?: string }) => {
@@ -35,6 +53,7 @@ export function registerBatchHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BATCH_DELETE, (_event, { id }: { id: string }) => {
     validateId(id)
+    assertExecutionEvidenceCanBeRemoved(id)
     batchJobRepo.delete(id)
     return true
   })
@@ -47,12 +66,14 @@ export function registerBatchHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BATCH_DELETE_TASKS, (_event, { jobId }: { jobId: string }) => {
     validateId(jobId)
+    assertExecutionEvidenceCanBeRemoved(jobId)
     batchTaskRepo.deleteByJob(jobId)
     return true
   })
 
   ipcMain.handle(IPC_CHANNELS.BATCH_RERUN, (_event, { id }: { id: string }) => {
     validateId(id)
+    assertExecutionEvidenceCanBeRemoved(id)
     const preflight = queueManager.preflightStart(id, ['completed', 'failed', 'cancelled'])
     if (!preflight.success) return preflight
 

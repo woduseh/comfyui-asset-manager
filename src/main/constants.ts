@@ -7,6 +7,7 @@ export const WS_BACKOFF_MULTIPLIER = 1.5
 
 // === ComfyUI REST Client ===
 export const COMFYUI_PING_TIMEOUT_MS = 5000
+export const COMFYUI_REQUEST_TIMEOUT_MS = 30_000
 
 // === ComfyUI Preview ===
 export const PREVIEW_THROTTLE_MS = 500

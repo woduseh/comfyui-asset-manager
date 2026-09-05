@@ -1,7 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { ComfyUIClient } from './client'
 import { ComfyUIWebSocket } from './websocket'
-import { IPC_CHANNELS } from '../../ipc/channels'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
 import { PREVIEW_THROTTLE_MS } from '../../constants'
 import log from '../../logger'

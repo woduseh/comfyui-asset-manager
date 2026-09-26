@@ -28,12 +28,10 @@ const onConnectionChanged = (connected: boolean): void => {
 }
 
 const onTaskCompleted = (data: QueueTaskCompletedEvent): void => {
-  if (!('jobId' in data)) return
   queueStore.onTaskCompleted(data)
 }
 
 const onTaskFailed = (data: QueueTaskFailedEvent): void => {
-  if (!('jobId' in data)) return
   queueStore.onTaskFailed(data)
 }
 
@@ -42,16 +40,18 @@ const onJobCompleted = (data: { jobId: string }): void => {
 }
 
 onMounted(async () => {
-  await settingsStore.loadSettings()
-  locale.value = settingsStore.settings.language || 'ko'
-
   // Listen for main→renderer events
   eventCleanups.push(
     onIpc(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, onConnectionChanged),
     onIpc(IPC_CHANNELS.QUEUE_TASK_COMPLETED, onTaskCompleted),
     onIpc(IPC_CHANNELS.QUEUE_TASK_FAILED, onTaskFailed),
-    onIpc(IPC_CHANNELS.QUEUE_JOB_COMPLETED, onJobCompleted)
+    onIpc(IPC_CHANNELS.QUEUE_JOB_COMPLETED, onJobCompleted),
+    onIpc(IPC_CHANNELS.QUEUE_STATUS_CHANGED, queueStore.onStatusChanged),
+    onIpc(IPC_CHANNELS.BATCH_CHANGED, queueStore.refreshFromEvent)
   )
+
+  await settingsStore.loadSettings()
+  locale.value = settingsStore.settings.language || 'ko'
 
   // Auto-connect on startup if previously connected
   const host = settingsStore.settings.comfyui_host || 'localhost'

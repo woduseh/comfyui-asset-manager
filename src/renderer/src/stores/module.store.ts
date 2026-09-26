@@ -32,6 +32,8 @@ export const useModuleStore = defineStore('module', () => {
   const modules = ref<PromptModule[]>([])
   const currentItems = ref<ModuleItem[]>([])
   const loading = ref(false)
+  const currentModuleId = ref<string | null>(null)
+  let itemRequest = 0
 
   async function loadModules(type?: string): Promise<void> {
     loading.value = true
@@ -64,9 +66,19 @@ export const useModuleStore = defineStore('module', () => {
     modules.value = modules.value.filter((m) => m.id !== id)
   }
 
+  function selectModule(id: string | null): void {
+    currentModuleId.value = id
+    itemRequest++
+    currentItems.value = []
+  }
+
   async function loadItems(moduleId: string): Promise<void> {
+    if (moduleId !== currentModuleId.value) return
+    const request = ++itemRequest
     const result = await invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, { moduleId })
-    currentItems.value = (result || []) as ModuleItem[]
+    if (request === itemRequest && moduleId === currentModuleId.value) {
+      currentItems.value = result as ModuleItem[]
+    }
   }
 
   async function createItem(data: {
@@ -104,6 +116,7 @@ export const useModuleStore = defineStore('module', () => {
   return {
     modules,
     currentItems,
+    selectModule,
     loading,
     loadModules,
     createModule,

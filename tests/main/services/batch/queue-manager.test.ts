@@ -1,5 +1,8 @@
 import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
+import type { Database as SqlJsDatabase } from 'sql.js'
+import { openTestDatabase } from '../../../helpers/database'
+import * as database from '@main/services/database'
+import type { MockInstance } from 'vitest'
 import { existsSync, mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -7,13 +10,11 @@ import { PromptExecutionError } from '../../../../src/main/services/batch/wait-f
 
 let mockDb: SqlJsDatabase
 
-const databaseMocks = vi.hoisted(() => ({
-  saveDatabase: vi.fn(),
-  flushDatabase: vi.fn().mockResolvedValue(undefined),
-  setBatchMode: vi.fn()
-}))
+let fixture: Awaited<ReturnType<typeof openTestDatabase>>
+let setBatchModeSpy: MockInstance
 
 const electronMocks = vi.hoisted(() => ({
+  userDataPath: '',
   getAllWindows: vi.fn(() => [] as Array<Record<string, unknown>>)
 }))
 
@@ -21,25 +22,12 @@ const journalMocks = vi.hoisted(() => ({
   recover: vi.fn(() => [] as Array<{ taskId: string; promptId: string; paths: string[] }>)
 }))
 
-vi.mock('../../../../src/main/services/database/index', () => ({
-  getDatabase: () => mockDb,
-  saveDatabase: databaseMocks.saveDatabase,
-  flushDatabase: databaseMocks.flushDatabase,
-  setBatchMode: databaseMocks.setBatchMode,
-  withTransaction: <T>(fn: () => T): T => {
-    mockDb.run('BEGIN TRANSACTION')
-    try {
-      const result = fn()
-      mockDb.run('COMMIT')
-      return result
-    } catch (error) {
-      mockDb.run('ROLLBACK')
-      throw error
-    }
-  }
+vi.mock('@main/logger', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 }))
 
 vi.mock('electron', () => ({
+  app: { getPath: () => electronMocks.userDataPath },
   BrowserWindow: { getAllWindows: electronMocks.getAllWindows }
 }))
 
@@ -74,70 +62,17 @@ import {
   GeneratedImageRepository
 } from '../../../../src/main/services/database/repositories/index'
 
-function createTables(db: SqlJsDatabase): void {
-  db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
-  db.run(`CREATE TABLE IF NOT EXISTS workflows (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '',
-    category TEXT NOT NULL DEFAULT 'generation', api_json TEXT NOT NULL,
-    ui_json TEXT, variables TEXT NOT NULL DEFAULT '[]', thumbnail BLOB,
-    created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS prompt_modules (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, description TEXT DEFAULT '',
-    is_template INTEGER DEFAULT 0, parent_id TEXT REFERENCES prompt_modules(id),
-    created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS module_items (
-    id TEXT PRIMARY KEY, module_id TEXT NOT NULL REFERENCES prompt_modules(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, prompt TEXT NOT NULL, negative TEXT DEFAULT '', weight REAL DEFAULT 1.0,
-    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}', thumbnail BLOB, enabled INTEGER DEFAULT 1,
-    prompt_variants TEXT DEFAULT '{}'
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS batch_jobs (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '',
-    status TEXT DEFAULT 'draft', config TEXT NOT NULL, workflow_id TEXT REFERENCES workflows(id),
-    total_tasks INTEGER DEFAULT 0, completed_tasks INTEGER DEFAULT 0, failed_tasks INTEGER DEFAULT 0,
-    pipeline_config TEXT, created_at DATETIME DEFAULT (datetime('now')),
-    started_at DATETIME, completed_at DATETIME, sort_order INTEGER DEFAULT 0,
-    module_data_snapshot TEXT
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS batch_tasks (
-    id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES batch_jobs(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending', prompt_data TEXT NOT NULL, comfyui_prompt_id TEXT,
-    result_path TEXT, error_message TEXT, retry_count INTEGER DEFAULT 0,
-    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}',
-    created_at DATETIME DEFAULT (datetime('now')), completed_at DATETIME
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS generated_images (
-    id TEXT PRIMARY KEY, task_id TEXT REFERENCES batch_tasks(id),
-    job_id TEXT REFERENCES batch_jobs(id), file_path TEXT NOT NULL,
-    thumbnail_path TEXT, file_size INTEGER, width INTEGER, height INTEGER,
-    generation_params TEXT DEFAULT '{}', prompt_text TEXT, negative_text TEXT,
-    rating INTEGER DEFAULT 0, is_favorite INTEGER DEFAULT 0, tags TEXT DEFAULT '[]',
-    character_name TEXT, outfit_name TEXT, emotion_name TEXT, style_name TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS characters (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, base_prompt TEXT NOT NULL,
-    negative_prompt TEXT DEFAULT '', thumbnail BLOB, metadata TEXT DEFAULT '{}',
-    created_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id)`)
-  db.run(
-    `INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`
-  )
-  db.run('PRAGMA foreign_keys = ON;')
-}
-
 describe('QueueManager Recovery', () => {
   let jobRepo: BatchJobRepository
   let taskRepo: BatchTaskRepository
   let settingsRepo: SettingsRepository
 
   beforeEach(async () => {
-    const SQL = await initSqlJs()
-    mockDb = new SQL.Database()
-    createTables(mockDb)
+    fixture = await openTestDatabase((path) => {
+      electronMocks.userDataPath = path
+    })
+    mockDb = fixture.db
+    setBatchModeSpy = vi.spyOn(database, 'setBatchMode')
     settingsRepo = new SettingsRepository()
     jobRepo = new BatchJobRepository()
     taskRepo = new BatchTaskRepository()
@@ -156,18 +91,16 @@ describe('QueueManager Recovery', () => {
     })
     ;(comfyuiManager as { isConnected: boolean }).isConnected = false
     vi.mocked(comfyuiManager.restClient.interrupt).mockReset().mockResolvedValue(undefined)
-    databaseMocks.saveDatabase.mockClear()
-    databaseMocks.flushDatabase.mockReset().mockResolvedValue(undefined)
     journalMocks.recover.mockReset().mockReturnValue([])
     vi.mocked(comfyuiManager.restClient.queuePrompt).mockReset()
     vi.mocked(comfyuiManager.restClient.getImage).mockReset()
     vi.mocked(comfyuiManager.restClient.deleteFromHistory).mockReset()
-    databaseMocks.setBatchMode.mockClear()
     electronMocks.getAllWindows.mockReset().mockReturnValue([])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks()
+    await fixture.close()
   })
 
   describe('recoverInterruptedJobs', () => {
@@ -347,7 +280,7 @@ describe('QueueManager Recovery', () => {
       expect(processJob).toHaveBeenCalledWith(jobId)
       expect(queueManager.isProcessing).toBe(false)
       expect(queueManager.currentJobId).toBeNull()
-      expect(databaseMocks.setBatchMode.mock.calls).toEqual([[true], [false]])
+      expect(setBatchModeSpy.mock.calls).toEqual([[true], [false]])
       expect(send).toHaveBeenCalledWith('queue:status-changed', {
         isProcessing: false,
         isPaused: false,
@@ -370,7 +303,7 @@ describe('QueueManager Recovery', () => {
       expect(jobRepo.get(jobId)?.status).toBe('failed')
       expect(queueManager.isProcessing).toBe(false)
       expect(queueManager.currentJobId).toBeNull()
-      expect(databaseMocks.setBatchMode.mock.calls).toEqual([[true], [false]])
+      expect(setBatchModeSpy.mock.calls).toEqual([[true], [false]])
     })
 
     it('pauses and hot-resumes the active job', async () => {
@@ -697,7 +630,7 @@ describe('QueueManager Recovery', () => {
         const order = task.sort_order as number
         processed.push(order)
         if (order === 1) throw new Error('Task failed')
-        taskRepo.updateStatus(task.id as string, 'completed')
+        taskRepo.finish(task.id as string, 'completed')
       })
 
       await queueManager.startJob(jobId)

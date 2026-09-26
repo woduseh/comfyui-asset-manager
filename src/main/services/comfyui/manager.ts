@@ -3,7 +3,6 @@ import { ComfyUIClient } from './client'
 import { ComfyUIWebSocket } from './websocket'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import type { IpcEventChannel, IpcEventPayload } from '@shared/ipc-contract'
-import { PREVIEW_THROTTLE_MS } from '../../constants'
 import log from '../../logger'
 
 /**
@@ -14,7 +13,6 @@ class ComfyUIManager {
   private client: ComfyUIClient
   private ws: ComfyUIWebSocket
   private _isConnected = false
-  private _lastPreviewTime = 0
 
   constructor() {
     this.client = new ComfyUIClient()
@@ -68,26 +66,6 @@ class ComfyUIManager {
     this.ws.on('disconnected', () => {
       this._isConnected = false
       this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, false)
-    })
-
-    this.ws.on('progress', (data) => {
-      this.sendToRenderer(IPC_CHANNELS.QUEUE_PROGRESS, data)
-    })
-
-    this.ws.on('executionComplete', (data) => {
-      this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_COMPLETED, data)
-    })
-
-    this.ws.on('executionError', (data) => {
-      this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, data)
-    })
-
-    this.ws.on('preview', (data: Buffer) => {
-      const now = Date.now()
-      if (now - this._lastPreviewTime < PREVIEW_THROTTLE_MS) return
-      this._lastPreviewTime = now
-      const base64 = data.toString('base64')
-      this.sendToRenderer(IPC_CHANNELS.COMFYUI_PREVIEW, base64)
     })
 
     this.ws.on('error', (error) => {

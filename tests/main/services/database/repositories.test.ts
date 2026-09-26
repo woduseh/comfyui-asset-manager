@@ -1,23 +1,13 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
+import type { Database as SqlJsDatabase } from 'sql.js'
+import { openTestDatabase } from '../../../helpers/database'
 
-// Mock the database module before importing repositories
 let mockDb: SqlJsDatabase
-
-vi.mock('../../../../src/main/services/database/index', () => ({
-  getDatabase: () => mockDb,
-  saveDatabase: vi.fn(),
-  withTransaction: <T>(fn: () => T): T => {
-    mockDb.run('BEGIN TRANSACTION')
-    try {
-      const result = fn()
-      mockDb.run('COMMIT')
-      return result
-    } catch (error) {
-      mockDb.run('ROLLBACK')
-      throw error
-    }
-  }
+let fixture: Awaited<ReturnType<typeof openTestDatabase>>
+const state = vi.hoisted(() => ({ path: '' }))
+vi.mock('electron', () => ({ app: { getPath: () => state.path } }))
+vi.mock('@main/logger', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 }))
 
 // Import after mocking
@@ -26,81 +16,22 @@ import {
   WorkflowRepository,
   ModuleRepository,
   ModuleItemRepository,
-  CharacterRepository,
   BatchJobRepository,
   BatchTaskRepository,
   GeneratedImageRepository
 } from '../../../../src/main/services/database/repositories/index'
 
-// Create tables helper (mirroring src/main/services/database/index.ts)
-function createTables(db: SqlJsDatabase): void {
-  db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
-  db.run(`CREATE TABLE IF NOT EXISTS workflows (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '',
-    category TEXT NOT NULL DEFAULT 'generation', api_json TEXT NOT NULL,
-    ui_json TEXT, variables TEXT NOT NULL DEFAULT '[]', thumbnail BLOB,
-    created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS workflow_variables (
-    id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-    node_id TEXT NOT NULL, field_name TEXT NOT NULL, display_name TEXT NOT NULL,
-    var_type TEXT NOT NULL DEFAULT 'text', default_val TEXT, description TEXT,
-    role TEXT NOT NULL DEFAULT 'custom'
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS prompt_modules (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, description TEXT DEFAULT '',
-    is_template INTEGER DEFAULT 0, parent_id TEXT REFERENCES prompt_modules(id),
-    created_at DATETIME DEFAULT (datetime('now')), updated_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS module_items (
-    id TEXT PRIMARY KEY, module_id TEXT NOT NULL REFERENCES prompt_modules(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, prompt TEXT NOT NULL, negative TEXT DEFAULT '', weight REAL DEFAULT 1.0,
-    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}', thumbnail BLOB, enabled INTEGER DEFAULT 1,
-    prompt_variants TEXT DEFAULT '{}'
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS characters (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, base_prompt TEXT NOT NULL,
-    negative_prompt TEXT DEFAULT '', thumbnail BLOB, metadata TEXT DEFAULT '{}',
-    created_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS batch_jobs (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '',
-    status TEXT DEFAULT 'draft', config TEXT NOT NULL, workflow_id TEXT REFERENCES workflows(id),
-    total_tasks INTEGER DEFAULT 0, completed_tasks INTEGER DEFAULT 0, failed_tasks INTEGER DEFAULT 0,
-    pipeline_config TEXT, created_at DATETIME DEFAULT (datetime('now')),
-    started_at DATETIME, completed_at DATETIME, sort_order INTEGER DEFAULT 0,
-    module_data_snapshot TEXT
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS batch_tasks (
-    id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES batch_jobs(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending', prompt_data TEXT NOT NULL, comfyui_prompt_id TEXT,
-    result_path TEXT, error_message TEXT, retry_count INTEGER DEFAULT 0,
-    sort_order INTEGER DEFAULT 0, metadata TEXT DEFAULT '{}',
-    created_at DATETIME DEFAULT (datetime('now')), completed_at DATETIME
-  )`)
-  db.run(`CREATE TABLE IF NOT EXISTS generated_images (
-    id TEXT PRIMARY KEY, task_id TEXT REFERENCES batch_tasks(id),
-    job_id TEXT REFERENCES batch_jobs(id), file_path TEXT NOT NULL,
-    thumbnail_path TEXT, file_size INTEGER, width INTEGER, height INTEGER,
-    generation_params TEXT DEFAULT '{}', prompt_text TEXT, negative_text TEXT,
-    rating INTEGER DEFAULT 0, is_favorite INTEGER DEFAULT 0, tags TEXT DEFAULT '[]',
-    character_name TEXT, outfit_name TEXT, emotion_name TEXT, style_name TEXT,
-    created_at DATETIME DEFAULT (datetime('now'))
-  )`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id)`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id)`)
-  db.run(`CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id)`)
-  db.run(
-    `INSERT OR IGNORE INTO settings (key, value) VALUES ('comfyui_host', 'localhost'), ('comfyui_port', '8188')`
-  )
-  db.run('PRAGMA foreign_keys = ON;')
-}
-
 describe('Database Repositories', () => {
   beforeEach(async () => {
-    const SQL = await initSqlJs()
-    mockDb = new SQL.Database()
-    createTables(mockDb)
+    fixture = await openTestDatabase((path) => {
+      state.path = path
+    })
+    mockDb = fixture.db
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await fixture.close()
   })
 
   describe('SettingsRepository', () => {
@@ -557,41 +488,6 @@ describe('Database Repositories', () => {
       expect(result).not.toBeNull()
       expect(result!.itemsCopied).toBe(0)
       expect(itemRepo.list(result!.newModuleId)).toHaveLength(0)
-    })
-  })
-
-  describe('CharacterRepository', () => {
-    let repo: CharacterRepository
-
-    beforeEach(() => {
-      repo = new CharacterRepository()
-    })
-
-    it('creates and gets a character', () => {
-      const id = repo.create({ name: 'Alice', base_prompt: '1girl, alice' })
-      const char = repo.get(id)
-      expect(char).not.toBeNull()
-      expect(char!.name).toBe('Alice')
-    })
-
-    it('lists characters alphabetically', () => {
-      repo.create({ name: 'Charlie', base_prompt: 'c' })
-      repo.create({ name: 'Alice', base_prompt: 'a' })
-      repo.create({ name: 'Bob', base_prompt: 'b' })
-      const list = repo.list()
-      expect(list.map((c) => c.name)).toEqual(['Alice', 'Bob', 'Charlie'])
-    })
-
-    it('updates a character', () => {
-      const id = repo.create({ name: 'Old', base_prompt: 'old' })
-      repo.update(id, { name: 'New' })
-      expect(repo.get(id)!.name).toBe('New')
-    })
-
-    it('deletes a character', () => {
-      const id = repo.create({ name: 'Del', base_prompt: 'del' })
-      repo.delete(id)
-      expect(repo.get(id)).toBeNull()
     })
   })
 

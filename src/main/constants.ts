@@ -10,7 +10,6 @@ export const COMFYUI_PING_TIMEOUT_MS = 5000
 export const COMFYUI_REQUEST_TIMEOUT_MS = 30_000
 
 // === ComfyUI Preview ===
-export const PREVIEW_THROTTLE_MS = 500
 
 // === Batch Queue ===
 export const TASK_CHUNK_SIZE = 50

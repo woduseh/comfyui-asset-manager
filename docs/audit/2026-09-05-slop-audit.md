@@ -69,9 +69,9 @@ coverage 임계값 완화 없이 고유한 검사 조건을 보존·보강했다
 
 coverage는 실행된 코드 범위이며 실제 모델·이미지 품질이나 모든 장애 조합의 증명은 아니다.
 최종 통합 결과의 모든 단계가 exit 0이고 `incomplete.json`이 없음을 확인했다.
-원본 결과와 단계 로그는 로컬의 [기준 결과](../../.reports/slop-audit/baseline/latest.json),
-[최종 결과](../../.reports/verify/latest.json), [smoke 결과](../../.reports/slop-audit/smoke-result.json),
-[활성 PTY 종료 실패](../../.reports/slop-audit/smoke-active-pty-shutdown.json)에 보관했다.
+원본 결과와 단계 로그는 로컬의 기준 결과 (`../../.reports/slop-audit/baseline/latest.json`, 당시 로컬 경로),
+최종 결과 (`../../.reports/verify/latest.json`, 당시 로컬 경로), smoke 결과 (`../../.reports/slop-audit/smoke-result.json`, 당시 로컬 경로),
+활성 PTY 종료 실패 (`../../.reports/slop-audit/smoke-active-pty-shutdown.json`, 당시 로컬 경로)에 보관했다.
 `.reports/`는 Git 제외 경로이므로 이 문서는 결과를 자체적으로 요약한다.
 
 ### 실제 Electron 사용 경로와 한계
@@ -94,7 +94,7 @@ main 종료 코드, Electron·node-pty 잠금 버전은 변경 전과 동일하�
 셸을 먼저 종료한 성공 결과로 이 실패를 대체하지 않았다.
 
 추가로 HEAD의 실제 PTY manager·종료 함수와 같은 잠금 의존성을 사용한
-[독립 재현](../../.reports/slop-audit/pty-shutdown-probe.json)을 1회 실행했지만 오류가
+독립 재현 (`../../.reports/slop-audit/pty-shutdown-probe.json`, 당시 로컬 경로)을 1회 실행했지만 오류가
 재현되지 않았다. BrowserWindow 없이 queue·MCP·DB·connection을 비활성 객체로
 대체했으므로 전체 앱의 결과와 동등하지 않다. 따라서 기존 문제인지 이번 변경의
 회귀인지는 아직 분류하지 못했다.

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     moduleUpdate: vi.fn(),
     workflowDelete: vi.fn(),
     workflowUpdate: vi.fn(),
+    batchSummaries: vi.fn(() => ({ items: [], total: 0 })),
     batchCreate: vi.fn(() => 'batch-id'),
     batchUpdateDraft: vi.fn(),
     batchDeleteTasks: vi.fn(),
@@ -78,14 +79,8 @@ vi.mock('../../../src/main/services/database/repositories', () => ({
     delete = vi.fn()
     reorder = vi.fn()
   },
-  CharacterRepository: class {
-    list = vi.fn(() => [])
-    get = vi.fn(() => null)
-    create = vi.fn(() => 'character-id')
-    update = vi.fn()
-    delete = vi.fn()
-  },
   BatchJobRepository: class {
+    listSummaries = mocks.batchSummaries
     list = vi.fn(() => [])
     get = vi.fn(() => null)
     create = mocks.batchCreate
@@ -359,5 +354,25 @@ describe('registerIpcHandlers validation boundary', () => {
 
     expect(() => handler({}, { id: '../terminal', data: 'pwd\r' })).toThrow('Invalid ID')
     expect(mocks.terminalWrite).not.toHaveBeenCalled()
+  })
+  it('validates summary pagination before querying and routes actionable/history scopes', () => {
+    const list = getHandler(IPC_CHANNELS.BATCH_LIST)
+    for (const invalid of [
+      null,
+      [],
+      { page: 0 },
+      { page: 1.5 },
+      { pageSize: 201 },
+      { scope: 'unknown' },
+      { page: Number.MAX_SAFE_INTEGER, pageSize: 200 },
+      { injected: true }
+    ]) {
+      expect(() => list({}, invalid)).toThrow()
+    }
+    expect(mocks.batchSummaries).not.toHaveBeenCalled()
+    expect(list({}, { scope: 'current' })).toEqual({ items: [], total: 0 })
+    expect(mocks.batchSummaries).toHaveBeenLastCalledWith(-1, 0, undefined, 'current')
+    list({}, { scope: 'history', page: 2, pageSize: 50 })
+    expect(mocks.batchSummaries).toHaveBeenLastCalledWith(50, 50, undefined, 'history')
   })
 })

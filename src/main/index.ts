@@ -1,3 +1,5 @@
+import { onBatchChanged } from './services/batch/changes'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { app, shell, BrowserWindow, protocol, net } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
@@ -119,6 +121,12 @@ app.whenReady().then(async () => {
 
   // Recover jobs interrupted by previous crash/force-quit
   await queueManager.recoverInterruptedJobs()
+
+  onBatchChanged(() => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.BATCH_CHANGED, null)
+    }
+  })
 
   // Register IPC handlers
   registerIpcHandlers()

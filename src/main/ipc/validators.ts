@@ -10,7 +10,7 @@ import {
   MAX_TERMINAL_DIMENSION,
   MAX_TERMINAL_INPUT_LENGTH
 } from '../constants'
-import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
+import type { BatchConfig, BatchModuleSelection, BatchListQuery } from '@shared/ipc-contract'
 
 // IPC input validation utilities
 // Protects against malicious or malformed input from the renderer process
@@ -210,15 +210,6 @@ export function validateModuleItemData(val: unknown, update = false): void {
   if (data.metadata !== undefined) validateString(data.metadata, 100_000)
   if (data.enabled !== undefined) validateIntegerRange(data.enabled, 0, 1, 'Module item enabled')
   if (data.prompt_variants !== undefined) validatePromptVariantsPayload(data.prompt_variants)
-}
-
-export function validateCharacterData(val: unknown, update = false): void {
-  const data = validateObject(val, update ? 'character update' : 'character')
-  rejectUnknownFields(data, ['name', 'base_prompt', 'negative_prompt', 'metadata'], 'character')
-  if (!update || data.name !== undefined) validateString(data.name, 200)
-  if (!update || data.base_prompt !== undefined) validateString(data.base_prompt, 100_000)
-  if (data.negative_prompt !== undefined) validateString(data.negative_prompt, 100_000)
-  if (data.metadata !== undefined) validateString(data.metadata, 100_000)
 }
 
 export function validateWorkflowVariables(val: unknown): void {
@@ -607,4 +598,23 @@ export function validatePromptVariants(
     }
   }
   return result
+}
+
+export function validateBatchListQuery(
+  value: unknown
+): BatchListQuery & { page: number; pageSize: number } {
+  const data = value === undefined ? {} : validateObject(value, 'batch list query')
+  rejectUnknownFields(data, ['status', 'scope', 'page', 'pageSize'], 'batch list query')
+  if (data.scope !== undefined) validateEnum(data.scope, ['current', 'history'] as const, 'scope')
+  if (data.status !== undefined)
+    validateEnum(
+      data.status,
+      ['draft', 'queued', 'running', 'paused', 'completed', 'failed', 'cancelled'] as const,
+      'batch status'
+    )
+  const page = validateIntegerRange(data.page ?? 1, 1, Number.MAX_SAFE_INTEGER, 'page')
+  const pageSize = validateIntegerRange(data.pageSize ?? 50, 1, 200, 'pageSize')
+  if (!Number.isSafeInteger((page - 1) * pageSize))
+    throw new Error('Batch list offset is too large')
+  return { ...data, page, pageSize } as BatchListQuery & { page: number; pageSize: number }
 }

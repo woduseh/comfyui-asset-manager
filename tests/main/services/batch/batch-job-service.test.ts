@@ -1,3 +1,4 @@
+import { onBatchChanged } from '@main/services/batch/changes'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BatchJobService,
@@ -167,5 +168,30 @@ describe('BatchJobService', () => {
     moduleItemList.mockReturnValueOnce([])
     expect(() => service.create(makeConfig())).toThrow('at least one enabled selected item')
     expect(create).not.toHaveBeenCalled()
+  })
+  it('invalidates both UI and MCP readers after successful mutations, coalescing bursts', async () => {
+    await Promise.resolve()
+    const changed = vi.fn()
+    const stop = onBatchChanged(changed)
+    try {
+      service.prepare(makeConfig())
+      expect(changed).not.toHaveBeenCalled()
+      create.mockImplementationOnce(() => {
+        throw new Error('write failed')
+      })
+      expect(() => service.create(makeConfig())).toThrow('write failed')
+      await Promise.resolve()
+      expect(changed).not.toHaveBeenCalled()
+      service.create(makeConfig())
+      service.updateDraft('job-id', makeConfig())
+      await Promise.resolve()
+      expect(changed).toHaveBeenCalledTimes(1)
+      stop()
+      service.create(makeConfig())
+      await Promise.resolve()
+      expect(changed).toHaveBeenCalledTimes(1)
+    } finally {
+      stop()
+    }
   })
 })

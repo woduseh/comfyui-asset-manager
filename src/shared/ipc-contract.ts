@@ -75,21 +75,37 @@ export type BatchJobStatus =
   | 'failed'
   | 'cancelled'
 
-export interface BatchJobRecord extends Record<string, unknown> {
+export interface BatchJobSummary extends Record<string, unknown> {
   id: string
   name: string
   description: string | null
   status: BatchJobStatus
-  config: string
   workflow_id: string | null
   total_tasks: number
   completed_tasks: number
   failed_tasks: number
   uncertain_tasks?: number
-  pipeline_config: string | null
   created_at: string
   started_at: string | null
   completed_at: string | null
+}
+
+export interface BatchJobRecord extends BatchJobSummary {
+  config: string
+  pipeline_config: string | null
+  module_data_snapshot?: string | null
+}
+
+export interface BatchJobPage {
+  items: BatchJobSummary[]
+  total: number
+}
+
+export interface BatchListQuery {
+  status?: BatchJobStatus
+  scope?: 'current' | 'history'
+  page?: number
+  pageSize?: number
 }
 
 export type BatchTaskStatus =
@@ -236,13 +252,6 @@ export interface ComfyUIStatus {
   systemStats?: ComfyUISystemStats
 }
 
-export interface QueueProgress {
-  promptId: string
-  node: string
-  value: number
-  max: number
-}
-
 export interface QueueStatus {
   isProcessing: boolean
   isPaused: boolean
@@ -273,16 +282,6 @@ export interface McpConfigStatus {
     codexCli: boolean
   }
   configPath: string
-}
-
-export interface DashboardStats {
-  totalImages: number
-  favoriteCount: number
-  totalJobs: number
-  completedJobs: number
-  totalWorkflows: number
-  totalModules: number
-  recentImages: Record<string, unknown>[]
 }
 
 export type ActionResult = { success: true } | { success: false; error: string }
@@ -373,21 +372,12 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.MODULE_ITEM_DELETE]: IpcCall<{ id: string }, boolean>
   [IPC_CHANNELS.MODULE_ITEM_REORDER]: IpcCall<{ itemIds: string[] }, boolean>
 
-  [IPC_CHANNELS.CHARACTER_LIST]: IpcCall<undefined, Record<string, unknown>[]>
-  [IPC_CHANNELS.CHARACTER_GET]: IpcCall<{ id: string }, Record<string, unknown> | null>
-  [IPC_CHANNELS.CHARACTER_CREATE]: IpcCall<
-    { name: string; base_prompt: string; negative_prompt?: string; metadata?: string },
-    string
-  >
-  [IPC_CHANNELS.CHARACTER_UPDATE]: IpcCall<{ id: string; data: Record<string, unknown> }, boolean>
-  [IPC_CHANNELS.CHARACTER_DELETE]: IpcCall<{ id: string }, boolean>
-
   [IPC_CHANNELS.BATCH_CREATE]: IpcCall<BatchConfig, { jobId: string; totalTasks: number }>
   [IPC_CHANNELS.BATCH_UPDATE_DRAFT]: IpcCall<
     { id: string; config: BatchConfig },
     { jobId: string; totalTasks: number }
   >
-  [IPC_CHANNELS.BATCH_LIST]: IpcCall<{ status?: string } | undefined, BatchJobRecord[]>
+  [IPC_CHANNELS.BATCH_LIST]: IpcCall<BatchListQuery | undefined, BatchJobPage>
   [IPC_CHANNELS.BATCH_GET]: IpcCall<{ id: string }, BatchJobRecord | null>
   [IPC_CHANNELS.BATCH_START]: IpcCall<{ id: string }, ActionResult>
   [IPC_CHANNELS.BATCH_PAUSE]: IpcCall<undefined, boolean>
@@ -418,7 +408,6 @@ export interface IpcInvokeContract {
     { moduleIds: string[]; variables?: Record<string, string> },
     { positive: string; negative: string }
   >
-  [IPC_CHANNELS.DASHBOARD_STATS]: IpcCall<undefined, DashboardStats>
 
   [IPC_CHANNELS.SETTINGS_GET]: IpcCall<{ key: string }, string | null>
   [IPC_CHANNELS.SETTINGS_SET]: IpcCall<{ key: string; value: string }, boolean>
@@ -450,37 +439,32 @@ export type IpcInvokeChannel = keyof IpcInvokeContract
 export type IpcInvokeArgs<K extends IpcInvokeChannel> = IpcInvokeContract[K]['args']
 export type IpcInvokeResult<K extends IpcInvokeChannel> = IpcInvokeContract[K]['result']
 
-export type QueueTaskCompletedEvent =
-  | { promptId: string }
-  | {
-      jobId: string
-      taskId: string
-      completed: number
-      total: number
-      etaMs: number
-      avgTaskDurationMs: number
-    }
+export interface QueueTaskCompletedEvent {
+  jobId: string
+  taskId: string
+  completed: number
+  total: number
+  etaMs: number
+  avgTaskDurationMs: number
+}
 
-export type QueueTaskFailedEvent =
-  | { promptId: string; nodeId: string; message: string; type: string }
-  | {
-      jobId: string
-      taskId: string
-      error: string
-      completed: number
-      failed: number
-      total: number
-      etaMs?: number
-    }
+export interface QueueTaskFailedEvent {
+  jobId: string
+  taskId: string
+  error: string
+  completed: number
+  failed: number
+  total: number
+  etaMs?: number
+}
 
 export interface IpcEventContract {
   [IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED]: boolean
-  [IPC_CHANNELS.QUEUE_PROGRESS]: QueueProgress
   [IPC_CHANNELS.QUEUE_TASK_COMPLETED]: QueueTaskCompletedEvent
   [IPC_CHANNELS.QUEUE_TASK_FAILED]: QueueTaskFailedEvent
   [IPC_CHANNELS.QUEUE_JOB_COMPLETED]: { jobId: string }
+  [IPC_CHANNELS.BATCH_CHANGED]: null
   [IPC_CHANNELS.QUEUE_STATUS_CHANGED]: QueueStatus
-  [IPC_CHANNELS.COMFYUI_PREVIEW]: string
   [IPC_CHANNELS.TERMINAL_DATA]: { id: string; data: string }
   [IPC_CHANNELS.TERMINAL_EXIT]: { id: string; exitCode: number }
 }

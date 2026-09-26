@@ -127,7 +127,7 @@ describe('database transactions', () => {
 
 describe('database query indexes', () => {
   it('uses indexed gallery authorization, ordering, and job status counts', async () => {
-    const { GeneratedImageRepository, BatchJobRepository } =
+    const { GeneratedImageRepository, BatchJobRepository, BatchTaskRepository } =
       await import('@main/services/database/repositories')
     const images = new GeneratedImageRepository()
     const jobs = new BatchJobRepository()
@@ -149,6 +149,7 @@ describe('database query indexes', () => {
     expect(images.hasTrackedAssetPath('/unregistered.png')).toBe(false)
     expect(images.list({ page: 1, pageSize: 20 }).items[0].id).toBe(imageId)
     expect(jobs.list()[0].uncertain_tasks).toBe(1)
+    expect(new BatchTaskRepository().nextSortOrder(jobId)).toBe(1)
 
     // Check the repository's actual SQL so an accidental query change cannot bypass the indexes.
     const queries = prepareSpy.mock.calls.map(([sql]) => String(sql))
@@ -169,6 +170,15 @@ describe('database query indexes', () => {
     expect(galleryPlan).not.toContain('USE TEMP B-TREE')
     const jobsPlan = plan(queries.find((sql) => sql.startsWith('SELECT batch_jobs.*'))!)
     expect(jobsPlan).toContain('COVERING INDEX idx_batch_tasks_job_status')
+    expect(plan("SELECT rowid FROM generated_images WHERE task_id = 'task'")).toContain(
+      'idx_generated_images_task'
+    )
+    expect(plan("SELECT rowid FROM saved_seeds WHERE source_task_id = 'task'")).toContain(
+      'idx_saved_seeds_task'
+    )
+    expect(plan(queries.find((sql) => sql.includes('MAX(sort_order)'))!)).toContain(
+      'COVERING INDEX idx_batch_tasks_job_sort'
+    )
   })
 
   it('adds query indexes to an existing database while preserving registered images', async () => {
@@ -176,7 +186,10 @@ describe('database query indexes', () => {
       'idx_generated_images_file_path',
       'idx_generated_images_thumbnail_path',
       'idx_generated_images_created_at',
-      'idx_batch_tasks_job_status'
+      'idx_batch_tasks_job_status',
+      'idx_batch_tasks_job_sort',
+      'idx_generated_images_task',
+      'idx_saved_seeds_task'
     ]
     const db = databaseModule.getDatabase()
     for (const index of indexes) db.run(`DROP INDEX ${index}`)
@@ -323,6 +336,7 @@ describe('database persistence queue', () => {
     databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('unsaved')")
     databaseModule.saveDatabase()
     await expect(databaseModule.flushDatabase()).rejects.toThrow('locked')
+    expect(databaseModule.getDatabase().exec('PRAGMA foreign_keys')[0].values).toEqual([[1]])
 
     expect(renameSpy).toHaveBeenCalledTimes(4)
     expect(readFileSync(databasePath)).toEqual(previousSnapshot)

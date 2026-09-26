@@ -143,7 +143,8 @@
       "importSuccess": "Workflow \"{name}\" imported ({count} variables)",
       "deleted": "Deleted",
       "updated": "Workflow updated",
-      "updateFailed": "Update failed: {error}"
+      "updateFailed": "Update failed: {error}",
+      "deleteFailed": "Unable to delete workflow: {error}"
     },
     "confirmDelete": "Delete this workflow?",
     "role": {
@@ -221,7 +222,8 @@
       "itemDeleted": "Item deleted",
       "copiedToClipboard": "Copied to clipboard",
       "importSuccess": "Module \"{name}\" imported",
-      "importFailed": "Cannot read module data from clipboard"
+      "importFailed": "Cannot read module data from clipboard",
+      "deleteFailed": "Unable to delete module: {error}"
     },
     "importClipboard": "Import (Clipboard)",
     "export": "Export",
@@ -622,7 +624,9 @@
       "openModules": "2. Browse modules",
       "configureBatch": "3. Configure batch",
       "attentionHint": "Failed jobs and jobs with unconfirmed results appear here. Jobs with uncertain results cannot be rerun or deleted.",
-      "viewResults": "View results"
+      "viewResults": "View results",
+      "loadFailed": "Unable to load jobs",
+      "jobNotFound": "This job no longer exists"
     }
   },
   "dashboard": {

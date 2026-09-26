@@ -143,7 +143,8 @@
       "importSuccess": "워크플로우 \"{name}\" 가져오기 완료 (변수 {count}개)",
       "deleted": "삭제되었습니다",
       "updated": "워크플로우가 수정되었습니다",
-      "updateFailed": "수정 실패: {error}"
+      "updateFailed": "수정 실패: {error}",
+      "deleteFailed": "워크플로우를 삭제하지 못했어요: {error}"
     },
     "confirmDelete": "이 워크플로우를 삭제하시겠습니까?",
     "role": {
@@ -221,7 +222,8 @@
       "itemDeleted": "아이템이 삭제되었습니다",
       "copiedToClipboard": "클립보드에 복사되었습니다",
       "importSuccess": "모듈 \"{name}\" 가져오기 완료",
-      "importFailed": "클립보드에서 모듈 데이터를 읽을 수 없습니다"
+      "importFailed": "클립보드에서 모듈 데이터를 읽을 수 없습니다",
+      "deleteFailed": "모듈을 삭제하지 못했어요: {error}"
     },
     "importClipboard": "가져오기 (클립보드)",
     "export": "내보내기",
@@ -622,7 +624,9 @@
       "openModules": "2. 모듈 둘러보기",
       "configureBatch": "3. 생성 구성",
       "attentionHint": "실패한 작업과 결과 확인이 필요한 작업이에요. 결과가 불확실한 작업은 재실행하거나 삭제할 수 없어요.",
-      "viewResults": "결과 보기"
+      "viewResults": "결과 보기",
+      "loadFailed": "작업 목록을 불러오지 못했어요",
+      "jobNotFound": "작업이 더 이상 존재하지 않아요"
     }
   },
   "dashboard": {

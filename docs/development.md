@@ -149,3 +149,11 @@ ComfyUI/GPU는 필요하지 않습니다. 기존 `FakeComfyUIServer`를 loopback
 배치 실패·강제 종료 테스트는 `tests/helpers/fake-comfyui.ts`와 임시 DB·출력 폴더를 사용합니다.
 기존 helper를 재사용하고 개인 ComfyUI 서버나 실제 사용자 DB를 테스트 대상으로 삼지 않습니다.
 세부 계약은 해당 소스·테스트를 읽고, 과거 감사 기록을 현재 상태의 증거로 대체하지 않습니다.
+
+## 배치·모듈 회귀 검증
+
+DB 관계·정렬·저장 수명주기 검사는 `tests/helpers/database.ts`의 production DB fixture를 재사용합니다.
+스키마나 transaction을 테스트에 복제하지 않고, 매 검사 후 연결을 닫아 임시 폴더를 정리합니다.
+저장 후 외래키, 삭제·재실행의 갤러리/시드 보존, 단일 완료 카운터는 `database/relations.test.ts`와
+기존 queue fault/crash 검사로 확인합니다. 외부 작업 알림은 `external-job-sync.test.ts`, 모듈 응답
+경쟁은 `module-selection.test.ts`, 이력 페이지·상세 복원은 `jobs-view.test.ts`에서 확인합니다.

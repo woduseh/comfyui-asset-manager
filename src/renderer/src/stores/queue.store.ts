@@ -1,14 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type {
-  BatchJobRecord,
+  BatchJobSummary,
+  QueueStatus,
   QueueTaskCompletedEvent,
   QueueTaskFailedEvent
 } from '@shared/ipc-contract'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { invokeIpc } from '@renderer/utils/ipc'
 
-export interface QueueJobInfo extends BatchJobRecord {
+export interface QueueJobInfo extends BatchJobSummary {
   etaMs?: number
   avgTaskDurationMs?: number
 }
@@ -16,6 +17,27 @@ export interface QueueJobInfo extends BatchJobRecord {
 export const useQueueStore = defineStore('queue', () => {
   const jobs = ref<QueueJobInfo[]>([])
   const loading = ref(false)
+  const loadError = ref<string | null>(null)
+  const queueStatus = ref<QueueStatus>({ isProcessing: false, isPaused: false, currentJobId: null })
+  let statusRevision = 0
+
+  async function loadQueueStatus(): Promise<void> {
+    const revision = ++statusRevision
+    const status = await invokeIpc(IPC_CHANNELS.QUEUE_STATUS)
+    if (revision === statusRevision) queueStatus.value = status
+  }
+
+  function onStatusChanged(status: QueueStatus): void {
+    statusRevision++
+    queueStatus.value = status
+    refreshFromEvent()
+  }
+
+  function refreshFromEvent(): void {
+    // Errors are retained for the jobs view, not left as unhandled event rejections.
+    void loadJobs().catch(() => {})
+  }
+
   const activeJobs = computed(() =>
     jobs.value.filter((job) => job.status === 'running' || job.status === 'queued')
   )
@@ -34,9 +56,10 @@ export const useQueueStore = defineStore('queue', () => {
       while (pendingLoad) {
         pendingLoad = false
         try {
-          const records = await invokeIpc(IPC_CHANNELS.BATCH_LIST)
+          const { items: records } = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { scope: 'current' })
           // A refresh or queue event after this read began requires a newer snapshot.
           if (pendingLoad) continue
+          loadError.value = null
           const previousJobs = new Map(jobs.value.map((job) => [job.id, job]))
           jobs.value = records.map((job) => {
             const previous = previousJobs.get(job.id)
@@ -57,7 +80,10 @@ export const useQueueStore = defineStore('queue', () => {
             return job
           })
         } catch (error) {
-          if (!pendingLoad) throw error
+          if (!pendingLoad) {
+            loadError.value = error instanceof Error ? error.message : String(error)
+            throw error
+          }
         }
       }
     } finally {
@@ -78,6 +104,7 @@ export const useQueueStore = defineStore('queue', () => {
   function onTaskCompleted(data: Extract<QueueTaskCompletedEvent, { jobId: string }>): void {
     if (loadPromise) pendingLoad = true
     const job = jobs.value.find((entry) => entry.id === data.jobId)
+    if (!job) refreshFromEvent()
     if (job) {
       job.completed_tasks = data.completed
       job.total_tasks = data.total
@@ -89,6 +116,7 @@ export const useQueueStore = defineStore('queue', () => {
   function onTaskFailed(data: Extract<QueueTaskFailedEvent, { jobId: string }>): void {
     if (loadPromise) pendingLoad = true
     const job = jobs.value.find((entry) => entry.id === data.jobId)
+    if (!job) refreshFromEvent()
     if (job) {
       job.completed_tasks = data.completed
       job.failed_tasks = data.failed
@@ -100,6 +128,7 @@ export const useQueueStore = defineStore('queue', () => {
   function onJobCompleted(jobId: string): void {
     if (loadPromise) pendingLoad = true
     const job = jobs.value.find((entry) => entry.id === jobId)
+    if (!job) refreshFromEvent()
     if (job) {
       job.status = 'completed'
       delete job.etaMs
@@ -110,6 +139,11 @@ export const useQueueStore = defineStore('queue', () => {
   return {
     jobs,
     loading,
+    loadError,
+    queueStatus,
+    loadQueueStatus,
+    onStatusChanged,
+    refreshFromEvent,
     activeJobs,
     isProcessing,
     totalProgress,

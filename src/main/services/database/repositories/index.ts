@@ -1,3 +1,4 @@
+import type { BatchJobPage, BatchJobSummary } from '@shared/ipc-contract'
 import { getDatabase, saveDatabase, withTransaction } from '../index'
 import { randomUUID } from 'node:crypto'
 import log from '../../../logger'
@@ -16,8 +17,7 @@ const ALLOWED_UPDATE_FIELDS = {
     'metadata',
     'module_id',
     'prompt_variants'
-  ],
-  characters: ['name', 'base_prompt', 'negative_prompt', 'metadata']
+  ]
 } as const
 
 function sanitizeUpdateFields(
@@ -327,8 +327,8 @@ export class ModuleRepository {
       for (const item of sourceItems) {
         const newItemId = randomUUID()
         db.run(
-          `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO module_items (id, module_id, name, prompt, negative, weight, sort_order, metadata, prompt_variants, enabled)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             newItemId,
             newModuleId,
@@ -338,7 +338,8 @@ export class ModuleRepository {
             (item.weight as number) ?? 1.0,
             (item.sort_order as number) ?? 0,
             (item.metadata as string) || '{}',
-            (item.prompt_variants as string) || '{}'
+            (item.prompt_variants as string) || '{}',
+            (item.enabled as number) ?? 1
           ]
         )
       }
@@ -547,66 +548,6 @@ export class ModuleItemRepository {
   }
 }
 
-export class CharacterRepository {
-  list(): Record<string, unknown>[] {
-    const db = getDatabase()
-    const stmt = db.prepare('SELECT * FROM characters ORDER BY name ASC')
-    const results: Record<string, unknown>[] = []
-    while (stmt.step()) {
-      results.push(stmt.getAsObject())
-    }
-    stmt.free()
-    return results
-  }
-
-  get(id: string): Record<string, unknown> | null {
-    const db = getDatabase()
-    const stmt = db.prepare('SELECT * FROM characters WHERE id = ?')
-    stmt.bind([id])
-    if (stmt.step()) {
-      const row = stmt.getAsObject()
-      stmt.free()
-      return row
-    }
-    stmt.free()
-    return null
-  }
-
-  create(data: {
-    name: string
-    base_prompt: string
-    negative_prompt?: string
-    metadata?: string
-  }): string {
-    const db = getDatabase()
-    const id = randomUUID()
-    db.run(
-      `INSERT INTO characters (id, name, base_prompt, negative_prompt, metadata)
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, data.name, data.base_prompt, data.negative_prompt || '', data.metadata || '{}']
-    )
-    saveDatabase()
-    return id
-  }
-
-  update(id: string, data: Partial<Record<string, unknown>>): void {
-    const db = getDatabase()
-    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.characters)
-    const fields = Object.keys(sanitized)
-    if (fields.length === 0) return
-    const setClauses = fields.map((f) => `${f} = ?`).join(', ')
-    const values = fields.map((f) => sanitized[f])
-    db.run(`UPDATE characters SET ${setClauses} WHERE id = ?`, [...(values as string[]), id])
-    saveDatabase()
-  }
-
-  delete(id: string): void {
-    const db = getDatabase()
-    db.run('DELETE FROM characters WHERE id = ?', [id])
-    saveDatabase()
-  }
-}
-
 export interface BatchJobWriteData {
   name: string
   description?: string
@@ -621,10 +562,17 @@ export class BatchJobRepository {
   listSummaries(
     limit: number,
     offset: number,
-    status?: string
-  ): { items: Record<string, unknown>[]; total: number } {
+    status?: string,
+    scope?: 'current' | 'history'
+  ): BatchJobPage {
     const db = getDatabase()
-    const where = status ? ' WHERE status = ?' : ''
+    const conditions: string[] = []
+    if (status) conditions.push('status = ?')
+    const history = `status IN ('completed', 'cancelled') AND NOT EXISTS (
+      SELECT 1 FROM batch_tasks WHERE job_id = batch_jobs.id AND status = 'uncertain')`
+    if (scope === 'history') conditions.push(`(${history})`)
+    if (scope === 'current') conditions.push(`NOT (${history})`)
+    const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : ''
     const count = db.prepare(`SELECT COUNT(*) AS total FROM batch_jobs${where}`)
     let total: number
     try {
@@ -640,8 +588,8 @@ export class BatchJobRepository {
       FROM batch_jobs${where} ORDER BY sort_order ASC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
     try {
       stmt.bind(status ? [status, limit, offset] : [limit, offset])
-      const items: Record<string, unknown>[] = []
-      while (stmt.step()) items.push(stmt.getAsObject())
+      const items: BatchJobSummary[] = []
+      while (stmt.step()) items.push(stmt.getAsObject() as BatchJobSummary)
       return { items, total }
     } finally {
       stmt.free()
@@ -766,8 +714,11 @@ export class BatchJobRepository {
 
   delete(id: string): void {
     const db = getDatabase()
-    db.run('DELETE FROM batch_jobs WHERE id = ?', [id])
-    saveDatabase()
+    withTransaction(() => {
+      new BatchTaskRepository().deleteByJob(id)
+      db.run('UPDATE generated_images SET job_id = NULL WHERE job_id = ?', [id])
+      db.run('DELETE FROM batch_jobs WHERE id = ?', [id])
+    })
   }
 
   reorder(jobIds: string[]): void {
@@ -900,10 +851,48 @@ export class BatchTaskRepository {
     saveDatabase()
   }
 
+  /** A terminal transition and its job counter are committed exactly once. */
+  finish(
+    id: string,
+    status: 'completed' | 'failed',
+    extra: { result_path?: string; error_message?: string } = {}
+  ): boolean {
+    const db = getDatabase()
+    return withTransaction(() => {
+      const stmt = db.prepare(`UPDATE batch_tasks
+        SET status = ?, result_path = COALESCE(?, result_path), error_message = ?, completed_at = datetime('now')
+        WHERE id = ? AND status IN ('pending', 'submitting', 'running', 'retrying')
+        RETURNING job_id`)
+      let jobId: string | undefined
+      try {
+        stmt.bind([status, extra.result_path ?? null, extra.error_message ?? null, id])
+        if (stmt.step()) jobId = String(stmt.getAsObject().job_id)
+      } finally {
+        stmt.free()
+      }
+      if (!jobId) return false
+      const counter = status === 'completed' ? 'completed_tasks' : 'failed_tasks'
+      db.run(`UPDATE batch_jobs SET ${counter} = ${counter} + 1 WHERE id = ?`, [jobId])
+      return true
+    })
+  }
+
   deleteByJob(jobId: string): void {
     const db = getDatabase()
-    db.run('DELETE FROM batch_tasks WHERE job_id = ?', [jobId])
-    saveDatabase()
+    withTransaction(() => {
+      // Results and saved seeds outlive an execution attempt; never delete their source files.
+      db.run(
+        `UPDATE generated_images SET task_id = NULL
+        WHERE task_id IN (SELECT id FROM batch_tasks WHERE job_id = ?)`,
+        [jobId]
+      )
+      db.run(
+        `UPDATE saved_seeds SET source_task_id = NULL
+        WHERE source_task_id IN (SELECT id FROM batch_tasks WHERE job_id = ?)`,
+        [jobId]
+      )
+      db.run('DELETE FROM batch_tasks WHERE job_id = ?', [jobId])
+    })
   }
 
   createSingle(data: {

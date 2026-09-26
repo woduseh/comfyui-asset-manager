@@ -12,7 +12,6 @@ import {
   validateBatchConfig,
   validateBatchPreviewInput,
   validateBoolean,
-  validateCharacterData,
   validateIntegerRange,
   validateModuleData,
   validateModuleItemData,
@@ -327,11 +326,7 @@ describe('entity mutation validators', () => {
     ).toThrow('prompt variants JSON')
   })
 
-  it('validates character fields and workflow variable arrays', () => {
-    expect(() => validateCharacterData({ name: 'Alice', base_prompt: '1girl' })).not.toThrow()
-    expect(() =>
-      validateCharacterData({ name: 'Alice', base_prompt: '1girl', extra: true })
-    ).toThrow('Unknown character')
+  it('validates workflow variable arrays', () => {
     expect(() =>
       validateWorkflowVariables([
         {

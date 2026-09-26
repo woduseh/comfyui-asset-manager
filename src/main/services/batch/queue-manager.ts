@@ -115,7 +115,7 @@ class QueueManager {
         if (batchJobRepo.get(task.job_id as string)?.status !== 'cancelled')
           batchJobRepo.updateStatus(task.job_id as string, 'paused')
       }
-      for (const job of batchJobRepo.list()) {
+      for (const job of batchJobRepo.listSummaries(-1, 0, undefined, 'current').items) {
         if (job.status !== 'running' && job.status !== 'paused') continue
         batchTaskRepo.resetRunningTasksByJob(job.id as string)
         this.syncProgress(job.id as string)
@@ -200,6 +200,7 @@ class QueueManager {
     this._maxRetries = parseIntegerOrFallback(retryStr, 3)
 
     batchJobRepo.updateStatus(jobId, 'running')
+    this.sendStatusToRenderer()
     let persistenceError: unknown
 
     try {
@@ -235,6 +236,7 @@ class QueueManager {
     this._isPaused = true
     if (this._currentJobId) {
       batchJobRepo.updateStatus(this._currentJobId, 'paused')
+      this.sendStatusToRenderer()
     }
   }
 
@@ -253,6 +255,7 @@ class QueueManager {
       }
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'running')
+      this.sendStatusToRenderer()
       return
     }
 
@@ -285,6 +288,7 @@ class QueueManager {
       this._isPaused = false
       batchJobRepo.updateStatus(this._currentJobId, 'cancelled')
       batchTaskRepo.cancelRemainingTasksByJob(this._currentJobId)
+      this.sendStatusToRenderer()
       return
     }
 
@@ -297,6 +301,7 @@ class QueueManager {
       log.info(`[QueueManager] Cold cancelling job: ${jobId}`)
       batchTaskRepo.cancelRemainingTasksByJob(jobId)
       batchJobRepo.updateStatus(jobId, 'cancelled')
+      this.sendStatusToRenderer()
     }
   }
 
@@ -324,6 +329,7 @@ class QueueManager {
     const initialCounts = batchTaskRepo.countByJobStatus(jobId)
     let completedCount = initialCounts.completed ?? 0
     let failedCount = initialCounts.failed ?? 0
+    batchJobRepo.updateProgress(jobId, completedCount, failedCount)
     const totalTasks = (job.total_tasks as number) || 0
 
     // ETA tracking — limited to moving average window to avoid O(n²) accumulation
@@ -338,7 +344,6 @@ class QueueManager {
       if (result.success) {
         completedCount++
         pushDuration(taskDurations, result.durationMs)
-        batchJobRepo.updateProgress(jobId, completedCount, failedCount)
         this.sendTaskCompletedEvent(
           jobId,
           taskId,
@@ -351,7 +356,6 @@ class QueueManager {
       }
 
       failedCount++
-      batchJobRepo.updateProgress(jobId, completedCount, failedCount)
       const remainingTasks = totalTasks - completedCount - failedCount
       const etaMs = computeEta(taskDurations, remainingTasks)
       this.sendToRenderer(IPC_CHANNELS.QUEUE_TASK_FAILED, {
@@ -492,7 +496,7 @@ class QueueManager {
         }
 
         if (retryCount >= this._maxRetries) {
-          batchTaskRepo.updateStatus(taskId, 'failed', { error_message: taskError.message })
+          batchTaskRepo.finish(taskId, 'failed', { error_message: taskError.message })
           return {
             success: false,
             cancelled: false,
@@ -597,8 +601,9 @@ class QueueManager {
         for (const imageRecord of target.imageRecords) {
           imageRepo.create(imageRecord)
         }
-        batchTaskRepo.updateStatus(taskId, 'completed', { result_path: target.savedPaths[0] })
-        this.syncProgress(jobId)
+        if (!batchTaskRepo.finish(taskId, 'completed', { result_path: target.savedPaths[0] })) {
+          throw new PromptOutcomeUnknownError('Task is no longer an active attempt')
+        }
       })
       committed = true
       await flushDatabase()

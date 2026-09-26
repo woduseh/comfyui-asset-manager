@@ -12,7 +12,6 @@ import {
   validateStringArray,
   validateAbsolutePath,
   validateBoolean,
-  validateCharacterData,
   validateIntegerRange,
   validateModuleData,
   validateModuleItemData,
@@ -29,13 +28,12 @@ import {
   WorkflowRepository,
   ModuleRepository,
   ModuleItemRepository,
-  CharacterRepository,
   GeneratedImageRepository
 } from '../services/database/repositories'
 import { comfyuiManager } from '../services/comfyui/manager'
 import { importWorkflowFromSelectedPath } from '../services/comfyui/workflow-import'
 import { previewPrompt } from '../services/prompt/composition-engine'
-import { getDatabase, withTransaction } from '../services/database'
+import { withTransaction } from '../services/database'
 import { ptyManager } from '../services/terminal/pty-manager'
 import { mcpServerManager } from '../services/mcp'
 import {
@@ -56,7 +54,6 @@ const settingsRepo = new SettingsRepository()
 const workflowRepo = new WorkflowRepository()
 const moduleRepo = new ModuleRepository()
 const moduleItemRepo = new ModuleItemRepository()
-const characterRepo = new CharacterRepository()
 const imageRepo = new GeneratedImageRepository()
 
 interface ModuleImportPayload {
@@ -357,43 +354,6 @@ export function registerIpcHandlers(): void {
     return true
   })
 
-  // Characters
-  ipcMain.handle(IPC_CHANNELS.CHARACTER_LIST, () => {
-    return characterRepo.list()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.CHARACTER_GET, (_event, { id }: { id: string }) => {
-    validateId(id)
-    return characterRepo.get(id)
-  })
-
-  ipcMain.handle(
-    IPC_CHANNELS.CHARACTER_CREATE,
-    (
-      _event,
-      data: { name: string; base_prompt: string; negative_prompt?: string; metadata?: string }
-    ) => {
-      validateCharacterData(data)
-      return characterRepo.create(data)
-    }
-  )
-
-  ipcMain.handle(
-    IPC_CHANNELS.CHARACTER_UPDATE,
-    (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
-      validateId(id)
-      validateCharacterData(data, true)
-      characterRepo.update(id, data)
-      return true
-    }
-  )
-
-  ipcMain.handle(IPC_CHANNELS.CHARACTER_DELETE, (_event, { id }: { id: string }) => {
-    validateId(id)
-    characterRepo.delete(id)
-    return true
-  })
-
   registerBatchHandlers()
 
   // Gallery
@@ -532,65 +492,6 @@ export function registerIpcHandlers(): void {
       })
     } catch (error) {
       return { error: (error as Error).message }
-    }
-  })
-
-  // Dashboard statistics
-  ipcMain.handle(IPC_CHANNELS.DASHBOARD_STATS, () => {
-    const db = getDatabase()
-
-    const imgCountStmt = db.prepare('SELECT COUNT(*) as count FROM generated_images')
-    imgCountStmt.step()
-    const totalImages = (imgCountStmt.getAsObject() as { count: number }).count
-    imgCountStmt.free()
-
-    const favCountStmt = db.prepare(
-      'SELECT COUNT(*) as count FROM generated_images WHERE is_favorite = 1'
-    )
-    favCountStmt.step()
-    const favoriteCount = (favCountStmt.getAsObject() as { count: number }).count
-    favCountStmt.free()
-
-    const jobCountStmt = db.prepare('SELECT COUNT(*) as count FROM batch_jobs')
-    jobCountStmt.step()
-    const totalJobs = (jobCountStmt.getAsObject() as { count: number }).count
-    jobCountStmt.free()
-
-    const completedJobsStmt = db.prepare(
-      "SELECT COUNT(*) as count FROM batch_jobs WHERE status = 'completed'"
-    )
-    completedJobsStmt.step()
-    const completedJobs = (completedJobsStmt.getAsObject() as { count: number }).count
-    completedJobsStmt.free()
-
-    const workflowCountStmt = db.prepare('SELECT COUNT(*) as count FROM workflows')
-    workflowCountStmt.step()
-    const totalWorkflows = (workflowCountStmt.getAsObject() as { count: number }).count
-    workflowCountStmt.free()
-
-    const moduleCountStmt = db.prepare('SELECT COUNT(*) as count FROM prompt_modules')
-    moduleCountStmt.step()
-    const totalModules = (moduleCountStmt.getAsObject() as { count: number }).count
-    moduleCountStmt.free()
-
-    // Recent images (last 10)
-    const recentStmt = db.prepare(
-      'SELECT id, file_path, character_name, emotion_name, created_at FROM generated_images ORDER BY created_at DESC LIMIT 10'
-    )
-    const recentImages: Record<string, unknown>[] = []
-    while (recentStmt.step()) {
-      recentImages.push(recentStmt.getAsObject())
-    }
-    recentStmt.free()
-
-    return {
-      totalImages,
-      favoriteCount,
-      totalJobs,
-      completedJobs,
-      totalWorkflows,
-      totalModules,
-      recentImages
     }
   })
 

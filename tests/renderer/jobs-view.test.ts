@@ -1,10 +1,11 @@
+import { useQueueStore } from '@renderer/stores/queue.store'
 // @vitest-environment happy-dom
 
 import { defineComponent } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { NMessageProvider } from 'naive-ui'
+import { NMessageProvider, NPagination } from 'naive-ui'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BatchJobRecord } from '@shared/ipc-contract'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
@@ -49,12 +50,31 @@ describe('production jobs view', () => {
     invokeIpc.mockReset()
     push.mockReset()
     invokeIpc.mockImplementation(
-      async (channel: string, args?: { id?: string; status?: string }) => {
+      async (
+        channel: string,
+        args?: { id?: string; status?: string; scope?: string; page?: number; pageSize?: number }
+      ) => {
         if (channel === IPC_CHANNELS.BATCH_LIST) {
-          return jobs
-            .filter((entry) => !args?.status || entry.status === args.status)
-            .map((entry) => ({ ...entry }))
+          const history = (entry: BatchJobRecord): boolean =>
+            ['completed', 'cancelled'].includes(entry.status) && !entry.uncertain_tasks
+          const rows = jobs.filter((entry) =>
+            args?.scope === 'history' ? history(entry) : !history(entry)
+          )
+          const size = args?.pageSize ?? rows.length
+          const offset = ((args?.page ?? 1) - 1) * size
+          return {
+            items: rows.slice(offset, offset + size).map((entry) => {
+              return Object.fromEntries(
+                Object.entries(entry).filter(
+                  ([field]) => field !== 'config' && field !== 'pipeline_config'
+                )
+              )
+            }),
+            total: rows.length
+          }
         }
+        if (channel === IPC_CHANNELS.BATCH_GET)
+          return jobs.find((entry) => entry.id === args?.id) ?? null
         if (channel === IPC_CHANNELS.QUEUE_STATUS) {
           const current = jobs.find(
             (entry) => entry.status === 'running' || entry.status === 'paused'
@@ -96,7 +116,7 @@ describe('production jobs view', () => {
     useConnectionStore(pinia).setConnectionChanged(true)
     wrapper = mount(
       defineComponent({
-        components: { JobsView, NMessageProvider },
+        components: { JobsView, NMessageProvider, NPagination },
         template: '<NMessageProvider><JobsView /></NMessageProvider>'
       }),
       {
@@ -117,7 +137,9 @@ describe('production jobs view', () => {
     jobs = [job('draft-job', 'draft')]
     const view = await openJobs()
     expect(
-      invokeIpc.mock.calls.filter(([channel]) => channel === IPC_CHANNELS.BATCH_LIST)
+      invokeIpc.mock.calls.filter(
+        ([channel, args]) => channel === IPC_CHANNELS.BATCH_LIST && args?.scope === 'current'
+      )
     ).toHaveLength(1)
     view.findComponent(ProductionJobTable).vm.$emit('start', 'draft-job')
     await flushPromises()
@@ -128,7 +150,9 @@ describe('production jobs view', () => {
       status: 'running'
     })
     expect(
-      invokeIpc.mock.calls.filter(([channel]) => channel === IPC_CHANNELS.BATCH_LIST)
+      invokeIpc.mock.calls.filter(
+        ([channel, args]) => channel === IPC_CHANNELS.BATCH_LIST && args?.scope === 'current'
+      )
     ).toHaveLength(2)
 
     view.findComponent(JobStatusBar).vm.$emit('pause')
@@ -177,7 +201,9 @@ describe('production jobs view', () => {
     jobs = [job('saved-draft', 'draft')]
     view.findComponent(BatchWizard).vm.$emit('saved')
     await flushPromises()
-    expect(view.findComponent(ProductionJobTable).props('jobs')).toEqual(jobs)
+    expect(view.findComponent(ProductionJobTable).props('jobs')).toEqual([
+      expect.objectContaining({ id: 'saved-draft' })
+    ])
   })
 
   it('keeps failed and uncertain jobs visible outside collapsed history and protects uncertain outputs', async () => {
@@ -219,5 +245,54 @@ describe('production jobs view', () => {
     expect(push).toHaveBeenCalledWith({ name: 'modules' })
     await actions[2].trigger('click')
     expect(view.findComponent(BatchWizard).props('show')).toBe(true)
+  })
+  it('pages completed history and fetches full configuration only for editing or cloning', async () => {
+    jobs = Array.from({ length: 55 }, (_, index) => job(`history-${index}`, 'completed'))
+    jobs.push(job('draft', 'draft'))
+    const view = await openJobs()
+    expect(invokeIpc.mock.calls.some(([channel]) => channel === IPC_CHANNELS.BATCH_GET)).toBe(false)
+    await view.get('.n-collapse-item__header-main').trigger('click')
+    await flushPromises()
+    const tables = view.findAllComponents(ProductionJobTable)
+    expect(tables[1].props('jobs')).toHaveLength(50)
+    view.findComponent(NPagination).vm.$emit('update:page', 2)
+    await flushPromises()
+    expect(view.findAllComponents(ProductionJobTable)[1].props('jobs')).toHaveLength(5)
+    expect(view.findAllComponents(ProductionJobTable)[1].props('jobs')[0].id).toBe('history-50')
+    tables[0].vm.$emit('edit', { id: 'draft' })
+    await flushPromises()
+    expect(invokeIpc).toHaveBeenCalledWith(IPC_CHANNELS.BATCH_GET, { id: 'draft' })
+    expect(view.findComponent(BatchWizard).props('sourceJob')!.config).toBe('{}')
+  })
+  it('keeps the requested history page when current jobs refresh during navigation', async () => {
+    jobs = Array.from({ length: 55 }, (_, index) => job(`history-${index}`, 'completed'))
+    const view = await openJobs()
+    await view.get('.n-collapse-item__header-main').trigger('click')
+    await flushPromises()
+    const fallback = invokeIpc.getMockImplementation()!
+    let release!: (value: unknown) => void
+    let delayed = false
+    invokeIpc.mockImplementation((channel, args) => {
+      if (
+        channel === IPC_CHANNELS.BATCH_LIST &&
+        args?.scope === 'history' &&
+        args.page === 2 &&
+        !delayed
+      ) {
+        delayed = true
+        return new Promise((resolve) => {
+          release = resolve
+        })
+      }
+      return fallback(channel, args)
+    })
+    view.findComponent(NPagination).vm.$emit('update:page', 2)
+    await flushPromises()
+    await useQueueStore().loadJobs()
+    await flushPromises()
+    release({ items: [], total: 55 })
+    await flushPromises()
+    expect(view.findComponent(NPagination).props('page')).toBe(2)
+    expect(view.findComponent(ProductionJobTable).props('jobs')[0].id).toBe('history-50')
   })
 })

@@ -29,12 +29,7 @@ export const IPC_CHANNELS = {
   MODULE_ITEM_DELETE: 'module-item:delete',
   MODULE_ITEM_REORDER: 'module-item:reorder',
 
-  CHARACTER_LIST: 'character:list',
-  CHARACTER_GET: 'character:get',
-  CHARACTER_CREATE: 'character:create',
-  CHARACTER_UPDATE: 'character:update',
-  CHARACTER_DELETE: 'character:delete',
-
+  BATCH_CHANGED: 'batch:changed',
   BATCH_CREATE: 'batch:create',
   BATCH_UPDATE_DRAFT: 'batch:update-draft',
   BATCH_LIST: 'batch:list',
@@ -52,16 +47,13 @@ export const IPC_CHANNELS = {
   QUEUE_STATUS: 'queue:status',
 
   GALLERY_LIST: 'gallery:list',
-  GALLERY_GET: 'gallery:get',
   GALLERY_RATE: 'gallery:rate',
   GALLERY_FAVORITE: 'gallery:favorite',
   GALLERY_DELETE: 'gallery:delete',
-  GALLERY_EXPORT: 'gallery:export',
   GALLERY_COPY_CLIPBOARD: 'gallery:copy-clipboard',
   GALLERY_SHOW_IN_EXPLORER: 'gallery:show-in-explorer',
 
   PROMPT_PREVIEW: 'prompt:preview',
-  DASHBOARD_STATS: 'dashboard:stats',
 
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
@@ -87,11 +79,9 @@ export const IPC_CHANNELS = {
   MCP_SETUP_CLI: 'mcp:setup-cli',
   MCP_REMOVE_CLI: 'mcp:remove-cli',
 
-  QUEUE_PROGRESS: 'queue:progress',
   QUEUE_TASK_COMPLETED: 'queue:task-completed',
   QUEUE_TASK_FAILED: 'queue:task-failed',
   QUEUE_JOB_COMPLETED: 'queue:job-completed',
   QUEUE_STATUS_CHANGED: 'queue:status-changed',
-  COMFYUI_CONNECTION_CHANGED: 'comfyui:connection-changed',
-  COMFYUI_PREVIEW: 'comfyui:preview'
+  COMFYUI_CONNECTION_CHANGED: 'comfyui:connection-changed'
 } as const

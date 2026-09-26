@@ -1,3 +1,4 @@
+import { notifyBatchChanged } from './changes'
 import {
   BatchJobRepository,
   ModuleItemRepository,
@@ -26,12 +27,14 @@ export class BatchJobService {
   create(config: BatchConfig): { jobId: string; totalTasks: number } {
     const prepared = this.prepare(config)
     const jobId = this.dependencies.batchJobRepo.create(prepared.data)
+    notifyBatchChanged()
     return { jobId, totalTasks: prepared.totalTasks }
   }
 
   updateDraft(id: string, config: BatchConfig): { jobId: string; totalTasks: number } {
     const prepared = this.prepare(config)
     this.dependencies.batchJobRepo.updateDraft(id, prepared.data)
+    notifyBatchChanged()
     return { jobId: id, totalTasks: prepared.totalTasks }
   }
 

@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { AddOutline, FlashOutline, TimeOutline } from '@vicons/ionicons5'
-import { NButton, NCollapse, NCollapseItem, NIcon, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCollapse, NCollapseItem, NIcon, NPagination, useMessage } from 'naive-ui'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
@@ -16,7 +16,7 @@ import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.sto
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
-import type { QueueStatus } from '@shared/ipc-contract'
+import type { BatchJobSummary } from '@shared/ipc-contract'
 import { JOBS_REFRESH_INTERVAL_MS, PRODUCTION_RECENT_RESULTS_LIMIT } from '@renderer/constants'
 import { buildBatchStatusLabels } from '@renderer/utils/view-labels'
 
@@ -26,15 +26,10 @@ const message = useMessage()
 const connectionStore = useConnectionStore()
 const galleryStore = useGalleryStore()
 const queueStore = useQueueStore()
-const { jobs: batchJobs, loading: loadingJobs } = storeToRefs(queueStore)
+const { jobs: batchJobs, loading: loadingJobs, queueStatus, loadError } = storeToRefs(queueStore)
 const recentImages = ref<GalleryImage[]>([])
 const loadingRecentImages = ref(false)
 const recentImagesLoadError = ref(false)
-const queueStatus = ref<QueueStatus>({
-  isProcessing: false,
-  isPaused: false,
-  currentJobId: null
-})
 const showWizard = ref(false)
 const wizardMode = ref<BatchWizardMode>('create')
 const wizardSourceJob = ref<Record<string, unknown> | null>(null)
@@ -65,13 +60,60 @@ const attentionJobs = computed(() =>
       (job.status === 'failed' || Number(job.uncertain_tasks || 0) > 0)
   )
 )
-const completedJobs = computed(() =>
-  batchJobs.value.filter(
-    (job) =>
-      ['completed', 'cancelled'].includes(job.status as string) &&
-      Number(job.uncertain_tasks || 0) === 0
-  )
-)
+const completedJobs = ref<BatchJobSummary[]>([])
+const historyPage = ref(1)
+const historyTotal = ref(0)
+const historyLoading = ref(false)
+const historyError = ref<string | null>(null)
+const historyPageSize = 50
+let historyTargetPage = 1
+let pendingHistoryPage: number | null = null
+let historyPromise: Promise<void> | null = null
+let disposed = false
+let wizardRequest = 0
+
+function loadHistory(page = historyTargetPage): Promise<void> {
+  historyTargetPage = page
+  pendingHistoryPage = page
+  if (!historyPromise) {
+    historyLoading.value = true
+    historyPromise = Promise.resolve().then(async () => {
+      try {
+        while (pendingHistoryPage !== null && !disposed) {
+          const requestedPage = pendingHistoryPage
+          pendingHistoryPage = null
+          const result = await invokeIpc(IPC_CHANNELS.BATCH_LIST, {
+            scope: 'history',
+            page: requestedPage,
+            pageSize: historyPageSize
+          }).catch((error) => {
+            if (disposed || pendingHistoryPage !== null) return null
+            throw error
+          })
+          if (!result || disposed || pendingHistoryPage !== null) continue
+          const lastPage = Math.max(1, Math.ceil(result.total / historyPageSize))
+          if (requestedPage > lastPage) {
+            historyTargetPage = lastPage
+            pendingHistoryPage = lastPage
+            continue
+          }
+          completedJobs.value = result.items
+          historyTotal.value = result.total
+          historyPage.value = requestedPage
+          historyError.value = null
+        }
+      } catch (error) {
+        historyError.value = error instanceof Error ? error.message : String(error)
+      } finally {
+        historyLoading.value = false
+        historyPromise = null
+      }
+    })
+  }
+  return historyPromise
+}
+watch(batchJobs, () => void loadHistory())
+
 function openResults(jobId: string): void {
   void router.push({ name: 'gallery', query: { jobId } })
 }
@@ -88,17 +130,12 @@ const runningJobEta = computed(() => {
   return t('jobs.time.seconds', { secs: seconds })
 })
 
-async function loadQueueStatus(): Promise<void> {
-  try {
-    queueStatus.value = await invokeIpc(IPC_CHANNELS.QUEUE_STATUS)
-  } catch (error) {
-    void error
-    // Queue polling is best-effort; preserve the latest known state.
-  }
-}
-
 async function refreshJobs(): Promise<void> {
-  await Promise.all([queueStore.loadJobs(), loadQueueStatus()])
+  try {
+    await Promise.all([queueStore.loadJobs(), queueStore.loadQueueStatus()])
+  } catch (error) {
+    queueStore.loadError = error instanceof Error ? error.message : String(error)
+  }
 }
 
 async function loadRecentImages(): Promise<void> {
@@ -174,7 +211,6 @@ async function handleStartJob(jobId: string): Promise<void> {
     return
   }
   message.success(t('batch.msg.started'))
-  await new Promise((resolve) => setTimeout(resolve, 300))
   await refreshJobs()
 }
 
@@ -220,7 +256,6 @@ async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
       return
     }
     message.success(t('batch.msg.rerunStartedShort'))
-    await new Promise((resolve) => setTimeout(resolve, 300))
     await refreshJobs()
   } catch (error) {
     message.error(
@@ -231,10 +266,21 @@ async function handleRerunJob(job: Record<string, unknown>): Promise<void> {
   }
 }
 
-function openWizard(mode: BatchWizardMode, job: Record<string, unknown> | null = null): void {
-  wizardMode.value = mode
-  wizardSourceJob.value = job
-  showWizard.value = true
+async function openWizard(
+  mode: BatchWizardMode,
+  job: Record<string, unknown> | null = null
+): Promise<void> {
+  const request = ++wizardRequest
+  try {
+    const detail = job ? await invokeIpc(IPC_CHANNELS.BATCH_GET, { id: String(job.id) }) : null
+    if (request !== wizardRequest || disposed) return
+    if (job && !detail) throw new Error(t('jobs.production.jobNotFound'))
+    wizardMode.value = mode
+    wizardSourceJob.value = detail
+    showWizard.value = true
+  } catch (error) {
+    if (request === wizardRequest && !disposed) message.error(String(error))
+  }
 }
 
 onMounted(() => {
@@ -260,6 +306,10 @@ watch(
 )
 
 onUnmounted(() => {
+  disposed = true
+  wizardRequest++
+  recentImagesRequestId++
+  pendingHistoryPage = null
   if (refreshInterval) clearInterval(refreshInterval)
   if (jobRefreshTimer) clearTimeout(jobRefreshTimer)
 })
@@ -279,6 +329,10 @@ onUnmounted(() => {
       </NButton>
     </header>
 
+    <NAlert v-if="loadError" type="error" :title="t('jobs.production.loadFailed')">
+      {{ loadError }}
+      <NButton size="small" @click="refreshJobs">{{ t('common.retry') }}</NButton>
+    </NAlert>
     <div class="production-workspace">
       <div class="production-main">
         <JobStatusBar
@@ -302,7 +356,10 @@ onUnmounted(() => {
           </div>
         </section>
 
-        <section v-if="!loadingJobs && batchJobs.length === 0" class="production-setup">
+        <section
+          v-if="!loadingJobs && !historyLoading && batchJobs.length === 0 && historyTotal === 0"
+          class="production-setup"
+        >
           <h2>{{ t('jobs.production.setupTitle') }}</h2>
           <p>{{ t('jobs.production.setupHint') }}</p>
           <div class="production-setup__actions">
@@ -380,9 +437,13 @@ onUnmounted(() => {
               <div class="production-history__title">
                 <NIcon :component="TimeOutline" />
                 <span>{{ t('jobs.production.completedHistory') }}</span>
-                <span>{{ completedJobs.length }}</span>
+                <span>{{ historyTotal }}</span>
               </div>
             </template>
+            <NAlert v-if="historyError" type="error">
+              {{ historyError }}
+              <NButton size="small" @click="loadHistory()">{{ t('common.retry') }}</NButton>
+            </NAlert>
             <ProductionJobTable
               v-if="completedJobs.length > 0"
               :jobs="completedJobs"
@@ -397,8 +458,16 @@ onUnmounted(() => {
               @results="openResults"
             />
             <div v-else class="production-section__empty">
-              {{ t('jobs.production.historyEmpty') }}
+              {{ historyLoading ? t('common.loading') : t('jobs.production.historyEmpty') }}
             </div>
+            <NPagination
+              v-if="historyTotal > historyPageSize"
+              :page="historyPage"
+              :page-size="historyPageSize"
+              :item-count="historyTotal"
+              :disabled="historyLoading"
+              @update:page="loadHistory"
+            />
           </NCollapseItem>
         </NCollapse>
       </div>

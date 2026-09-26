@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard,
@@ -105,31 +105,40 @@ const filteredModules = computed(() => {
   })
 })
 
-// Watch selected module to load items
-watch(selectedModuleId, async (id) => {
-  if (id) {
-    selectedModule.value = (await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })) as PromptModule | null
+let previewRequest = 0
+watch(selectedModuleId, async (id, _previous, onCleanup) => {
+  let current = true
+  onCleanup(() => {
+    current = false
+  })
+  selectedModule.value = null
+  moduleStore.selectModule(id)
+  promptPreview.value = null
+  previewRequest++
+  if (!id) return
+  try {
+    const module = await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })
+    if (!current) return
+    selectedModule.value = module as PromptModule | null
     await moduleStore.loadItems(id)
-    await updatePreview()
-  } else {
-    selectedModule.value = null
-    moduleStore.currentItems = []
-    promptPreview.value = null
+    if (current) await updatePreview()
+  } catch (error) {
+    if (current) message.error(String(error))
   }
 })
 
 async function updatePreview(): Promise<void> {
-  if (!selectedModuleId.value) {
+  const id = selectedModuleId.value
+  const request = ++previewRequest
+  if (!id) {
     promptPreview.value = null
     return
   }
   try {
-    promptPreview.value = await invokeIpc(IPC_CHANNELS.PROMPT_PREVIEW, {
-      moduleIds: [selectedModuleId.value]
-    })
-  } catch (error) {
-    void error
-    promptPreview.value = null
+    const result = await invokeIpc(IPC_CHANNELS.PROMPT_PREVIEW, { moduleIds: [id] })
+    if (request === previewRequest && id === selectedModuleId.value) promptPreview.value = result
+  } catch {
+    if (request === previewRequest && id === selectedModuleId.value) promptPreview.value = null
   }
 }
 
@@ -184,9 +193,13 @@ async function handleEditModule(): Promise<void> {
 }
 
 async function handleDeleteModule(id: string): Promise<void> {
-  if (selectedModuleId.value === id) selectedModuleId.value = null
-  await moduleStore.deleteModule(id)
-  message.success(t('module.msg.deleted'))
+  try {
+    await moduleStore.deleteModule(id)
+    if (selectedModuleId.value === id) selectedModuleId.value = null
+    message.success(t('module.msg.deleted'))
+  } catch (error) {
+    message.error(t('module.msg.deleteFailed', { error: String(error) }))
+  }
 }
 
 function selectModule(id: string): void {
@@ -360,6 +373,11 @@ async function handleReorderItems(): Promise<void> {
   const itemIds = moduleStore.currentItems.map((item) => item.id)
   await invokeIpc(IPC_CHANNELS.MODULE_ITEM_REORDER, { itemIds })
 }
+
+onBeforeUnmount(() => {
+  previewRequest++
+  moduleStore.selectModule(null)
+})
 
 onMounted(() => {
   moduleStore.loadModules()

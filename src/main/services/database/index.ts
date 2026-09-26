@@ -152,8 +152,7 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
   const database = existsSync(dbPath) ? new SQL.Database(readFileSync(dbPath)) : new SQL.Database()
 
   try {
-    database.run('PRAGMA journal_mode = WAL;')
-    database.run('PRAGMA foreign_keys = ON;')
+    configureConnection(database)
     createTables(database)
   } catch (error) {
     database.close()
@@ -164,6 +163,20 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
   saveDatabase()
 
   return db
+}
+
+function configureConnection(database: SqlJsDatabase): void {
+  database.run('PRAGMA journal_mode = WAL;')
+  database.run('PRAGMA foreign_keys = ON;')
+}
+
+function exportDatabaseSnapshot(database: SqlJsDatabase): Uint8Array {
+  try {
+    return database.export()
+  } finally {
+    // sql.js closes/reopens its connection during export. Restore policy before any async I/O.
+    configureConnection(database)
+  }
 }
 
 export function getDatabase(): SqlJsDatabase {
@@ -224,7 +237,7 @@ function ensureSaveLoop(): Promise<void> {
       const snapshotRevision = requestedSaveRevision
       try {
         // sql.js exports an owned byte array; fs can write it without copying the entire DB.
-        const buffer = db.export()
+        const buffer = exportDatabaseSnapshot(db)
         await writeDatabaseSnapshot(buffer)
         persistedSaveRevision = snapshotRevision
         consecutiveSaveFailures = 0
@@ -262,12 +275,13 @@ export async function flushDatabase(): Promise<void> {
 
 export function saveDatabaseSync(): void {
   if (!db) return
+  if (transactionDepth > 0) throw new Error('Cannot export an uncommitted transaction')
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
   const snapshotRevision = ++requestedSaveRevision
-  writeDatabaseSnapshotSync(db.export())
+  writeDatabaseSnapshotSync(exportDatabaseSnapshot(db))
   persistedSaveRevision = snapshotRevision
   consecutiveSaveFailures = 0
   lastSaveError = undefined
@@ -528,7 +542,10 @@ function createTables(database: SqlJsDatabase): void {
 
   // Create indexes
   database.run('CREATE INDEX IF NOT EXISTS idx_module_items_module ON module_items(module_id);')
-  database.run('CREATE INDEX IF NOT EXISTS idx_batch_tasks_job ON batch_tasks(job_id);')
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job_sort ON batch_tasks(job_id, sort_order);'
+  )
+  database.run('DROP INDEX IF EXISTS idx_batch_tasks_job;')
   database.run(
     'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job_status ON batch_tasks(job_id, status);'
   )
@@ -537,6 +554,9 @@ function createTables(database: SqlJsDatabase): void {
     `CREATE INDEX IF NOT EXISTS idx_batch_tasks_prompt_cleanup ON batch_tasks(job_id, status)
      WHERE status = 'completed' AND prompt_data != '{}';`
   )
+  // Foreign-key checks on bulk task removal must not scan every retained result per task.
+  database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_task ON generated_images(task_id);')
+  database.run('CREATE INDEX IF NOT EXISTS idx_saved_seeds_task ON saved_seeds(source_task_id);')
   database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);')
   // Asset authorization runs for every image request, including paths outside the output root.
   // Both OR branches need an index to avoid scanning the entire gallery for each request.

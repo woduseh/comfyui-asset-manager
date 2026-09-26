@@ -162,8 +162,12 @@ async function handleViewDetail(id: string): Promise<void> {
 }
 
 async function handleDelete(id: string): Promise<void> {
-  await workflowStore.deleteWorkflow(id)
-  message.success(t('workflow.msg.deleted'))
+  try {
+    await workflowStore.deleteWorkflow(id)
+    message.success(t('workflow.msg.deleted'))
+  } catch (error) {
+    message.error(t('workflow.msg.deleteFailed', { error: String(error) }))
+  }
 }
 
 async function handleCategoryChange(id: string, category: string): Promise<void> {

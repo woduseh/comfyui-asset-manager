@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { BatchJobRecord, QueueTaskCompletedEvent } from '@shared/ipc-contract'
+import type {
+  BatchJobRecord,
+  BatchJobSummary,
+  BatchJobPage,
+  QueueTaskCompletedEvent
+} from '@shared/ipc-contract'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { useQueueStore } from '@renderer/stores/queue.store'
 
@@ -23,6 +28,10 @@ function job(id = 'running', status: BatchJobRecord['status'] = 'running'): Batc
     started_at: '2026-09-01 00:01:00',
     completed_at: null
   }
+}
+
+function page(items: BatchJobSummary[]): BatchJobPage {
+  return { items, total: items.length }
 }
 
 function completedEvent(): Extract<QueueTaskCompletedEvent, { jobId: string }> {
@@ -64,11 +73,11 @@ describe('queue store snapshots', () => {
       job('completed', 'completed'),
       job('draft', 'draft')
     ]
-    invokeIpc.mockResolvedValue(records)
+    invokeIpc.mockResolvedValue(page(records))
     const store = useQueueStore()
     await store.loadJobs()
 
-    expect(invokeIpc.mock.calls).toEqual([[IPC_CHANNELS.BATCH_LIST]])
+    expect(invokeIpc.mock.calls).toEqual([[IPC_CHANNELS.BATCH_LIST, { scope: 'current' }]])
     expect(store.jobs).toEqual(records)
     expect(store.activeJobs.map((entry) => entry.id)).toEqual(['running', 'queued'])
     expect(store.isProcessing).toBe(true)
@@ -76,7 +85,7 @@ describe('queue store snapshots', () => {
   })
 
   it('applies authoritative event counts once and moves a completed job into history', async () => {
-    invokeIpc.mockResolvedValue([job()])
+    invokeIpc.mockResolvedValue(page([job()]))
     const store = useQueueStore()
     await store.loadJobs()
     store.onTaskCompleted(completedEvent())
@@ -108,16 +117,16 @@ describe('queue store snapshots', () => {
   ])(
     'retains timing while paused and clears it after rerun with $startedAt/$completed',
     async ({ startedAt, completed }) => {
-      invokeIpc.mockResolvedValueOnce([job()])
+      invokeIpc.mockResolvedValueOnce(page([job()]))
       const store = useQueueStore()
       await store.loadJobs()
       store.onTaskCompleted(completedEvent())
-      invokeIpc.mockResolvedValueOnce([{ ...job('running', 'paused'), completed_tasks: 2 }])
+      invokeIpc.mockResolvedValueOnce(page([{ ...job('running', 'paused'), completed_tasks: 2 }]))
       await store.loadJobs()
       expect(store.jobs[0]).toMatchObject({ etaMs: 80_000, avgTaskDurationMs: 10_000 })
-      invokeIpc.mockResolvedValueOnce([
-        { ...job(), started_at: startedAt, completed_tasks: completed }
-      ])
+      invokeIpc.mockResolvedValueOnce(
+        page([{ ...job(), started_at: startedAt, completed_tasks: completed }])
+      )
       await store.loadJobs()
       expect(store.jobs[0].completed_tasks).toBe(completed)
       expect(store.jobs[0].etaMs).toBeUndefined()
@@ -126,19 +135,19 @@ describe('queue store snapshots', () => {
   )
 
   it('coalesces refreshes during a read into one fresh snapshot', async () => {
-    const first = deferred<BatchJobRecord[]>()
-    const latest = deferred<BatchJobRecord[]>()
+    const first = deferred<BatchJobPage>()
+    const latest = deferred<BatchJobPage>()
     invokeIpc.mockReturnValueOnce(first.promise).mockReturnValueOnce(latest.promise)
     const store = useQueueStore()
     const initial = store.loadJobs()
     await Promise.resolve()
     const refreshes = Array.from({ length: 20 }, () => store.loadJobs())
-    first.resolve([job('obsolete')])
+    first.resolve(page([job('obsolete')]))
     await Promise.resolve()
     expect(invokeIpc).toHaveBeenCalledTimes(2)
     expect(store.jobs).toEqual([])
     expect(store.loading).toBe(true)
-    latest.resolve([job('latest')])
+    latest.resolve(page([job('latest')]))
     await Promise.all([initial, ...refreshes])
     expect(store.jobs[0].id).toBe('latest')
     expect(store.loading).toBe(false)
@@ -148,11 +157,11 @@ describe('queue store snapshots', () => {
     'does not overwrite a %s event with a snapshot requested before it',
     async (event) => {
       const original = job()
-      invokeIpc.mockResolvedValueOnce([original])
+      invokeIpc.mockResolvedValueOnce(page([original]))
       const store = useQueueStore()
       await store.loadJobs()
-      const stale = deferred<BatchJobRecord[]>()
-      const latest = deferred<BatchJobRecord[]>()
+      const stale = deferred<BatchJobPage>()
+      const latest = deferred<BatchJobPage>()
       invokeIpc.mockReturnValueOnce(stale.promise).mockReturnValueOnce(latest.promise)
       const loading = store.loadJobs()
       await Promise.resolve()
@@ -169,32 +178,32 @@ describe('queue store snapshots', () => {
       }
       if (event === 'completed-job') store.onJobCompleted('running')
       const afterEvent = { ...store.jobs[0] }
-      stale.resolve([job()])
+      stale.resolve(page([job()]))
       await Promise.resolve()
       expect(store.jobs[0]).toEqual(afterEvent)
       expect(invokeIpc).toHaveBeenCalledTimes(3)
-      latest.resolve([afterEvent])
+      latest.resolve(page([afterEvent]))
       await loading
       expect(store.jobs[0]).toEqual(afterEvent)
     }
   )
 
   it('preserves visible jobs on a current failure and allows retry', async () => {
-    invokeIpc.mockResolvedValueOnce([job()])
+    invokeIpc.mockResolvedValueOnce(page([job()]))
     const store = useQueueStore()
     await store.loadJobs()
     invokeIpc.mockRejectedValueOnce(new Error('database unavailable'))
     await expect(store.loadJobs()).rejects.toThrow('database unavailable')
     expect(store.jobs[0].id).toBe('running')
     expect(store.loading).toBe(false)
-    invokeIpc.mockResolvedValueOnce([])
+    invokeIpc.mockResolvedValueOnce(page([]))
     await store.loadJobs()
     expect(store.jobs).toEqual([])
   })
 
   it('finishes the requested refresh when an obsolete read fails', async () => {
-    const obsolete = deferred<BatchJobRecord[]>()
-    invokeIpc.mockReturnValueOnce(obsolete.promise).mockResolvedValueOnce([job('latest')])
+    const obsolete = deferred<BatchJobPage>()
+    invokeIpc.mockReturnValueOnce(obsolete.promise).mockResolvedValueOnce(page([job('latest')]))
     const store = useQueueStore()
     const initial = store.loadJobs()
     await Promise.resolve()

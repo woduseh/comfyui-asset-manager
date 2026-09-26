@@ -91,5 +91,6 @@
     "*.{ts,vue,json,md}": [
       "prettier --write"
     ]
-  }
+  },
+  "license": "MIT"
 }

@@ -1,8 +1,9 @@
+import { notifyBatchChanged } from '../../services/batch/changes'
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import {
   validateBatchPreviewInput,
-  validateEnum,
+  validateBatchListQuery,
   validateId,
   validateStringArray
 } from '../validators'
@@ -11,7 +12,7 @@ import { withTransaction } from '../../services/database'
 import { batchJobService } from '../../services/batch/batch-job-service'
 import { queueManager } from '../../services/batch/queue-manager'
 import { calculateTaskCount } from '../../services/batch/task-generator'
-import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
+import type { BatchConfig, BatchModuleSelection, BatchListQuery } from '@shared/ipc-contract'
 
 const batchJobRepo = new BatchJobRepository()
 const batchTaskRepo = new BatchTaskRepository()
@@ -35,15 +36,14 @@ function assertExecutionEvidenceCanBeRemoved(jobId: string): void {
 }
 
 export function registerBatchHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.BATCH_LIST, (_event, args?: { status?: string }) => {
-    if (args?.status !== undefined) {
-      validateEnum(
-        args.status,
-        ['draft', 'queued', 'running', 'paused', 'completed', 'failed', 'cancelled'] as const,
-        'batch status'
-      )
-    }
-    return batchJobRepo.list(args?.status)
+  ipcMain.handle(IPC_CHANNELS.BATCH_LIST, (_event, args?: BatchListQuery) => {
+    const query = validateBatchListQuery(args)
+    return batchJobRepo.listSummaries(
+      query.scope === 'current' ? -1 : query.pageSize,
+      query.scope === 'current' ? 0 : (query.page - 1) * query.pageSize,
+      query.status,
+      query.scope
+    )
   })
 
   ipcMain.handle(IPC_CHANNELS.BATCH_GET, (_event, { id }: { id: string }) => {
@@ -55,12 +55,14 @@ export function registerBatchHandlers(): void {
     validateId(id)
     assertExecutionEvidenceCanBeRemoved(id)
     batchJobRepo.delete(id)
+    notifyBatchChanged()
     return true
   })
 
   ipcMain.handle(IPC_CHANNELS.BATCH_REORDER, (_event, { jobIds }: { jobIds: string[] }) => {
     validateStringArray(jobIds)
     batchJobRepo.reorder(jobIds)
+    notifyBatchChanged()
     return true
   })
 
@@ -68,6 +70,7 @@ export function registerBatchHandlers(): void {
     validateId(jobId)
     assertExecutionEvidenceCanBeRemoved(jobId)
     batchTaskRepo.deleteByJob(jobId)
+    notifyBatchChanged()
     return true
   })
 

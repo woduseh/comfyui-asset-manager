@@ -67,13 +67,7 @@ export interface ModuleItemRecord extends Record<string, unknown> {
 }
 
 export type BatchJobStatus =
-  | 'draft'
-  | 'queued'
-  | 'running'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+  'draft' | 'queued' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
 export interface BatchJobSummary extends Record<string, unknown> {
   id: string
@@ -288,14 +282,11 @@ export interface McpConfigStatus {
 export type ActionResult = { success: true } | { success: false; error: string }
 export type FileActionResult = { success: true } | { success: false; error: string }
 export type McpStartResult =
-  | { success: true; url: string; port: number }
-  | { success: false; error: string }
+  { success: true; url: string; port: number } | { success: false; error: string }
 export type McpSetupResult =
-  | { success: true; configPath: string }
-  | { success: false; error: string }
+  { success: true; configPath: string } | { success: false; error: string }
 export type McpRemoveResult =
-  | { success: true; removed: boolean }
-  | { success: false; error: string }
+  { success: true; removed: boolean } | { success: false; error: string }
 
 export interface IpcCall<Args, Result> {
   args: Args

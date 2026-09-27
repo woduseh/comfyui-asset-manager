@@ -47,6 +47,12 @@ npm run typecheck:test
 지정하거나 전체 검증을 실행합니다. 테스트를 찾지 못하면 실패하며 성공으로 처리하지 않습니다.
 `typecheck:test`는 테스트와 fixture, Vitest 설정 및 참조하는 Vue 컴포넌트까지 검사합니다.
 
+Vitest는 테스트 파일을 병렬 실행합니다. worker 수는 vitest.config.ts에서 CPU가 1~2개인 환경은
+가용 CPU를 모두 사용하고, 그보다 큰 환경은 다른 빌드·OS 작업을 위해 1개를 남기도록 계산합니다.
+한 파일 안의 테스트는 기본적으로 순차 실행합니다. 공유 mock·Pinia·임시 DB를 사용하는 테스트에
+concurrent를 일괄 적용하지 않습니다. 느린 파일을 분리할 때에도 Vue/Naive UI import·mount 비용이
+복제될 수 있으므로 전체 wall-clock 시간을 전후 측정한 경우에만 분리를 유지합니다.
+
 검증 도구를 수정했거나 esbuild 시작이 막힌 환경에서는 도구 자체의 실행 계약을 별도로
 확인할 수 있습니다. Node와 설치된 의존성을 사용하며 제품 테스트·빌드·GUI 검사를 대신하지 않습니다.
 

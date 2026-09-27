@@ -1,4 +1,12 @@
-import { ipcMain, dialog, BrowserWindow, shell, clipboard, nativeImage } from 'electron'
+import {
+  ipcMain,
+  dialog,
+  BrowserWindow,
+  shell,
+  clipboard,
+  nativeImage,
+  ClipboardItem
+} from 'electron'
 import { existsSync } from 'fs'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import log from '../logger'
@@ -347,7 +355,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.GALLERY_COPY_CLIPBOARD,
-    (_event, { filePath }: { filePath: string }) => {
+    async (_event, { filePath }: { filePath: string }) => {
       try {
         const validatedPath = validateAbsolutePath(filePath)
         const allowedPath = resolveDirectAssetPathFromSettings(validatedPath, {
@@ -362,7 +370,10 @@ export function registerIpcHandlers(): void {
 
         const img = nativeImage.createFromPath(allowedPath)
         if (img.isEmpty()) return { success: false, error: 'Failed to load image' }
-        clipboard.writeImage(img)
+        const png = Uint8Array.from(img.toPNG())
+        await clipboard.write([
+          new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })
+        ])
         return { success: true }
       } catch (error) {
         return { success: false, error: (error as Error).message }

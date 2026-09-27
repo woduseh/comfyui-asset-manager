@@ -1,12 +1,18 @@
 import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
+import { availableParallelism } from 'node:os'
 import vue from '@vitejs/plugin-vue'
+
+const cpuCount = availableParallelism()
+const testWorkers = cpuCount <= 2 ? cpuCount : cpuCount - 1
 
 export default defineConfig({
   plugins: [vue()],
   test: {
     globals: true,
     environment: 'node',
+    pool: 'forks',
+    maxWorkers: testWorkers,
     include: ['tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',

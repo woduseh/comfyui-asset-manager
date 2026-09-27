@@ -42,47 +42,47 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.30.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/xterm": "^6.0.0",
-    "electron-log": "^5.4.3",
+    "electron-log": "^5.4.4",
     "node-pty": "^1.1.0",
-    "ofetch": "^1.4.1",
-    "sql.js": "^1.12.0",
-    "ws": "^8.18.2",
-    "zod": "^4.3.6"
+    "ofetch": "^1.5.1",
+    "sql.js": "^1.14.2",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
-    "@types/node": "^22.19.1",
+    "@types/node": "^26.6.3",
     "@types/ws": "^8.18.1",
-    "@vicons/ionicons5": "^0.12.0",
-    "@vitejs/plugin-vue": "^6.0.2",
-    "@vitest/coverage-v8": "^4.1.0",
-    "@vue/test-utils": "^2.4.6",
-    "electron": "^41.10.7",
-    "electron-builder": "^26.0.12",
+    "@vicons/ionicons5": "^0.13.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "@vitest/coverage-v8": "^5.0.2",
+    "@vue/test-utils": "^2.5.1",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
-    "eslint": "^9.39.1",
-    "eslint-plugin-vue": "^10.6.2",
-    "happy-dom": "^20.8.4",
+    "eslint": "^10.11.0",
+    "eslint-plugin-vue": "^10.11.1",
+    "happy-dom": "^20.14.5",
     "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "naive-ui": "^2.42.0",
-    "pinia": "^3.0.3",
-    "prettier": "^3.7.4",
-    "typescript": "^5.9.3",
-    "vite": "^7.2.6",
-    "vitest": "^4.1.0",
-    "vue": "^3.5.25",
+    "lint-staged": "^17.6.0",
+    "naive-ui": "^2.45.3",
+    "pinia": "^4.0.3",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.2",
+    "vue": "^3.5.43",
     "vue-draggable-plus": "^0.6.1",
-    "vue-eslint-parser": "^10.2.0",
-    "vue-i18n": "^11.1.5",
-    "vue-router": "^4.5.1",
-    "vue-tsc": "^3.1.6"
+    "vue-eslint-parser": "^10.4.1",
+    "vue-i18n": "^11.4.12",
+    "vue-router": "^5.3.1",
+    "vue-tsc": "^3.3.11"
   },
   "lint-staged": {
     "*.{ts,vue}": [
@@ -92,5 +92,8 @@
       "prettier --write"
     ]
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=26.10.0 <27"
+  }
 }

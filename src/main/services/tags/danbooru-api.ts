@@ -17,9 +17,7 @@ export interface DanbooruApiTag {
 }
 
 export type OnlineTagLookup =
-  | { kind: 'found'; tag: DanbooruApiTag }
-  | { kind: 'not_found' }
-  | { kind: 'unavailable' }
+  { kind: 'found'; tag: DanbooruApiTag } | { kind: 'not_found' } | { kind: 'unavailable' }
 
 const apiCache = new Map<
   string,

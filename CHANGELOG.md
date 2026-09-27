@@ -35,6 +35,12 @@
 
 ### Changed
 
+- 개발·CI 런타임을 Node.js 26.10.0으로 올리고 Electron 44.4.5, Vitest 5.0.2, ESLint 10.11.0, Pinia 4.0.3, Vue Router 5.3.1 등 직접 의존성을 최신 호환 버전으로 갱신. npm ci와 native node-pty rebuild, npm audit를 새 조합에서 검증
+- TypeScript를 최신 호환선 6.0.3으로 올리고 폐기 예정 baseUrl 없이 상대 paths를 사용하도록 tsconfig 정리. TypeScript 7은 현재 typescript-eslint peer 범위 밖이라 보류
+- Vite를 electron-vite 5가 지원하는 최신 7.3.6으로 갱신. Vite 8은 현재 electron-vite peer 범위 밖이라 강제 설치하지 않음
+- Vitest의 파일 병렬 실행을 유지하면서 CPU가 1~2개면 모두 사용하고 그보다 많으면 1개를 남기는 worker 정책을 명시. 2코어 검증 환경에서 1 worker 대비 전체 테스트 시간을 약 29% 단축
+- Electron 44의 W3C clipboard API로 이미지 복사를 마이그레이션하고 PNG ClipboardItem을 사용
+
 - 배치 실행 client·서버 주소를 고정하고, 주소를 요청 ID와 함께 저장해 연결 전환·재시작 시 결과 혼합 방지. 원래 서버를 알 수 없는 레거시 수락 요청은 자동 재개하지 않음
 - 활성 작업 표시는 목록 순서보다 backend의 currentJobId를 우선하며 같은 서버 복구 연결은 IPC·MCP 공통 정책으로 허용
 - 프롬프트 build/preview 조립 규칙을 통합하고 0 가중치 및 negative 모듈 가중치 보존

@@ -28,7 +28,9 @@ const mocks = vi.hoisted(() => {
     queueCancel: vi.fn(),
     withTransaction: vi.fn(<T>(operation: () => T) => operation()),
     terminalWrite: vi.fn(),
-    recentImages: vi.fn(() => [])
+    recentImages: vi.fn(() => []),
+    clipboardWrite: vi.fn().mockResolvedValue(undefined),
+    resolveAssetPath: vi.fn((): string | null => null)
   }
 })
 
@@ -41,8 +43,13 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: mocks.showOpenDialog },
   BrowserWindow: { getFocusedWindow: vi.fn(() => ({})) },
   shell: { showItemInFolder: vi.fn() },
-  clipboard: { writeImage: vi.fn() },
-  nativeImage: { createFromPath: vi.fn(() => ({ isEmpty: () => false })) }
+  clipboard: { write: mocks.clipboardWrite },
+  ClipboardItem: class {
+    constructor(public readonly items: Record<string, unknown>) {}
+  },
+  nativeImage: {
+    createFromPath: vi.fn(() => ({ isEmpty: () => false, toPNG: () => Buffer.from('png') }))
+  }
 }))
 
 vi.mock('../../../src/main/logger', () => ({
@@ -178,7 +185,7 @@ vi.mock('../../../src/main/services/mcp/auth', () => ({
 }))
 
 vi.mock('../../../src/main/services/assets/local-asset', () => ({
-  resolveDirectAssetPathFromSettings: vi.fn(() => null)
+  resolveDirectAssetPathFromSettings: mocks.resolveAssetPath
 }))
 
 import { registerIpcHandlers } from '../../../src/main/ipc/handlers'
@@ -348,6 +355,17 @@ describe('registerIpcHandlers validation boundary', () => {
     expect(cancelHandler({}, { id: 'job-id' })).toBe(true)
     expect(mocks.queueResume).toHaveBeenCalledWith('job-id')
     expect(mocks.queueCancel).toHaveBeenCalledWith('job-id')
+  })
+
+  it('writes approved gallery images through the W3C clipboard API', async () => {
+    const filePath = new URL('../../../README.md', import.meta.url).pathname
+    mocks.resolveAssetPath.mockReturnValueOnce(filePath)
+
+    await expect(
+      getHandler(IPC_CHANNELS.GALLERY_COPY_CLIPBOARD)({}, { filePath })
+    ).resolves.toEqual({ success: true })
+    expect(mocks.clipboardWrite).toHaveBeenCalledOnce()
+    expect(mocks.clipboardWrite.mock.calls[0][0]).toHaveLength(1)
   })
 
   it('rejects malformed terminal input before writing to the PTY', () => {

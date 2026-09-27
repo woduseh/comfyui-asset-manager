@@ -22,7 +22,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const usage = 'Usage: npm run smoke -- [--existing-build] [--inject-failure] [--timeout-ms 45000]'
 
 export function fingerprintInputs(root) {
-  const files = ['package.json', 'package-lock.json', '.node-version', 'electron.vite.config.ts']
+  const files = ['package.json', 'package-lock.json', '.node-version', 'vite.config.mts']
   for (const directory of ['src', 'resources']) {
     for (const entry of readdirSync(join(root, directory), {
       recursive: true,
@@ -153,19 +153,19 @@ export async function runSmoke({
   const env = { ...process.env, NODE_ENV: 'production' }
   for (const name of [
     'ELECTRON_RUN_AS_NODE',
-    'ELECTRON_RENDERER_URL',
+    'VITE_DEV_SERVER_URL',
     'ELECTRON_CLI_ARGS',
     'REMOTE_DEBUGGING_PORT'
   ])
     delete env[name]
-  const execute = async (item, executable, args, limit = timeoutMs) => {
+  const execute = async (item, executable, args, limit = timeoutMs, processEnv = env) => {
     item.logPath = join(runDir, `${item.name}.log`)
     item.process = await runLoggedProcess(executable, args, {
       cwd: root,
       logPath: item.logPath,
       timeoutMs: limit,
       signal,
-      env
+      env: processEnv
     })
     terminationFailed ||= item.process.terminationFailed === true
     assert.equal(
@@ -197,13 +197,9 @@ export async function runSmoke({
         await execute(
           item,
           process.execPath,
-          [
-            join(root, 'node_modules/electron-vite/bin/electron-vite.js'),
-            'build',
-            '--outDir',
-            bundleDir
-          ],
-          120_000
+          [join(root, 'node_modules/vite/bin/vite.js'), 'build'],
+          120_000,
+          { ...env, COMFYUI_ASSET_BUILD_DIR: bundleDir }
         )
       for (const file of ['main/index.js', 'preload/index.js', 'renderer/index.html']) {
         assert(existsSync(join(bundleDir, file)), `Missing application bundle: ${file}`)

@@ -13,9 +13,9 @@ npm run doctor
 npm run --silent doctor -- --json
 ```
 
-Node 버전, 로컬 검증 도구, sql.js WASM, Electron 실행 파일, Vite가 사용하는 esbuild의
-자식 프로세스 실행을 확인합니다. 설치·설정 변경·앱 실행은 하지 않습니다.
-`spawn EPERM`/`EACCES`는 프로세스 실행 권한 문제일 수 있으므로 의존성 재설치에 앞서
+Node 버전, 로컬 검증 도구, sql.js WASM, Electron 실행 파일과 Vite 8의 Oxc TypeScript
+변환 경로를 확인합니다. 설치·설정 변경·앱 실행은 하지 않습니다.
+실제 빌드나 테스트에서 `spawn EPERM`/`EACCES`가 발생하면 의존성 재설치에 앞서
 샌드박스 권한을 확인합니다. Electron GUI와 네이티브 PTY의 실제 동작은 별도 확인이 필요합니다.
 
 Windows에서 아래 검증을 실행하는 최소 조건은 지정된 Node.js·설치된 의존성과 자식
@@ -47,13 +47,13 @@ npm run typecheck:test
 지정하거나 전체 검증을 실행합니다. 테스트를 찾지 못하면 실패하며 성공으로 처리하지 않습니다.
 `typecheck:test`는 테스트와 fixture, Vitest 설정 및 참조하는 Vue 컴포넌트까지 검사합니다.
 
-Vitest는 테스트 파일을 병렬 실행합니다. worker 수는 vitest.config.ts에서 CPU가 1~2개인 환경은
+Vitest는 테스트 파일을 병렬 실행합니다. worker 수는 vitest.config.mts에서 CPU가 1~2개인 환경은
 가용 CPU를 모두 사용하고, 그보다 큰 환경은 다른 빌드·OS 작업을 위해 1개를 남기도록 계산합니다.
 한 파일 안의 테스트는 기본적으로 순차 실행합니다. 공유 mock·Pinia·임시 DB를 사용하는 테스트에
 concurrent를 일괄 적용하지 않습니다. 느린 파일을 분리할 때에도 Vue/Naive UI import·mount 비용이
 복제될 수 있으므로 전체 wall-clock 시간을 전후 측정한 경우에만 분리를 유지합니다.
 
-검증 도구를 수정했거나 esbuild 시작이 막힌 환경에서는 도구 자체의 실행 계약을 별도로
+검증 도구를 수정했거나 Vite/Rolldown 변환 경로가 막힌 환경에서는 도구 자체의 실행 계약을 별도로
 확인할 수 있습니다. Node와 설치된 의존성을 사용하며 제품 테스트·빌드·GUI 검사를 대신하지 않습니다.
 
 ```bash
@@ -128,7 +128,7 @@ ComfyUI/GPU는 필요하지 않습니다. 기존 `FakeComfyUIServer`를 loopback
 `create.json`의 `injected-assertion` 실패까지 확인해야 하며, 준비/빌드 실패를 주입 성공으로
 해석하면 안 됩니다.
 
-제한된 Windows 환경에서 esbuild `spawn EPERM` 또는 Electron의
+제한된 Windows 환경에서 빌드 자식 프로세스 `spawn EPERM` 또는 Electron의
 `platform_channel.cc` 접근 거부가 발생하면 앱 검사는 실행되지 않은 것입니다.
 보안 플래그를 끄지 말고 로그로 환경 오류와 코드 실패를 구분하세요. 기존 번들의 시작만
 진단하려면 `npm run smoke -- --existing-build`를 사용합니다. 이 모드는 검사가 모두 끝나도

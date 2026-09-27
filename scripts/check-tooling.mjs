@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
-// Real tooling contract checks that can run even when Vite/esbuild cannot start.
+// Real tooling contract checks that can run even when the Vite/Rolldown build cannot start.
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -156,12 +156,7 @@ try {
   )
   results.push({ check: 'empty app checks cannot be reported as passed', status: 'passed' })
 
-  for (const file of [
-    'package.json',
-    'package-lock.json',
-    '.node-version',
-    'electron.vite.config.ts'
-  ])
+  for (const file of ['package.json', 'package-lock.json', '.node-version', 'vite.config.mts'])
     writeFileSync(join(root, file), '{}')
   mkdirSync(join(root, 'src'))
   mkdirSync(join(root, 'resources'))

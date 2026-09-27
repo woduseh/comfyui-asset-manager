@@ -14,22 +14,26 @@ describe('environment doctor', () => {
       'node',
       'dependencies',
       'electron',
-      'esbuild'
+      'vite-transform'
     ])
     expect(probe).toHaveBeenCalledTimes(1)
   })
 
-  it('reports version drift and blocked child processes together with actionable remedies', async () => {
+  it('reports version drift and Vite transform failures together with actionable remedies', async () => {
     const result = await checkEnvironment({
       nodeVersion: '0.0.0',
       probe: async () => {
-        throw new Error('spawn EPERM')
+        throw new Error('transform unavailable')
       }
     })
     expect(result.status).toBe('failed')
     expect(result.checks.filter((check) => check.status === 'failed')).toMatchObject([
       { name: 'node', detail: expect.stringContaining('0.0.0'), remedy: expect.any(String) },
-      { name: 'esbuild', detail: 'spawn EPERM', remedy: expect.stringContaining('permissions') }
+      {
+        name: 'vite-transform',
+        detail: 'transform unavailable',
+        remedy: expect.stringContaining('npm ci')
+      }
     ])
   })
 })

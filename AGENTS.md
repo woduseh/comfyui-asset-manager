@@ -45,7 +45,8 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
 ## 프로세스와 외부 접근 경계
 
 - Electron의 sandbox·webSecurity·CSP 보호를 유지한다. sandbox preload가 로드되도록
-  `electron.vite.config.ts`에서 `@electron-toolkit/preload`를 인라인 번들링한다.
+  `vite.config.mts`에서 `@electron-toolkit/preload`를 인라인 번들링한다.
+  vite-plugin-electron의 개발 실행도 `startup(['.'])`을 사용하며 기본 `--no-sandbox` 인자를 사용하지 않는다.
 - 자산 표시·클립보드·탐색기 접근은 `src/main/services/assets/local-asset.ts`를 재사용한다.
   현재 출력 루트 또는 DB 등록 자산을 허용하되 realpath 탈출을 차단한다.
 - 외부 파일 import는 main에서 선택과 읽기를 함께 수행한다. renderer가 임의 경로를 제출하는

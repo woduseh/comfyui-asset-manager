@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { build } from 'vite'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const options = {
@@ -34,53 +34,54 @@ options.source = resolve(options.source)
 
 const directory = join(root, '.reports', 'performance', options.label)
 mkdirSync(directory, { recursive: true })
-const require = createRequire(import.meta.url)
-const requireFromVite = createRequire(require.resolve('vite/package.json'))
-const esbuild = requireFromVite('esbuild')
 const worker = join(directory, 'worker.cjs')
-try {
-  await esbuild.build({
-    entryPoints: [join(root, 'scripts/performance/database-worker.mjs')],
-    outfile: worker,
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    packages: 'external',
+const benchmarkElectronShim = join(directory, 'electron-shim.mjs')
+writeFileSync(
+  benchmarkElectronShim,
+  `
+    export const app = { getPath() {
+      if (!process.env.BENCH_USER_DATA) throw new Error('Missing benchmark directory');
+      return process.env.BENCH_USER_DATA;
+    }};
+    export default {
+      transports: { file: {}, console: {} },
+      info() {}, warn() {}, error() {}, debug() {}
+    };
+  `
+)
+const bareImport = /^(?![a-zA-Z]:)[\w@]/
+await build({
+  configFile: false,
+  logLevel: 'silent',
+  resolve: {
     alias: {
+      electron: benchmarkElectronShim,
+      'electron-log/main': benchmarkElectronShim,
       '@benchmark/database': join(options.source, 'src/main/services/database/index.ts'),
       '@benchmark/repositories': join(
         options.source,
         'src/main/services/database/repositories/index.ts'
       )
+    }
+  },
+  build: {
+    outDir: directory,
+    emptyOutDir: false,
+    lib: {
+      entry: join(root, 'scripts/performance/database-worker.mjs'),
+      formats: ['cjs'],
+      fileName: () => 'worker.cjs'
     },
-    plugins: [
-      {
-        name: 'isolated-electron',
-        setup(build) {
-          build.onResolve({ filter: /^(electron|electron-log\/main)$/ }, ({ path }) => ({
-            path,
-            namespace: 'benchmark'
-          }))
-          build.onLoad({ filter: /.*/, namespace: 'benchmark' }, () => ({
-            contents: `
-              export const app = { getPath() {
-                if (!process.env.BENCH_USER_DATA) throw new Error('Missing benchmark directory');
-                return process.env.BENCH_USER_DATA;
-              }};
-              export default {
-                transports: { file: {}, console: {} },
-                info() {}, warn() {}, error() {}, debug() {}
-              };
-            `,
-            loader: 'js'
-          }))
-        }
-      }
-    ]
-  })
-} finally {
-  esbuild.stop()
-}
+    rolldownOptions: {
+      platform: 'node',
+      external: (id) =>
+        bareImport.test(id) &&
+        id !== 'electron' &&
+        id !== 'electron-log/main' &&
+        !id.startsWith('@benchmark/')
+    }
+  }
+})
 
 // Preserve the exact tested implementation even when the checkout is edited afterwards.
 const sources = [

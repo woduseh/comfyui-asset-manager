@@ -69,7 +69,7 @@ export function createPlan({ cwd = projectRoot, coverage = false } = {}) {
       name: coverage ? 'test:coverage' : 'test',
       commands: [cli('vitest/vitest.mjs', 'run', ...(coverage ? ['--coverage'] : []))]
     },
-    { name: 'build:bundle', commands: [cli('electron-vite/bin/electron-vite.js', 'build')] }
+    { name: 'build:bundle', commands: [cli('vite/bin/vite.js', 'build')] }
   ]
 }
 

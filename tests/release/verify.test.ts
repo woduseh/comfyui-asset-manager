@@ -88,7 +88,7 @@ describe('verification runner', () => {
       [join(cwd, 'node_modules/typescript/bin/tsc'), 'tsc'],
       [join(cwd, 'node_modules/vue-tsc/bin/vue-tsc.js'), 'vue-tsc'],
       [join(cwd, 'node_modules/vitest/vitest.mjs'), 'vitest'],
-      [join(cwd, 'node_modules/electron-vite/bin/electron-vite.js'), 'electron-vite']
+      [join(cwd, 'node_modules/vite/bin/vite.js'), 'vite']
     ])
     for (const coverage of [false, true]) {
       for (const step of createPlan({ cwd, coverage })) {

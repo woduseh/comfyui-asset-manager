@@ -2,7 +2,7 @@
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": [
     "tests/**/*.ts",
-    "vitest.config.ts",
+    "vitest.config.mts",
     "src/renderer/src/env.d.ts",
     "src/preload/*.d.ts"
   ],
@@ -21,8 +21,7 @@
     },
     "types": [
       "node",
-      "vitest/globals",
-      "electron-vite/node"
+      "vitest/globals"
     ]
   }
 }

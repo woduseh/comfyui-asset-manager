@@ -3,8 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { app, shell, BrowserWindow, protocol, net } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import log from './logger'
 import { initDatabase, closeDatabase } from './services/database'
 import { registerIpcHandlers } from './ipc/handlers'
@@ -63,7 +62,7 @@ function createWindow(): void {
     minHeight: WINDOW_MIN_HEIGHT,
     show: false,
     autoHideMenuBar: true,
-    icon,
+    icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -87,8 +86,9 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  const rendererUrl = process.env['VITE_DEV_SERVER_URL']
+  if (rendererUrl) {
+    mainWindow.loadURL(rendererUrl)
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }

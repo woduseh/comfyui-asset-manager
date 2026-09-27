@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { build } from 'esbuild'
+import { build } from 'vite'
 import { spawn, type ChildProcess } from 'child_process'
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
@@ -37,14 +37,30 @@ function removeTestDirectory(path: string): void {
 beforeAll(async () => {
   bundleDirectory = mkdtempSync(join(tmpdir(), 'comfyui-output-crash-bundle-'))
   const shim = resolve('tests/fixtures/output-crash-electron.ts')
+  const bareImport = /^(?![a-zA-Z]:)[\w@]/
   await build({
-    entryPoints: ['tests/fixtures/output-crash-worker.ts'],
-    outfile: join(bundleDirectory, 'worker.cjs'),
-    bundle: true,
-    platform: 'node',
-    format: 'cjs',
-    packages: 'external',
-    alias: { electron: shim, 'electron-log/main': shim, '@shared': resolve('src/shared') }
+    configFile: false,
+    logLevel: 'silent',
+    resolve: {
+      alias: { electron: shim, 'electron-log/main': shim, '@shared': resolve('src/shared') }
+    },
+    build: {
+      outDir: bundleDirectory,
+      emptyOutDir: true,
+      lib: {
+        entry: resolve('tests/fixtures/output-crash-worker.ts'),
+        formats: ['cjs'],
+        fileName: () => 'worker.cjs'
+      },
+      rolldownOptions: {
+        platform: 'node',
+        external: (id) =>
+          bareImport.test(id) &&
+          id !== 'electron' &&
+          id !== 'electron-log/main' &&
+          !id.startsWith('@shared/')
+      }
+    }
   })
   server = await FakeComfyUIServer.start()
   server.images.set('first.png', Buffer.from('first image'))

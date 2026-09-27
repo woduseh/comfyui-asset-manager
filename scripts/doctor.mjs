@@ -2,25 +2,22 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-async function probeEsbuild(requireFromProject) {
-  // Probe Vite's actual esbuild version, which may be nested under node_modules/vite.
-  const requireFromVite = createRequire(requireFromProject.resolve('vite/package.json'))
-  const esbuild = requireFromVite('esbuild')
-  try {
-    await esbuild.transform('const ready: boolean = true', { loader: 'ts' })
-  } finally {
-    esbuild.stop()
+async function probeViteTransform(requireFromProject) {
+  const vite = await import(pathToFileURL(requireFromProject.resolve('vite')).href)
+  const result = await vite.transformWithOxc('const ready: boolean = true', 'doctor.ts')
+  if (!result.code.includes('const ready = true')) {
+    throw new Error('Vite did not transform TypeScript as expected')
   }
 }
 
 export async function checkEnvironment({
   root = projectRoot,
   nodeVersion = process.versions.node,
-  probe = probeEsbuild
+  probe = probeViteTransform
 } = {}) {
   const checks = []
   const requireFromProject = createRequire(resolve(root, 'package.json'))
@@ -45,7 +42,7 @@ export async function checkEnvironment({
   await check(
     'dependencies',
     () => {
-      for (const name of ['vitest', 'vue-tsc', 'eslint', 'electron-vite']) {
+      for (const name of ['vitest', 'vue-tsc', 'eslint', 'vite-plugin-electron']) {
         requireFromProject.resolve(name)
       }
       const wasm = requireFromProject.resolve('sql.js/dist/sql-wasm.wasm')
@@ -66,12 +63,12 @@ export async function checkEnvironment({
     'Run npm ci with install scripts enabled; check Electron download errors.'
   )
   await check(
-    'esbuild',
+    'vite-transform',
     async () => {
       await probe(requireFromProject)
-      return 'Vite esbuild child process can transform TypeScript'
+      return 'Vite Oxc transform can compile TypeScript'
     },
-    'For spawn EPERM/EACCES, check sandbox or process permissions. For a missing binary, run npm ci.'
+    'Run npm ci and verify the Vite/Oxc native package for this platform.'
   )
 
   return { status: checks.every((item) => item.status === 'passed') ? 'passed' : 'failed', checks }

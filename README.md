@@ -249,7 +249,7 @@ npm run dev        # 개발 모드 (HMR)
 
 | 영역          | 기술                                        |
 | ------------- | ------------------------------------------- |
-| 프레임워크    | Electron + electron-vite                    |
+| 프레임워크    | Electron + Vite 8 + vite-plugin-electron    |
 | 프론트엔드    | Vue 3, Pinia, Vue Router, Vue I18n          |
 | UI 라이브러리 | Naive UI                                    |
 | 터미널        | xterm.js, node-pty                          |
@@ -264,7 +264,7 @@ npm run dev        # 개발 모드 (HMR)
 ### 빌드 & 테스트
 
 ```bash
-npm run doctor          # Node·의존성·esbuild 실행 환경 진단
+npm run doctor          # Node·의존성·Vite 변환 환경 진단
 npm run verify          # lint + main/renderer/tests 타입 검사 + 전체 테스트 + 빌드
 npm run verify:coverage # CI와 같은 검증 + 커버리지 임계값
 npm run build           # 타입 체크 + Electron Vite 빌드

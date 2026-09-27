@@ -2,6 +2,10 @@
 
 Target branch: maintenance/node26-test-performance-20260927
 
+> Superseded note: this report records the dependency ceiling at the time of the Node 26 upgrade.
+> The later [Vite 8 migration](2026-09-27-vite8-migration.md) replaced electron-vite with
+> vite-plugin-electron and removed the Vite 7 ceiling. The TypeScript 7 constraint remains.
+
 ## Runtime and dependency policy
 
 - Node.js is pinned to 26.10.0 through .node-version and package engines.

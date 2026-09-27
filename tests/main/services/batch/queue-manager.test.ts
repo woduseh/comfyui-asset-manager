@@ -230,6 +230,21 @@ describe('QueueManager Recovery', () => {
       expect(startJob).toHaveBeenCalledWith(jobId)
     })
 
+    it('contains background execution failures after an accepted start', async () => {
+      const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
+      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
+      ;(comfyuiManager as { isConnected: boolean }).isConnected = true
+      const jobId = jobRepo.create({ name: 'Rejected Background Job', config: '{}' })
+      const startJob = vi
+        .spyOn(queueManager, 'startJob')
+        .mockRejectedValueOnce(new Error('background failed'))
+
+      expect(queueManager.requestStart(jobId)).toEqual({ success: true })
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(startJob).toHaveBeenCalledWith(jobId)
+    })
+
     it('rejects background starts for terminal jobs', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')

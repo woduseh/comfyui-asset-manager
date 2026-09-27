@@ -1,7 +1,7 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": [
-    "electron.vite.config.*",
+    "vite.config.*",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*"
@@ -13,9 +13,6 @@
         "./src/shared/*"
       ]
     },
-    "resolveJsonModule": true,
-    "types": [
-      "electron-vite/node"
-    ]
+    "resolveJsonModule": true
   }
 }

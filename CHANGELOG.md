@@ -37,6 +37,7 @@
 
 ### Changed
 
+- GitHub Actions를 현재 major(`checkout@v7`, `setup-node@v7`, `upload-artifact@v7`, `action-gh-release@v3`)로 갱신하고 Dependabot minor/patch 업데이트를 ecosystem별 그룹 PR로 묶어 자동 업데이트 노이즈를 줄임
 - 개발·CI 런타임을 Node.js 26.10.0으로 올리고 Electron 44.4.5, Vitest 5.0.2, ESLint 10.11.0, Pinia 4.0.3, Vue Router 5.3.1 등 직접 의존성을 최신 호환 버전으로 갱신. npm ci와 native node-pty rebuild, npm audit를 새 조합에서 검증
 - TypeScript를 최신 호환선 6.0.3으로 올리고 폐기 예정 baseUrl 없이 상대 paths를 사용하도록 tsconfig 정리. TypeScript 7은 현재 typescript-eslint peer 범위 밖이라 보류
 - electron-vite를 vite-plugin-electron 1.1.2로 교체하고 Vite 8.3.1로 전환. 기존 out/main·preload·renderer 경로와 production dependency externalization을 유지하며 preload의 @electron-toolkit/preload는 sandbox 호환을 위해 인라인 번들링

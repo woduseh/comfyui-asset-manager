@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '../../../src/shared/ipc-channels'
 import type { queueManager } from '../../../src/main/services/batch/queue-manager'
@@ -358,7 +359,7 @@ describe('registerIpcHandlers validation boundary', () => {
   })
 
   it('writes approved gallery images through the W3C clipboard API', async () => {
-    const filePath = new URL('../../../README.md', import.meta.url).pathname
+    const filePath = fileURLToPath(new URL('../../../README.md', import.meta.url))
     mocks.resolveAssetPath.mockReturnValueOnce(filePath)
 
     await expect(

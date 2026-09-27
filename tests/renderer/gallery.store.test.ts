@@ -38,8 +38,7 @@ describe('gallery.store request scheduling', () => {
     await Promise.resolve()
 
     for (let page = 2; page <= 100; page++) {
-      store.setPage(page)
-      requests.push(store.loadImages())
+      requests.push(store.loadImages(page))
     }
     expect(invoke).toHaveBeenCalledTimes(1)
     first.resolve({ items: [{ id: 'stale' }], total: 1 })
@@ -160,4 +159,45 @@ describe('gallery.store request scheduling', () => {
     expect(store.images[0].id).toBe('keep')
     expect(store.total).toBe(1)
   })
+  it('refreshes the requested page rather than reverting an in-flight navigation', async () => {
+    invoke.mockResolvedValueOnce({ items: [{ id: 'first' }], total: 3 })
+    const store = useGalleryStore()
+    store.pageSize = 1
+    await store.loadImages(1)
+    const next = deferred<unknown>()
+    invoke
+      .mockReturnValueOnce(next.promise)
+      .mockResolvedValueOnce({ items: [{ id: 'second' }], total: 3 })
+    const navigation = store.loadImages(2)
+    await Promise.resolve()
+    const refresh = store.loadImages()
+    next.resolve({ items: [{ id: 'stale second' }], total: 3 })
+    await Promise.all([navigation, refresh])
+    expect(invoke.mock.calls.map(([, query]) => query.page)).toEqual([1, 2, 2])
+    expect(store.page).toBe(2)
+    expect(store.images[0].id).toBe('second')
+  })
+
+  it.each(['favorite', 'rating'] as const)(
+    'does not let an earlier list overwrite a saved %s',
+    async (kind) => {
+      const original = { id: 'image', rating: 0, is_favorite: 0 }
+      invoke.mockResolvedValueOnce({ items: [{ ...original }], total: 1 })
+      const store = useGalleryStore()
+      await store.loadImages()
+      const stale = deferred<unknown>()
+      const updated = { ...original, ...(kind === 'favorite' ? { is_favorite: 1 } : { rating: 4 }) }
+      invoke
+        .mockReturnValueOnce(stale.promise)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce({ items: [updated], total: 1 })
+      const reading = store.loadImages()
+      await Promise.resolve()
+      if (kind === 'favorite') await store.toggleFavorite('image')
+      else await store.rateImage('image', 4)
+      stale.resolve({ items: [{ ...original }], total: 1 })
+      await reading
+      expect(store.images[0]).toEqual(updated)
+    }
+  )
 })

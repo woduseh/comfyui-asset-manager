@@ -1,3 +1,4 @@
+import { createLatestRequest } from '@renderer/utils/latest-request'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type {
@@ -48,61 +49,44 @@ export const useQueueStore = defineStore('queue', () => {
     return total > 0 ? Math.round((completed / total) * 100) : 0
   })
 
-  let pendingLoad = false
-  let loadPromise: Promise<void> | null = null
-
-  async function drainJobRequests(): Promise<void> {
-    try {
-      while (pendingLoad) {
-        pendingLoad = false
-        try {
-          const { items: records } = await invokeIpc(IPC_CHANNELS.BATCH_LIST, { scope: 'current' })
-          // A refresh or queue event after this read began requires a newer snapshot.
-          if (pendingLoad) continue
-          loadError.value = null
-          const previousJobs = new Map(jobs.value.map((job) => [job.id, job]))
-          jobs.value = records.map((job) => {
-            const previous = previousJobs.get(job.id)
-            if (
-              previous &&
-              job.started_at !== null &&
-              job.started_at === previous.started_at &&
-              job.completed_tasks >= previous.completed_tasks &&
-              job.failed_tasks >= previous.failed_tasks &&
-              (job.status === 'running' || job.status === 'paused')
-            ) {
-              return {
-                ...job,
-                etaMs: previous.etaMs,
-                avgTaskDurationMs: previous.avgTaskDurationMs
-              }
-            }
-            return job
-          })
-        } catch (error) {
-          if (!pendingLoad) {
-            loadError.value = error instanceof Error ? error.message : String(error)
-            throw error
+  const requests = createLatestRequest({
+    read: () => invokeIpc(IPC_CHANNELS.BATCH_LIST, { scope: 'current' }),
+    commit: ({ items: records }) => {
+      loadError.value = null
+      const previousJobs = new Map(jobs.value.map((job) => [job.id, job]))
+      jobs.value = records.map((job) => {
+        const previous = previousJobs.get(job.id)
+        if (
+          previous &&
+          job.started_at !== null &&
+          job.started_at === previous.started_at &&
+          job.completed_tasks >= previous.completed_tasks &&
+          job.failed_tasks >= previous.failed_tasks &&
+          (job.status === 'running' || job.status === 'paused')
+        ) {
+          return {
+            ...job,
+            etaMs: previous.etaMs,
+            avgTaskDurationMs: previous.avgTaskDurationMs
           }
         }
-      }
-    } finally {
-      loading.value = false
-      loadPromise = null
+        return job
+      })
+    },
+    loading: (value) => {
+      loading.value = value
+    },
+    error: (error) => {
+      loadError.value = error instanceof Error ? error.message : String(error)
     }
-  }
+  })
 
   function loadJobs(): Promise<void> {
-    pendingLoad = true
-    if (!loadPromise) {
-      loading.value = true
-      loadPromise = Promise.resolve().then(drainJobRequests)
-    }
-    return loadPromise
+    return requests.request(null)
   }
 
-  function onTaskCompleted(data: Extract<QueueTaskCompletedEvent, { jobId: string }>): void {
-    if (loadPromise) pendingLoad = true
+  function onTaskCompleted(data: QueueTaskCompletedEvent): void {
+    requests.refreshIfRunning()
     const job = jobs.value.find((entry) => entry.id === data.jobId)
     if (!job) refreshFromEvent()
     if (job) {
@@ -113,8 +97,8 @@ export const useQueueStore = defineStore('queue', () => {
     }
   }
 
-  function onTaskFailed(data: Extract<QueueTaskFailedEvent, { jobId: string }>): void {
-    if (loadPromise) pendingLoad = true
+  function onTaskFailed(data: QueueTaskFailedEvent): void {
+    requests.refreshIfRunning()
     const job = jobs.value.find((entry) => entry.id === data.jobId)
     if (!job) refreshFromEvent()
     if (job) {
@@ -126,7 +110,7 @@ export const useQueueStore = defineStore('queue', () => {
   }
 
   function onJobCompleted(jobId: string): void {
-    if (loadPromise) pendingLoad = true
+    requests.refreshIfRunning()
     const job = jobs.value.find((entry) => entry.id === jobId)
     if (!job) refreshFromEvent()
     if (job) {

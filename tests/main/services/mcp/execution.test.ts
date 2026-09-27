@@ -84,10 +84,13 @@ describe('MCP execution tools', () => {
     expect(mocks.comfy.connect).toHaveBeenCalledWith('configured-host', 8189)
   })
 
-  it('rejects reconnect while processing and reports connection failure', async () => {
+  it('delegates reconnect policy to the shared manager and reports failures', async () => {
     mocks.queue.isProcessing = true
+    mocks.comfy.connect.mockRejectedValueOnce(new Error('Cannot change the ComfyUI server'))
     expect((await call('connect_comfyui')).isError).toBe(true)
-    expect(mocks.comfy.connect).not.toHaveBeenCalled()
+    expect(mocks.comfy.connect).toHaveBeenCalledWith('configured-host', 8189)
+    mocks.comfy.connect.mockResolvedValueOnce(true)
+    expect((await call('connect_comfyui')).isError).not.toBe(true)
     mocks.queue.isProcessing = false
     mocks.comfy.connect.mockResolvedValue(false)
     expect((await call('connect_comfyui')).isError).toBe(true)

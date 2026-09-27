@@ -125,6 +125,7 @@ export interface BatchTaskRecord extends Record<string, unknown> {
   status: BatchTaskStatus
   prompt_data: string
   comfyui_prompt_id: string | null
+  comfyui_server_url?: string | null
   result_path: string | null
   error_message: string | null
   retry_count: number
@@ -304,7 +305,6 @@ export interface IpcCall<Args, Result> {
 export interface IpcInvokeContract {
   [IPC_CHANNELS.COMFYUI_CONNECT]: IpcCall<{ host: string; port: number }, boolean>
   [IPC_CHANNELS.COMFYUI_DISCONNECT]: IpcCall<undefined, boolean>
-  [IPC_CHANNELS.COMFYUI_STATUS]: IpcCall<undefined, { connected: boolean; clientId: string }>
   [IPC_CHANNELS.COMFYUI_SYSTEM_STATS]: IpcCall<undefined, ComfyUISystemStats | null>
   [IPC_CHANNELS.COMFYUI_MODELS]: IpcCall<undefined, ComfyUIResources | null>
 
@@ -317,26 +317,8 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.WORKFLOW_DELETE]: IpcCall<{ id: string }, boolean>
   [IPC_CHANNELS.WORKFLOW_UPDATE]: IpcCall<{ id: string; data: Record<string, unknown> }, boolean>
   [IPC_CHANNELS.WORKFLOW_VARIABLES]: IpcCall<{ workflowId: string }, WorkflowVariableRecord[]>
-  [IPC_CHANNELS.WORKFLOW_SET_VARIABLES]: IpcCall<
-    {
-      workflowId: string
-      variables: Array<{
-        node_id: string
-        field_name: string
-        display_name: string
-        var_type: string
-        default_val?: string
-        description?: string
-      }>
-    },
-    boolean
-  >
   [IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE]: IpcCall<
     { variableId: string; role: string },
-    boolean
-  >
-  [IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_VALUE]: IpcCall<
-    { variableId: string; value: string },
     boolean
   >
 
@@ -394,6 +376,7 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.BATCH_TASKS]: IpcCall<{ jobId: string }, BatchTaskRecord[]>
   [IPC_CHANNELS.QUEUE_STATUS]: IpcCall<undefined, QueueStatus>
 
+  [IPC_CHANNELS.GALLERY_RECENT]: IpcCall<{ limit: number; jobId?: string }, GeneratedImageRecord[]>
   [IPC_CHANNELS.GALLERY_LIST]: IpcCall<
     GalleryQuery,
     { items: GeneratedImageRecord[]; total: number }
@@ -408,15 +391,8 @@ export interface IpcInvokeContract {
     { moduleIds: string[]; variables?: Record<string, string> },
     { positive: string; negative: string }
   >
-
-  [IPC_CHANNELS.SETTINGS_GET]: IpcCall<{ key: string }, string | null>
   [IPC_CHANNELS.SETTINGS_SET]: IpcCall<{ key: string; value: string }, boolean>
   [IPC_CHANNELS.SETTINGS_GET_ALL]: IpcCall<undefined, Record<string, string>>
-
-  [IPC_CHANNELS.DIALOG_OPEN_FILE]: IpcCall<
-    { filters?: Array<{ name: string; extensions: string[] }> } | undefined,
-    string | null
-  >
   [IPC_CHANNELS.DIALOG_OPEN_DIRECTORY]: IpcCall<undefined, string | null>
 
   [IPC_CHANNELS.TERMINAL_CREATE]: IpcCall<{ cols: number; rows: number }, string>

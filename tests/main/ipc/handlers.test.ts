@@ -27,7 +27,8 @@ const mocks = vi.hoisted(() => {
     queueResume: vi.fn(),
     queueCancel: vi.fn(),
     withTransaction: vi.fn(<T>(operation: () => T) => operation()),
-    terminalWrite: vi.fn()
+    terminalWrite: vi.fn(),
+    recentImages: vi.fn(() => [])
   }
 })
 
@@ -81,7 +82,6 @@ vi.mock('../../../src/main/services/database/repositories', () => ({
   },
   BatchJobRepository: class {
     listSummaries = mocks.batchSummaries
-    list = vi.fn(() => [])
     get = vi.fn(() => null)
     create = mocks.batchCreate
     updateDraft = mocks.batchUpdateDraft
@@ -96,6 +96,7 @@ vi.mock('../../../src/main/services/database/repositories', () => ({
     deleteByJob = mocks.batchDeleteTasks
   },
   GeneratedImageRepository: class {
+    recent = mocks.recentImages
     list = vi.fn(() => ({ items: [], total: 0 }))
     updateRating = vi.fn()
     updateFavorite = vi.fn()
@@ -374,5 +375,14 @@ describe('registerIpcHandlers validation boundary', () => {
     expect(mocks.batchSummaries).toHaveBeenLastCalledWith(-1, 0, undefined, 'current')
     list({}, { scope: 'history', page: 2, pageSize: 50 })
     expect(mocks.batchSummaries).toHaveBeenLastCalledWith(50, 50, undefined, 'history')
+  })
+  it('bounds recent-result reads independently of expensive gallery counts', () => {
+    const recent = getHandler(IPC_CHANNELS.GALLERY_RECENT)
+    expect(() => recent({}, { limit: 0 })).toThrow()
+    expect(() => recent({}, { limit: 51 })).toThrow()
+    expect(() => recent({}, { limit: 8, jobId: '../bad' })).toThrow()
+    expect(mocks.recentImages).not.toHaveBeenCalled()
+    expect(recent({}, { limit: 8, jobId: 'job' })).toEqual([])
+    expect(mocks.recentImages).toHaveBeenCalledWith(8, 'job')
   })
 })

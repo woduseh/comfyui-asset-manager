@@ -44,7 +44,19 @@ beforeEach(async () => {
   client = new ComfyUIClient(server.host, server.port)
   ws = new ComfyUIWebSocket(server.host, server.port)
   ws.on('error', () => {})
-  state.manager = { restClient: client, webSocket: ws, isConnected: true, clientId: ws.clientId }
+  state.manager = {
+    acquireExecution: () => ({
+      client,
+      webSocket: ws,
+      clientId: ws.clientId,
+      serverUrl: client.serverUrl,
+      release: vi.fn()
+    }),
+    restClient: client,
+    webSocket: ws,
+    isConnected: true,
+    clientId: ws.clientId
+  }
   db = await import('@main/services/database')
   await db.initDatabase()
   repos = await import('@main/services/database/repositories')
@@ -169,7 +181,8 @@ describe('batch fault boundaries with a real loopback ComfyUI server', () => {
     const result = await client.queuePrompt({}, ws.clientId)
     server.complete(result.prompt_id)
     new repos.BatchTaskRepository().updateStatus(taskId, 'running', {
-      comfyui_prompt_id: result.prompt_id
+      comfyui_prompt_id: result.prompt_id,
+      comfyui_server_url: client.serverUrl
     })
     new repos.BatchJobRepository().updateStatus(jobId, 'paused')
     await db.flushDatabase()

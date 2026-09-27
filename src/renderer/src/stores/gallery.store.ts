@@ -1,3 +1,4 @@
+import { createLatestRequest } from '@renderer/utils/latest-request'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GalleryQuery } from '@shared/ipc-contract'
@@ -29,6 +30,8 @@ export const useGalleryStore = defineStore('gallery', () => {
   const images = ref<GalleryImage[]>([])
   const total = ref(0)
   const loading = ref(false)
+  const loadError = ref<string | null>(null)
+  let targetPage = 1
   const page = ref(1)
   const pageSize = ref(DEFAULT_GALLERY_PAGE_SIZE)
 
@@ -37,46 +40,32 @@ export const useGalleryStore = defineStore('gallery', () => {
     sortOrder: 'desc'
   })
 
-  let pendingQuery: GalleryQuery | null = null
-  let loadPromise: Promise<void> | null = null
-
-  async function drainImageRequests(): Promise<void> {
-    try {
-      while (pendingQuery) {
-        const query = pendingQuery
-        pendingQuery = null
-        try {
-          const result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, query)
-          // A newer request supersedes this result, including refreshes of the same page.
-          if (!pendingQuery && result) {
-            images.value = result.items as GalleryImage[]
-            total.value = result.total
-            page.value = query.page ?? 1
-          }
-        } catch (error) {
-          if (!pendingQuery) throw error
-        }
-      }
-    } finally {
-      loading.value = false
-      loadPromise = null
+  const requests = createLatestRequest({
+    read: (query: GalleryQuery) => invokeIpc(IPC_CHANNELS.GALLERY_LIST, query),
+    commit: (result, query) => {
+      images.value = result.items
+      total.value = result.total
+      page.value = query.page ?? 1
+      loadError.value = null
+    },
+    loading: (value) => {
+      loading.value = value
+    },
+    error: (error) => {
+      loadError.value = error instanceof Error ? error.message : String(error)
     }
-  }
+  })
 
-  function loadImages(targetPage = page.value): Promise<void> {
-    // Bound IPC work to one active query and the latest pending query.
-    pendingQuery = { ...filters.value, page: targetPage, pageSize: pageSize.value }
-    if (!loadPromise) {
-      loading.value = true
-      loadPromise = Promise.resolve().then(drainImageRequests)
-    }
-    return loadPromise
+  function loadImages(requestedPage = targetPage): Promise<void> {
+    targetPage = requestedPage
+    return requests.request({ ...filters.value, page: targetPage, pageSize: pageSize.value })
   }
 
   async function rateImage(id: string, rating: number): Promise<void> {
     await invokeIpc(IPC_CHANNELS.GALLERY_RATE, { id, rating })
     const img = images.value.find((i) => i.id === id)
     if (img) img.rating = rating
+    requests.refreshIfRunning()
   }
 
   async function toggleFavorite(id: string): Promise<void> {
@@ -84,7 +73,9 @@ export const useGalleryStore = defineStore('gallery', () => {
     if (!img) return
     const newFav = img.is_favorite ? false : true
     await invokeIpc(IPC_CHANNELS.GALLERY_FAVORITE, { id, favorite: newFav })
-    img.is_favorite = newFav ? 1 : 0
+    const current = images.value.find((image) => image.id === id)
+    if (current) current.is_favorite = newFav ? 1 : 0
+    requests.refreshIfRunning()
   }
 
   async function deleteImages(ids: string[]): Promise<void> {
@@ -95,13 +86,10 @@ export const useGalleryStore = defineStore('gallery', () => {
     await loadImages(Math.min(page.value, Math.max(1, Math.ceil(total.value / pageSize.value))))
   }
 
-  function setPage(p: number): void {
-    page.value = p
-  }
-
   function setFilters(f: Partial<GalleryQuery>): void {
     filters.value = { ...filters.value, ...f }
-    page.value = 1
+    targetPage = 1
+    requests.cancel()
   }
 
   async function copyToClipboard(filePath: string): Promise<boolean> {
@@ -117,6 +105,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     images,
     total,
     loading,
+    loadError,
     page,
     pageSize,
     filters,
@@ -126,7 +115,6 @@ export const useGalleryStore = defineStore('gallery', () => {
     deleteImages,
     copyToClipboard,
     showInExplorer,
-    setPage,
     setFilters
   }
 })

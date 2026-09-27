@@ -21,6 +21,7 @@ import {
 } from '../../constants'
 import log from '../../logger'
 
+let readEpoch = 0
 let db: SqlJsDatabase | null = null
 let dbPath: string = ''
 let saveTimer: ReturnType<typeof setTimeout> | null = null
@@ -166,6 +167,7 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
 }
 
 function configureConnection(database: SqlJsDatabase): void {
+  readEpoch++
   database.run('PRAGMA journal_mode = WAL;')
   database.run('PRAGMA foreign_keys = ON;')
 }
@@ -177,6 +179,11 @@ function exportDatabaseSnapshot(database: SqlJsDatabase): Uint8Array {
     // sql.js closes/reopens its connection during export. Restore policy before any async I/O.
     configureConnection(database)
   }
+}
+
+/** Includes connection resets because sql.js export resets total_changes(), even on the same JS object. */
+export function getDatabaseReadVersion(): string {
+  return `${readEpoch}:${getDatabase().exec('SELECT total_changes()')[0].values[0][0]}`
 }
 
 export function getDatabase(): SqlJsDatabase {
@@ -345,6 +352,8 @@ export function withTransaction<T>(fn: () => T): T {
     }
     throw error
   } finally {
+    // A rollback must invalidate snapshots even though SQLite total_changes() stays incremented.
+    readEpoch++
     transactionDepth--
     if (isOutermost && committed) {
       requestDatabaseSave()
@@ -477,6 +486,8 @@ function createTables(database: SqlJsDatabase): void {
     );
   `)
 
+  addColumnIfMissing(database, 'batch_tasks', 'comfyui_server_url', 'TEXT')
+
   database.run(`
     CREATE TABLE IF NOT EXISTS generated_images (
       id                TEXT PRIMARY KEY,
@@ -547,6 +558,9 @@ function createTables(database: SqlJsDatabase): void {
   )
   database.run('DROP INDEX IF EXISTS idx_batch_tasks_job;')
   database.run(
+    "CREATE INDEX IF NOT EXISTS idx_batch_tasks_pending ON batch_tasks(job_id, sort_order) WHERE status IN ('pending', 'retrying');"
+  )
+  database.run(
     'CREATE INDEX IF NOT EXISTS idx_batch_tasks_job_status ON batch_tasks(job_id, status);'
   )
   // Periodic cleanup should visit only completed tasks that still retain prompt data.
@@ -557,7 +571,10 @@ function createTables(database: SqlJsDatabase): void {
   // Foreign-key checks on bulk task removal must not scan every retained result per task.
   database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_task ON generated_images(task_id);')
   database.run('CREATE INDEX IF NOT EXISTS idx_saved_seeds_task ON saved_seeds(source_task_id);')
-  database.run('CREATE INDEX IF NOT EXISTS idx_generated_images_job ON generated_images(job_id);')
+  database.run(
+    'CREATE INDEX IF NOT EXISTS idx_generated_images_job_created ON generated_images(job_id, created_at);'
+  )
+  database.run('DROP INDEX IF EXISTS idx_generated_images_job;')
   // Asset authorization runs for every image request, including paths outside the output root.
   // Both OR branches need an index to avoid scanning the entire gallery for each request.
   database.run(

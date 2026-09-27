@@ -165,61 +165,48 @@ class TagService {
     tags: string[],
     onlineFallback = true
   ): Promise<{ results: TagValidationResult[]; onlineAvailable: boolean }> {
-    const results: TagValidationResult[] = []
-    const canUseOnline = onlineFallback && (await checkOnlineAvailability())
-
-    for (const tagName of tags) {
-      const normalized = tagName.trim().toLowerCase().replace(/\s+/g, '_')
-      const localTag = this.tags.get(normalized)
-
-      if (localTag) {
-        results.push({
-          tag: normalized,
+    const normalized = tags.map((name) => name.trim().toLowerCase().replace(/\s+/g, '_'))
+    const resolved = new Map<string, TagValidationResult>()
+    let canUseOnline: boolean | null = null
+    for (const name of new Set(normalized)) {
+      const local = this.tags.get(name)
+      if (local) {
+        resolved.set(name, {
+          tag: name,
           valid: true,
-          postCount: localTag.count,
-          category: CATEGORY_NAMES[localTag.category] || 'unknown',
+          postCount: local.count,
+          category: CATEGORY_NAMES[local.category] || 'unknown',
           source: 'local'
         })
         continue
       }
-
-      // Online fallback (only if network is reachable)
-      if (canUseOnline) {
-        const onlineTag = await validateTagOnline(normalized)
-        if (onlineTag && !onlineTag.is_deprecated) {
-          results.push({
-            tag: normalized,
-            valid: true,
-            postCount: onlineTag.post_count,
-            category: CATEGORY_NAMES[onlineTag.category] || 'unknown',
-            source: 'online'
-          })
-          continue
-        }
-      }
-
-      // Tag not found locally and online unavailable/not found
-      if (!canUseOnline && onlineFallback) {
-        // Online was requested but unavailable — mark as unverified
-        const suggestions = this.suggestSimilar(normalized, 5)
-        results.push({
-          tag: normalized,
-          valid: null,
-          source: 'unverified',
-          suggestions: suggestions.length > 0 ? suggestions : undefined
+      // No network probe at all for all-local requests. Duplicate normalized tags share work.
+      if (onlineFallback && canUseOnline === null) canUseOnline = await checkOnlineAvailability()
+      const lookup = canUseOnline ? await validateTagOnline(name) : { kind: 'unavailable' as const }
+      if (lookup.kind === 'found' && !lookup.tag.is_deprecated) {
+        resolved.set(name, {
+          tag: name,
+          valid: true,
+          postCount: lookup.tag.post_count,
+          category: CATEGORY_NAMES[lookup.tag.category] || 'unknown',
+          source: 'online'
         })
-      } else {
-        // Confirmed invalid (online checked or not requested)
-        const suggestions = this.suggestSimilar(normalized, 5)
-        results.push({
-          tag: normalized,
-          valid: false,
-          suggestions: suggestions.length > 0 ? suggestions : undefined
-        })
+        continue
       }
+      if (lookup.kind === 'unavailable' && onlineFallback) canUseOnline = false
+      const suggestions = this.suggestSimilar(name, 5)
+      const unverified = onlineFallback && lookup.kind === 'unavailable'
+      resolved.set(name, {
+        tag: name,
+        valid: unverified ? null : false,
+        ...(unverified ? { source: 'unverified' as const } : {}),
+        suggestions: suggestions.length ? suggestions : undefined
+      })
     }
-
-    return { results, onlineAvailable: canUseOnline }
+    return {
+      results: normalized.map((name) => resolved.get(name)!),
+      onlineAvailable: canUseOnline === true
+    }
   }
 
   search(query: string, category?: string, limit = 20): DanbooruTag[] {
@@ -230,7 +217,10 @@ class TagService {
     const hasWildcard = normalizedQuery.includes('*')
 
     if (hasWildcard) {
-      const regexStr = normalizedQuery.replace(/\*/g, '.*').replace(/\?/g, '.')
+      const regexStr = normalizedQuery
+        .split('*')
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.*')
       const regex = new RegExp(`^${regexStr}$`)
 
       for (const tag of this.tagsByCount) {
@@ -365,12 +355,15 @@ class TagService {
       if (similarity >= 0.4) {
         // Boost score by popularity (log scale)
         const popularityBoost = Math.log10(tagData.count + 1) / 10
-        scored.push({ name, score: similarity + popularityBoost })
+        const entry = { name, score: similarity + popularityBoost }
+        const index = scored.findIndex((candidate) => candidate.score < entry.score)
+        if (index >= 0) scored.splice(index, 0, entry)
+        else if (scored.length < limit) scored.push(entry)
+        if (scored.length > limit) scored.pop()
       }
     }
 
-    scored.sort((a, b) => b.score - a.score)
-    return scored.slice(0, limit).map((s) => s.name)
+    return scored.map((s) => s.name)
   }
 
   formatTagsForDisplay(
@@ -385,21 +378,21 @@ class TagService {
 }
 
 function levenshtein(a: string, b: string): number {
-  const m = a.length
-  const n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
-
-  for (let i = 0; i <= m; i++) dp[i][0] = i
-  for (let j = 0; j <= n; j++) dp[0][j] = j
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+  if (a.length > b.length) [a, b] = [b, a]
+  let previous = Array.from({ length: a.length + 1 }, (_, index) => index)
+  let current = new Array<number>(a.length + 1)
+  for (let row = 1; row <= b.length; row++) {
+    current[0] = row
+    for (let column = 1; column <= a.length; column++) {
+      current[column] = Math.min(
+        previous[column] + 1,
+        current[column - 1] + 1,
+        previous[column - 1] + (a[column - 1] === b[row - 1] ? 0 : 1)
+      )
     }
+    ;[previous, current] = [current, previous]
   }
-
-  return dp[m][n]
+  return previous[a.length]
 }
 
 export const tagService = new TagService()

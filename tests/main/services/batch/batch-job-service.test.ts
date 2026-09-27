@@ -194,4 +194,33 @@ describe('BatchJobService', () => {
       stop()
     }
   })
+  it('preserves zero weights through snapshot and slot-prefix construction', () => {
+    const items = moduleItemList().map((item) => ({ ...item, weight: 0 }))
+    moduleItemList.mockReturnValueOnce(items).mockReturnValueOnce(items)
+    const prepared = service.prepare(
+      makeConfig({
+        slotMappings: [
+          {
+            variableId: 'slot',
+            nodeId: '1',
+            fieldName: 'text',
+            role: 'prompt_positive',
+            action: 'inject',
+            fixedValue: '',
+            assignedModuleIds: ['module-id'],
+            prefixModuleIds: ['module-id'],
+            prefixText: '',
+            suffixText: ''
+          }
+        ]
+      })
+    )
+    const snapshot = JSON.parse(prepared.data.module_data_snapshot!)
+    expect(snapshot[0].items[0].weight).toBe(0)
+    expect(JSON.parse(prepared.data.config).slotMappings[0].prefixText).toBe('(base prompt:0.00)')
+    expect(
+      expandBatchToTasksChunk(JSON.parse(prepared.data.config), snapshot, 0, 1)[0].promptData
+        .positive
+    ).toBe('(base prompt:0.00)')
+  })
 })

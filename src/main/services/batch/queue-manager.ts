@@ -7,7 +7,7 @@
 
 import { existsSync } from 'fs'
 import { BrowserWindow } from 'electron'
-import { comfyuiManager } from '../comfyui/manager'
+import { comfyuiManager, type ComfyUIExecution } from '../comfyui/manager'
 import { resolveConfiguredOutputRoot } from '../output-root'
 import {
   BatchJobRepository,
@@ -80,6 +80,7 @@ class QueueManager {
   private recoveryError: string | null = null
   private activeRun: Promise<void> | null = null
   private stopping = false
+  private execution: ComfyUIExecution | null = null
 
   get isProcessing(): boolean {
     return this._isProcessing
@@ -167,6 +168,14 @@ class QueueManager {
       return { success: false, error: `Batch job cannot start from status: ${job.status}` }
     }
 
+    const conflict = batchTaskRepo.pendingServerConflict(jobId, comfyuiManager.restClient.serverUrl)
+    if (conflict)
+      return {
+        success: false,
+        error: conflict.serverUrl
+          ? `Reconnect to the original ComfyUI server before resuming: ${conflict.serverUrl}`
+          : 'The original server of a legacy accepted request is unknown; review its results before creating a new job'
+      }
     return { success: true }
   }
 
@@ -183,6 +192,7 @@ class QueueManager {
   startJob(jobId: string): Promise<void> {
     const check = this.preflightStart(jobId)
     if (!check.success) return Promise.reject(new Error(check.error))
+    this.execution = comfyuiManager.acquireExecution()
     this.activeRun = this.runJob(jobId)
     return this.activeRun
   }
@@ -192,18 +202,18 @@ class QueueManager {
     this._isPaused = false
     this._isCancelled = false
     this._currentJobId = jobId
-    setBatchMode(true)
-    this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, true)
-
-    // Load retry setting
-    const retryStr = settingsRepo.get('max_retries') ?? settingsRepo.get('batch.maxRetries')
-    this._maxRetries = parseIntegerOrFallback(retryStr, 3)
-
-    batchJobRepo.updateStatus(jobId, 'running')
-    this.sendStatusToRenderer()
     let persistenceError: unknown
 
     try {
+      setBatchMode(true)
+      this.sendToRenderer(IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED, true)
+
+      // Load retry setting
+      const retryStr = settingsRepo.get('max_retries') ?? settingsRepo.get('batch.maxRetries')
+      this._maxRetries = parseIntegerOrFallback(retryStr, 3)
+
+      batchJobRepo.updateStatus(jobId, 'running')
+      this.sendStatusToRenderer()
       await this.processJob(jobId)
     } catch (error) {
       log.error('Job execution error:', error)
@@ -219,6 +229,8 @@ class QueueManager {
         this.recoveryError = 'Database durability requires attention: ' + String(error)
         persistenceError = error
       } finally {
+        this.execution?.release()
+        this.execution = null
         this._isProcessing = false
         this._isPaused = false
         this._currentJobId = null
@@ -544,16 +556,21 @@ class QueueManager {
 
     const workflowJson = structuredClone(baseApiJson)
     injectPromptData(workflowJson, promptData)
+    const execution = this.execution
+    if (!execution) throw new Error('No active ComfyUI execution context')
     let promptId = task.comfyui_prompt_id as string | undefined
+    if (promptId && task.comfyui_server_url !== execution.serverUrl) {
+      throw new PromptOutcomeUnknownError(
+        'Accepted request belongs to a different or unknown ComfyUI server'
+      )
+    }
     if (!promptId) {
-      batchTaskRepo.updateStatus(taskId, 'submitting')
+      task.comfyui_server_url = execution.serverUrl
+      batchTaskRepo.updateStatus(taskId, 'submitting', { comfyui_server_url: execution.serverUrl })
       await flushDatabase()
       if (this._isCancelled) throw new PromptWaitCancelledError()
       try {
-        const result = await comfyuiManager.restClient.queuePrompt(
-          workflowJson,
-          comfyuiManager.clientId
-        )
+        const result = await execution.client.queuePrompt(workflowJson, execution.clientId)
         promptId = result.prompt_id
         if (!promptId) throw new Error('Missing prompt ID')
       } catch (error) {
@@ -587,7 +604,7 @@ class QueueManager {
         taskId,
         jobId,
         getImage: (filename, subfolder, type) =>
-          comfyuiManager.restClient.getImage(filename, subfolder, type),
+          execution.client.getImage(filename, subfolder, type),
         target,
         journal
       })
@@ -626,7 +643,7 @@ class QueueManager {
       log.warn('Committed output journal cleanup failed:', error)
     }
     try {
-      await comfyuiManager.restClient.deleteFromHistory([promptId])
+      await execution.client.deleteFromHistory([promptId])
     } catch (error) {
       log.debug('Failed to clear committed ComfyUI history:', error)
     }
@@ -636,9 +653,10 @@ class QueueManager {
     promptId: string,
     timeoutMs = TASK_EXECUTION_TIMEOUT_MS
   ): Promise<{ outputs: Record<string, unknown> }> {
+    if (!this.execution) throw new Error('No active ComfyUI execution context')
     return waitForPrompt({
-      client: comfyuiManager.restClient,
-      webSocket: comfyuiManager.webSocket,
+      client: this.execution.client,
+      webSocket: this.execution.webSocket,
       promptId,
       timeoutMs,
       pollIntervalMs: COMPLETION_POLL_INTERVAL_MS,

@@ -1,3 +1,4 @@
+import log from '../../logger'
 import WebSocket from 'ws'
 import { EventEmitter } from 'events'
 import { randomUUID } from 'node:crypto'
@@ -182,6 +183,8 @@ export class ComfyUIWebSocket extends EventEmitter {
     }
     if (this.ws) {
       this.ws.removeAllListeners()
+      // Closing a connecting socket emits an asynchronous error; it is intentional cancellation.
+      this.ws.on('error', (error) => log.debug('[ComfyUI] Closed socket:', error))
       this.ws.close()
       this.ws = null
     }

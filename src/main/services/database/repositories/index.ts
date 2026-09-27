@@ -559,6 +559,21 @@ export interface BatchJobWriteData {
 }
 
 export class BatchJobRepository {
+  private static readonly SUMMARY_SELECT = `SELECT id, name, description, workflow_id, status, total_tasks,
+    completed_tasks, failed_tasks, created_at, started_at, completed_at, sort_order,
+    (SELECT COUNT(*) FROM batch_tasks WHERE job_id = batch_jobs.id AND status = 'uncertain') AS uncertain_tasks
+    FROM batch_jobs`
+
+  getSummary(id: string): BatchJobSummary | null {
+    const stmt = getDatabase().prepare(`${BatchJobRepository.SUMMARY_SELECT} WHERE id = ?`)
+    try {
+      stmt.bind([id])
+      return stmt.step() ? (stmt.getAsObject() as BatchJobSummary) : null
+    } finally {
+      stmt.free()
+    }
+  }
+
   listSummaries(
     limit: number,
     offset: number,
@@ -582,10 +597,9 @@ export class BatchJobRepository {
     } finally {
       count.free()
     }
-    const stmt = db.prepare(`SELECT id, name, description, workflow_id, status, total_tasks,
-      completed_tasks, failed_tasks, created_at, started_at, completed_at,
-      (SELECT COUNT(*) FROM batch_tasks WHERE job_id = batch_jobs.id AND status = 'uncertain') AS uncertain_tasks
-      FROM batch_jobs${where} ORDER BY sort_order ASC, created_at DESC, id ASC LIMIT ? OFFSET ?`)
+    const stmt = db.prepare(
+      `${BatchJobRepository.SUMMARY_SELECT}${where} ORDER BY sort_order ASC, created_at DESC, id ASC LIMIT ? OFFSET ?`
+    )
     try {
       stmt.bind(status ? [status, limit, offset] : [limit, offset])
       const items: BatchJobSummary[] = []
@@ -599,25 +613,6 @@ export class BatchJobRepository {
   private static readonly SELECT_WITH_UNCERTAIN = `SELECT batch_jobs.*,
     (SELECT COUNT(*) FROM batch_tasks WHERE batch_tasks.job_id = batch_jobs.id
       AND batch_tasks.status = 'uncertain') AS uncertain_tasks FROM batch_jobs`
-
-  list(status?: string): Record<string, unknown>[] {
-    const db = getDatabase()
-    let query = BatchJobRepository.SELECT_WITH_UNCERTAIN
-    const params: unknown[] = []
-    if (status) {
-      query += ' WHERE status = ?'
-      params.push(status)
-    }
-    query += ' ORDER BY sort_order ASC, created_at DESC'
-    const stmt = db.prepare(query)
-    if (params.length) stmt.bind(params as string[])
-    const results: Record<string, unknown>[] = []
-    while (stmt.step()) {
-      results.push(stmt.getAsObject())
-    }
-    stmt.free()
-    return results
-  }
 
   get(id: string): Record<string, unknown> | null {
     const db = getDatabase()
@@ -819,7 +814,12 @@ export class BatchTaskRepository {
   updateStatus(
     id: string,
     status: string,
-    extra?: { comfyui_prompt_id?: string | null; result_path?: string; error_message?: string }
+    extra?: {
+      comfyui_prompt_id?: string | null
+      comfyui_server_url?: string
+      result_path?: string
+      error_message?: string
+    }
   ): void {
     const db = getDatabase()
     let query = 'UPDATE batch_tasks SET status = ?'
@@ -828,6 +828,10 @@ export class BatchTaskRepository {
     if (extra?.comfyui_prompt_id !== undefined) {
       query += ', comfyui_prompt_id = ?'
       params.push(extra.comfyui_prompt_id)
+    }
+    if (extra?.comfyui_server_url !== undefined) {
+      query += ', comfyui_server_url = ?'
+      params.push(extra.comfyui_server_url)
     }
     if (extra?.result_path) {
       query += ', result_path = ?'
@@ -849,6 +853,20 @@ export class BatchTaskRepository {
 
     db.run(query, params)
     saveDatabase()
+  }
+
+  pendingServerConflict(jobId: string, serverUrl: string): { serverUrl: string | null } | null {
+    const stmt = getDatabase().prepare(`SELECT comfyui_server_url FROM batch_tasks
+      WHERE job_id = ? AND status IN ('pending', 'retrying') AND comfyui_prompt_id IS NOT NULL
+      AND (comfyui_server_url IS NULL OR comfyui_server_url != ?) LIMIT 1`)
+    try {
+      stmt.bind([jobId, serverUrl])
+      return stmt.step()
+        ? { serverUrl: stmt.getAsObject().comfyui_server_url as string | null }
+        : null
+    } finally {
+      stmt.free()
+    }
   }
 
   /** A terminal transition and its job counter are committed exactly once. */
@@ -947,6 +965,20 @@ export class BatchTaskRepository {
 }
 
 export class GeneratedImageRepository {
+  recent(limit: number, jobId?: string): Record<string, unknown>[] {
+    const stmt = getDatabase().prepare(
+      `SELECT * FROM generated_images${jobId ? ' WHERE job_id = ?' : ''} ORDER BY created_at DESC LIMIT ?`
+    )
+    try {
+      stmt.bind(jobId ? [jobId, limit] : [limit])
+      const rows: Record<string, unknown>[] = []
+      while (stmt.step()) rows.push(stmt.getAsObject())
+      return rows
+    } finally {
+      stmt.free()
+    }
+  }
+
   get(id: string): Record<string, unknown> | null {
     const stmt = getDatabase().prepare('SELECT * FROM generated_images WHERE id = ?')
     try {

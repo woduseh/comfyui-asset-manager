@@ -15,14 +15,14 @@ interface HistoryRequestOptions {
 }
 
 export class ComfyUIClient {
-  private baseUrl: string
+  private readonly baseUrl: string
 
   constructor(host: string = 'localhost', port: number = 8188) {
-    this.baseUrl = `http://${host}:${port}`
+    this.baseUrl = new URL(`http://${host}:${port}`).origin
   }
 
-  setServer(host: string, port: number): void {
-    this.baseUrl = `http://${host}:${port}`
+  get serverUrl(): string {
+    return this.baseUrl
   }
 
   /** Check if the server is reachable */
@@ -96,11 +96,6 @@ export class ComfyUIClient {
       timeout: COMFYUI_REQUEST_TIMEOUT_MS
     })
     return Buffer.from(response)
-  }
-
-  /** Interrupt the current execution */
-  async interrupt(): Promise<void> {
-    await ofetch(`${this.baseUrl}/interrupt`, { method: 'POST' })
   }
 
   /** Delete items from history */

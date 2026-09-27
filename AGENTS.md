@@ -31,6 +31,8 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
   스냅샷 없는 레거시 작업의 실행 호환성을 유지한다.
 - `max_retries`는 최초 시도 이후의 추가 시도 횟수다. `retrying`은 완료 상태가 아니며
   `batch.maxRetries`는 레거시 읽기 호환용이다.
+- 배치 실행은 불변 REST client와 서버 주소에 묶는다. 같은 주소 재연결만 허용하고 주소·prompt ID를 함께 보존한다.
+  원래 서버를 알 수 없는 레거시 수락 요청은 임의의 현재 서버에 조회·재제출하지 않는다.
 - 외부 제출 전에 `submitting`을 flush하고 수신한 prompt ID를 보존한다. 응답 유실·완료 확인 실패는
   `uncertain`으로 격리하며 자동 재제출하지 않는다. 다운로드 재시도는 같은 prompt ID를 사용한다.
 - 출력 journal은 파일 생성 전에 기록한다. 완료·gallery·진행률을 함께 커밋하고 DB flush 이후에만
@@ -59,6 +61,8 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
 
 - 코드 식별자·주석은 영어, 사용자 문서는 한국어로 작성한다. UI 문자열은 i18n을 사용하고
   `src/renderer/src/locales/ko.json`과 `en.json`을 함께 갱신한다. 언어 자체의 이름은 예외다.
+- 화면 조회의 마지막 요청·무효화는 `utils/latest-request.ts`를 재사용한다. 요청 목표 페이지와 표시 완료 페이지는 구분한다.
+- 배포 파일 목록은 런타임 허용 목록으로 유지하고 `.reports` 등 개발 자료를 포함하지 않는다.
 - 공용 순수 타입·유틸은 `src/shared/`에서 직접 참조한다. JSON 구조 검증은 기존 safe-json helper를 재사용한다.
 - main 로깅은 `src/main/logger.ts`의 electron-log를 사용한다. 사용자가 상태를 오판할 수 있는
   실패는 호출자나 renderer의 오류 상태로 전달한다.

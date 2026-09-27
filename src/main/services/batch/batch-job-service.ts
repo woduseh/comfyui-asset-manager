@@ -61,7 +61,7 @@ export class BatchJobService {
                     return {
                       prompt: variant?.prompt ?? (item.prompt as string),
                       negative: variant?.negative ?? ((item.negative as string) || ''),
-                      weight: (item.weight as number) || 1.0,
+                      weight: (item.weight as number | null) ?? 1.0,
                       enabled: true
                     }
                   })
@@ -104,7 +104,7 @@ export class BatchJobService {
           name: item.name as string,
           prompt: item.prompt as string,
           negative: (item.negative as string) || '',
-          weight: (item.weight as number) || 1.0,
+          weight: (item.weight as number | null) ?? 1.0,
           enabled: (item.enabled as number) !== 0,
           prompt_variants: validatePromptVariants(item.prompt_variants as string)
         }))

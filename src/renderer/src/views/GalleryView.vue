@@ -111,6 +111,11 @@ function goToJobs(): void {
   void router.push({ name: 'jobs' })
 }
 
+function retryGallery(): void {
+  // The store retains the failure for the visible error banner.
+  void galleryStore.loadImages().catch(() => {})
+}
+
 // Apply filters
 async function applyFilters(): Promise<void> {
   showDetail.value = false
@@ -389,6 +394,16 @@ onUnmounted(() => {
         </NTag>
       </template>
     </PageHeader>
+
+    <NAlert
+      v-if="galleryStore.loadError"
+      type="error"
+      :title="t('gallery.msg.loadFailed')"
+      class="gallery-load-error"
+    >
+      {{ galleryStore.loadError }}
+      <NButton size="small" @click="retryGallery">{{ t('common.retry') }}</NButton>
+    </NAlert>
 
     <NAlert v-if="filterJobId" type="info" :bordered="false" class="gallery-job-context">
       <div class="gallery-missing-alert__content">

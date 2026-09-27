@@ -42,11 +42,13 @@ function job(id: string, status: BatchJobRecord['status']): BatchJobRecord {
 
 describe('production jobs view', () => {
   let jobs: BatchJobRecord[]
+  let activeId: string | undefined
   let wrapper: VueWrapper | undefined
 
   beforeEach(() => {
     vi.useFakeTimers()
     jobs = []
+    activeId = undefined
     invokeIpc.mockReset()
     push.mockReset()
     invokeIpc.mockImplementation(
@@ -76,16 +78,16 @@ describe('production jobs view', () => {
         if (channel === IPC_CHANNELS.BATCH_GET)
           return jobs.find((entry) => entry.id === args?.id) ?? null
         if (channel === IPC_CHANNELS.QUEUE_STATUS) {
-          const current = jobs.find(
-            (entry) => entry.status === 'running' || entry.status === 'paused'
-          )
+          const current = activeId
+            ? jobs.find((entry) => entry.id === activeId)
+            : jobs.find((entry) => entry.status === 'running' || entry.status === 'paused')
           return {
             isProcessing: Boolean(current),
             isPaused: current?.status === 'paused',
             currentJobId: current?.id ?? null
           }
         }
-        if (channel === IPC_CHANNELS.GALLERY_LIST) return { items: [], total: 0 }
+        if (channel === IPC_CHANNELS.GALLERY_RECENT) return []
         if (channel === IPC_CHANNELS.BATCH_START || channel === IPC_CHANNELS.BATCH_RESUME) {
           const current = jobs.find((entry) => entry.id === args?.id)!
           current.status = 'running'
@@ -294,5 +296,16 @@ describe('production jobs view', () => {
     await flushPromises()
     expect(view.findComponent(NPagination).props('page')).toBe(2)
     expect(view.findComponent(ProductionJobTable).props('jobs')[0].id).toBe('history-50')
+  })
+  it('uses backend currentJobId instead of list order when multiple paused jobs exist', async () => {
+    jobs = [job('old-recovery', 'paused'), job('actual-active', 'paused')]
+    activeId = 'actual-active'
+    const view = await openJobs()
+    const bar = view.findComponent(JobStatusBar)
+    expect(bar.props('job').id).toBe(activeId)
+    bar.vm.$emit('resume')
+    await flushPromises()
+    expect(invokeIpc).toHaveBeenCalledWith(IPC_CHANNELS.BATCH_RESUME, { id: 'actual-active' })
+    expect(jobs[0].status).toBe('paused')
   })
 })

@@ -148,7 +148,7 @@ describe('database query indexes', () => {
     expect(images.hasTrackedAssetPath('/archive/thumbnail.png')).toBe(true)
     expect(images.hasTrackedAssetPath('/unregistered.png')).toBe(false)
     expect(images.list({ page: 1, pageSize: 20 }).items[0].id).toBe(imageId)
-    expect(jobs.list()[0].uncertain_tasks).toBe(1)
+    expect(jobs.getSummary(jobId)!.uncertain_tasks).toBe(1)
     expect(new BatchTaskRepository().nextSortOrder(jobId)).toBe(1)
 
     // Check the repository's actual SQL so an accidental query change cannot bypass the indexes.
@@ -168,7 +168,7 @@ describe('database query indexes', () => {
     )
     expect(galleryPlan).toContain('idx_generated_images_created_at')
     expect(galleryPlan).not.toContain('USE TEMP B-TREE')
-    const jobsPlan = plan(queries.find((sql) => sql.startsWith('SELECT batch_jobs.*'))!)
+    const jobsPlan = plan(queries.find((sql) => sql.includes('AS uncertain_tasks'))!)
     expect(jobsPlan).toContain('COVERING INDEX idx_batch_tasks_job_status')
     expect(plan("SELECT rowid FROM generated_images WHERE task_id = 'task'")).toContain(
       'idx_generated_images_task'
@@ -189,7 +189,9 @@ describe('database query indexes', () => {
       'idx_batch_tasks_job_status',
       'idx_batch_tasks_job_sort',
       'idx_generated_images_task',
-      'idx_saved_seeds_task'
+      'idx_saved_seeds_task',
+      'idx_batch_tasks_pending',
+      'idx_generated_images_job_created'
     ]
     const db = databaseModule.getDatabase()
     for (const index of indexes) db.run(`DROP INDEX ${index}`)

@@ -20,8 +20,7 @@ import {
   validateTerminalInput,
   validateWorkflowCategory,
   validateWorkflowRole,
-  validateWorkflowUpdate,
-  validateWorkflowVariables
+  validateWorkflowUpdate
 } from './validators'
 import {
   SettingsRepository,
@@ -117,13 +116,6 @@ export function registerIpcHandlers(): void {
     return true
   })
 
-  ipcMain.handle(IPC_CHANNELS.COMFYUI_STATUS, () => {
-    return {
-      connected: comfyuiManager.isConnected,
-      clientId: comfyuiManager.clientId
-    }
-  })
-
   ipcMain.handle(IPC_CHANNELS.COMFYUI_SYSTEM_STATS, async () => {
     if (!comfyuiManager.isConnected) return null
     try {
@@ -170,32 +162,6 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.WORKFLOW_SET_VARIABLES,
-    (
-      _event,
-      {
-        workflowId,
-        variables
-      }: {
-        workflowId: string
-        variables: Array<{
-          node_id: string
-          field_name: string
-          display_name: string
-          var_type: string
-          default_val?: string
-          description?: string
-        }>
-      }
-    ) => {
-      validateId(workflowId)
-      validateWorkflowVariables(variables)
-      workflowRepo.setVariables(workflowId, variables)
-      return true
-    }
-  )
-
   // Update variable role
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE,
@@ -206,23 +172,6 @@ export function registerIpcHandlers(): void {
       return true
     }
   )
-
-  // Update variable value
-  ipcMain.handle(
-    IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_VALUE,
-    (_event, { variableId, value }: { variableId: string; value: string }) => {
-      validateId(variableId)
-      validateString(value, 100_000)
-      workflowRepo.updateValue(variableId, value)
-      return true
-    }
-  )
-
-  // Settings
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (_event, { key }: { key: string }) => {
-    validateSettingsKey(key)
-    return settingsRepo.get(key)
-  })
 
   ipcMain.handle(
     IPC_CHANNELS.SETTINGS_SET,
@@ -357,6 +306,15 @@ export function registerIpcHandlers(): void {
   registerBatchHandlers()
 
   // Gallery
+  ipcMain.handle(
+    IPC_CHANNELS.GALLERY_RECENT,
+    (_event, { limit, jobId }: { limit: number; jobId?: string }) => {
+      validateIntegerRange(limit, 1, 50, 'Recent image limit')
+      if (jobId !== undefined) validateId(jobId)
+      return imageRepo.recent(limit, jobId)
+    }
+  )
+
   ipcMain.handle(IPC_CHANNELS.GALLERY_LIST, (_event, query) => {
     return imageRepo.list(validateGalleryQuery(query))
   })
@@ -450,7 +408,7 @@ export function registerIpcHandlers(): void {
           items: items.map((item) => ({
             prompt: item.prompt as string,
             negative: (item.negative as string) || '',
-            weight: (item.weight as number) || 1.0,
+            weight: (item.weight as number | null) ?? 1.0,
             enabled: (item.enabled as number) !== 0
           }))
         })
@@ -494,23 +452,6 @@ export function registerIpcHandlers(): void {
       return { error: (error as Error).message }
     }
   })
-
-  // Dialogs
-  ipcMain.handle(
-    IPC_CHANNELS.DIALOG_OPEN_FILE,
-    async (_event, args?: { filters?: { name: string; extensions: string[] }[] }) => {
-      const win = BrowserWindow.getFocusedWindow()
-      if (!win) return null
-      const result = await dialog.showOpenDialog(win, {
-        properties: ['openFile'],
-        filters: args?.filters || [
-          { name: 'JSON Files', extensions: ['json'] },
-          { name: 'All Files', extensions: ['*'] }
-        ]
-      })
-      return result.canceled ? null : result.filePaths[0]
-    }
-  )
 
   ipcMain.handle(IPC_CHANNELS.DIALOG_OPEN_DIRECTORY, async () => {
     const win = BrowserWindow.getFocusedWindow()

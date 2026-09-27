@@ -142,7 +142,7 @@ describe('MCP batch generation integration', () => {
         call('create_batch_job', { ...input, variable_overrides: [{ variableId: cfgId, value }] })
       ).rejects.toThrow(/finite number/i)
     }
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
   })
 
   it('rejects duplicate variable override IDs instead of silently using the last value', async () => {
@@ -155,7 +155,7 @@ describe('MCP batch generation integration', () => {
         ]
       })
     ).rejects.toThrow(/duplicate/i)
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
   })
 
   it('requires explicit mappings to cover every detected prompt slot', async () => {
@@ -165,7 +165,7 @@ describe('MCP batch generation integration', () => {
     await expect(
       call('preview_batch_job', { ...input, slot_mappings: [{ variableId: positive.id }] })
     ).rejects.toThrow()
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
   })
 
   it('validates variants for every enabled prefix item, including unselected ones', async () => {
@@ -239,7 +239,7 @@ describe('MCP batch generation integration', () => {
     })
     expect(result.structuredContent).toMatchObject({ jobId: id, cloned: false })
     expect(repos.batchTaskRepo.listByJob(id)).toHaveLength(0)
-    expect(repos.batchJobRepo.list()).toHaveLength(1)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(1)
   })
 
   it('previews one character × three emotions × two images with exact injected slots and explicit overrides', async () => {
@@ -272,7 +272,7 @@ describe('MCP batch generation integration', () => {
     expect(injectSpy).toHaveBeenCalledTimes(6)
     const rendered = injectSpy.mock.calls[0][0] as typeof workflow
     expect(rendered['3'].inputs.cfg).toBe(4.5)
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
   })
 
   it('rejects a stale preview after module or workflow changes without creating a draft', async () => {
@@ -283,7 +283,7 @@ describe('MCP batch generation integration', () => {
       preview_token: preview.structuredContent!.preview_token
     })
     expect(result.isError).toBe(true)
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
     const fresh = await call('preview_batch_job', input)
     repos.workflowRepo.update(workflowId, {
       api_json: JSON.stringify({
@@ -331,7 +331,7 @@ describe('MCP batch generation integration', () => {
           variable_overrides: [{ variableId: cfgId, value: '4' }]
         })
       ).rejects.toThrow('not a primitive')
-      expect(repos.batchJobRepo.list()).toHaveLength(0)
+      expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
     }
   )
 
@@ -348,7 +348,7 @@ describe('MCP batch generation integration', () => {
       }))
     )
     await expect(call('create_batch_job', input)).rejects.toThrow('requires a text input')
-    expect(repos.batchJobRepo.list()).toHaveLength(0)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
   })
 
   it('updates an untouched draft in place and clones completed jobs preserving history', async () => {
@@ -361,7 +361,7 @@ describe('MCP batch generation integration', () => {
     expect(clone.structuredContent).toMatchObject({ cloned: true, source_job_id: id })
     expect(clone.structuredContent!.jobId).not.toBe(id)
     expect(repos.batchJobRepo.get(id)).toEqual(before)
-    expect(repos.batchJobRepo.list()).toHaveLength(2)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(2)
   })
 
   it('pages task metadata and statuses while blocking replacement of uncertain work', async () => {
@@ -395,7 +395,7 @@ describe('MCP batch generation integration', () => {
     const filtered = await call('list_batch_tasks', { job_id: id, status: 'uncertain', limit: 1 })
     expect(filtered.structuredContent).toMatchObject({ total: 1, has_more: false })
     expect((await call('update_batch_job', { ...input, job_id: id })).isError).toBe(true)
-    expect(repos.batchJobRepo.list()).toHaveLength(1)
+    expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(1)
     expect(repos.batchTaskRepo.get(taskIds[1])).toMatchObject({
       comfyui_prompt_id: 'keep-prompt-id',
       status: 'uncertain'

@@ -1,3 +1,4 @@
+import { getDatabaseReadVersion } from '../../database'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
@@ -71,10 +72,34 @@ export interface BatchStatus {
   next_action: string
 }
 
-export function batchStatus(jobId: string): BatchStatus {
-  const job = batchJobRepo.get(jobId)
+let statusReadVersion = ''
+const statusReads = new Map<
+  string,
+  { job: Record<string, unknown>; counts: Record<string, number> }
+>()
+function readStatusRecords(jobId: string): {
+  job: Record<string, unknown>
+  counts: Record<string, number>
+} {
+  const version = getDatabaseReadVersion()
+  if (version !== statusReadVersion) {
+    statusReads.clear()
+    statusReadVersion = version
+  }
+  const cached = statusReads.get(jobId)
+  if (cached) return cached
+  const job = batchJobRepo.getSummary(jobId)
   if (!job) throw new Error(`Batch job not found: ${jobId}`)
-  const counts = batchTaskRepo.countByJobStatus(jobId)
+  const value = { job, counts: batchTaskRepo.countByJobStatus(jobId) }
+  if (statusReads.size >= 64) statusReads.delete(statusReads.keys().next().value!)
+  statusReads.set(jobId, value)
+  return value
+}
+
+export function batchStatus(jobId: string): BatchStatus {
+  const stored = readStatusRecords(jobId)
+  const job = { ...stored.job }
+  const counts = { ...stored.counts }
   const materialized = Object.values(counts).reduce((total, count) => total + count, 0)
   const active = queueManager.isProcessing && queueManager.currentJobId === jobId
   const requiresReview = (counts.uncertain ?? 0) > 0

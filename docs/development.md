@@ -157,3 +157,13 @@ DB 관계·정렬·저장 수명주기 검사는 `tests/helpers/database.ts`의 
 저장 후 외래키, 삭제·재실행의 갤러리/시드 보존, 단일 완료 카운터는 `database/relations.test.ts`와
 기존 queue fault/crash 검사로 확인합니다. 외부 작업 알림은 `external-job-sync.test.ts`, 모듈 응답
 경쟁은 `module-selection.test.ts`, 이력 페이지·상세 복원은 `jobs-view.test.ts`에서 확인합니다.
+
+## 서버 연결·배포 경계 검사
+
+`tests/main/services/batch/server-binding.test.ts`는 두 로컬 가짜 ComfyUI 서버와 실제 실행기·DB로
+주소 전환 차단, 같은 서버 복구, 원래 서버가 다른/알 수 없는 수락 요청 보존을 확인합니다.
+태그의 transport 결과·wildcard는 `tags/lookup-contracts.test.ts`, 상태 읽기 캐시의 rollback·export·재개방
+무효화는 `mcp/batch-status.test.ts`에서 확인합니다. `tests/release/package-files.test.ts`는 설치된
+builder의 실제 파일 필터를 사용하지만 Windows 설치·실행이나 native PTY 작동까지 입증하지는 않습니다.
+새 배포를 만들 때에는 app.asar/asar.unpacked 목록에서도 런타임 파일·sql.js WASM·native 의존성 보존과
+개발/로컬 진단 파일 제외를 확인합니다.

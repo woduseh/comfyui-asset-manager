@@ -5,12 +5,6 @@
  * Supports: weight formatting, variable interpolation, wildcard expansion.
  */
 
-export interface PromptFragment {
-  text: string
-  negative?: string
-  weight: number
-}
-
 /**
  * Apply weight to a prompt string. Returns `(text:weight)` if weight != 1.0
  */
@@ -49,149 +43,60 @@ export function interpolateVariables(text: string, variables: Record<string, str
   })
 }
 
-/**
- * Combine multiple prompt fragments into a single comma-separated prompt string.
- */
-export function combineFragments(fragments: PromptFragment[]): {
-  positive: string
-  negative: string
-} {
+interface PromptModule {
+  type: string
+  items: Array<{ prompt: string; negative: string; weight: number; enabled: boolean }>
+}
+const typeOrder = [
+  'quality',
+  'style',
+  'artist',
+  'character',
+  'outfit',
+  'emotion',
+  'lora',
+  'negative',
+  'custom'
+]
+
+function composePrompt(
+  modules: PromptModule[],
+  variables: Record<string, string> | undefined,
+  expandWildcards: boolean,
+  seed?: number
+): { positive: string; negative: string } {
+  const priority = (type: string): number => {
+    const index = typeOrder.indexOf(type)
+    return index < 0 ? typeOrder.length : index
+  }
+  const sorted = [...modules].sort((a, b) => priority(a.type) - priority(b.type))
   const positives: string[] = []
   const negatives: string[] = []
-
-  for (const frag of fragments) {
-    const weighted = applyWeight(frag.text, frag.weight)
-    if (weighted) positives.push(weighted)
-
-    if (frag.negative?.trim()) {
-      negatives.push(frag.negative.trim())
+  for (const module of sorted) {
+    for (const item of module.items) {
+      if (!item.enabled) continue
+      let text = variables ? interpolateVariables(item.prompt, variables) : item.prompt
+      if (expandWildcards) text = resolveWildcards(text, seed)
+      const weighted = applyWeight(text, item.weight)
+      // Only negative modules contribute to the negative prompt; legacy item.negative is retained data.
+      if (weighted) (module.type === 'negative' ? negatives : positives).push(weighted)
     }
   }
-
-  return {
-    positive: positives.join(', '),
-    negative: negatives.join(', ')
-  }
+  return { positive: positives.join(', '), negative: negatives.join(', ') }
 }
 
-/**
- * Build a complete prompt from module items.
- * Order: quality → style → artist → character → outfit → emotion → lora → custom
- */
+/** Build and preview share all policies except deterministic wildcard expansion. */
 export function buildPrompt(
-  modules: Array<{
-    type: string
-    items: Array<{
-      prompt: string
-      negative: string
-      weight: number
-      enabled: boolean
-    }>
-  }>,
+  modules: PromptModule[],
   variables?: Record<string, string>,
   seed?: number
 ): { positive: string; negative: string } {
-  const typeOrder = [
-    'quality',
-    'style',
-    'artist',
-    'character',
-    'outfit',
-    'emotion',
-    'lora',
-    'negative',
-    'custom'
-  ]
-
-  const sorted = [...modules].sort((a, b) => {
-    const ia = typeOrder.indexOf(a.type)
-    const ib = typeOrder.indexOf(b.type)
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
-  })
-
-  const fragments: PromptFragment[] = []
-
-  for (const mod of sorted) {
-    for (const item of mod.items) {
-      if (!item.enabled) continue
-
-      let promptText = item.prompt
-
-      if (variables) {
-        promptText = interpolateVariables(promptText, variables)
-      }
-
-      promptText = resolveWildcards(promptText, seed)
-
-      // 'negative' type modules contribute to negative prompt only
-      if (mod.type === 'negative') {
-        fragments.push({ text: '', negative: promptText, weight: item.weight })
-      } else {
-        fragments.push({ text: promptText, negative: '', weight: item.weight })
-      }
-    }
-  }
-
-  return combineFragments(fragments)
+  return composePrompt(modules, variables, true, seed)
 }
 
-/**
- * Preview combined prompt without resolving wildcards.
- */
 export function previewPrompt(
-  modules: Array<{
-    type: string
-    items: Array<{
-      prompt: string
-      negative: string
-      weight: number
-      enabled: boolean
-    }>
-  }>,
+  modules: PromptModule[],
   variables?: Record<string, string>
 ): { positive: string; negative: string } {
-  const typeOrder = [
-    'quality',
-    'style',
-    'artist',
-    'character',
-    'outfit',
-    'emotion',
-    'lora',
-    'negative',
-    'custom'
-  ]
-
-  const sorted = [...modules].sort((a, b) => {
-    const ia = typeOrder.indexOf(a.type)
-    const ib = typeOrder.indexOf(b.type)
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
-  })
-
-  const positives: string[] = []
-  const negatives: string[] = []
-
-  for (const mod of sorted) {
-    for (const item of mod.items) {
-      if (!item.enabled) continue
-
-      let promptText = item.prompt
-
-      if (variables) {
-        promptText = interpolateVariables(promptText, variables)
-      }
-
-      if (mod.type === 'negative') {
-        if (promptText.trim()) negatives.push(applyWeight(promptText, item.weight))
-      } else {
-        const weighted = applyWeight(promptText, item.weight)
-        if (weighted) positives.push(weighted)
-      }
-    }
-  }
-
-  return {
-    positive: positives.join(', '),
-    negative: negatives.join(', ')
-  }
+  return composePrompt(modules, variables, false)
 }

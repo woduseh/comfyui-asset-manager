@@ -3,10 +3,8 @@ import {
   applyWeight,
   resolveWildcards,
   interpolateVariables,
-  combineFragments,
   buildPrompt,
-  previewPrompt,
-  type PromptFragment
+  previewPrompt
 } from '../../../../src/main/services/prompt/composition-engine'
 
 describe('Prompt Composition Engine', () => {
@@ -108,51 +106,6 @@ describe('Prompt Composition Engine', () => {
 
     it('handles empty string', () => {
       expect(interpolateVariables('', { name: 'val' })).toBe('')
-    })
-  })
-
-  describe('combineFragments', () => {
-    it('combines positive and negative fragments', () => {
-      const fragments: PromptFragment[] = [
-        { text: 'masterpiece', negative: 'bad quality', weight: 1.0 },
-        { text: '1girl', negative: 'ugly', weight: 1.0 }
-      ]
-      const result = combineFragments(fragments)
-      expect(result.positive).toBe('masterpiece, 1girl')
-      expect(result.negative).toBe('bad quality, ugly')
-    })
-
-    it('applies weight to positive text', () => {
-      const fragments: PromptFragment[] = [
-        { text: 'masterpiece', weight: 1.2 },
-        { text: 'detailed', weight: 1.0 }
-      ]
-      const result = combineFragments(fragments)
-      expect(result.positive).toBe('(masterpiece:1.20), detailed')
-    })
-
-    it('handles empty fragments', () => {
-      const result = combineFragments([])
-      expect(result.positive).toBe('')
-      expect(result.negative).toBe('')
-    })
-
-    it('skips fragments with empty text', () => {
-      const fragments: PromptFragment[] = [
-        { text: '', weight: 1.0 },
-        { text: 'masterpiece', weight: 1.0 }
-      ]
-      const result = combineFragments(fragments)
-      expect(result.positive).toBe('masterpiece')
-    })
-
-    it('skips fragments with empty negative', () => {
-      const fragments: PromptFragment[] = [
-        { text: 'a', negative: '', weight: 1.0 },
-        { text: 'b', negative: 'bad', weight: 1.0 }
-      ]
-      const result = combineFragments(fragments)
-      expect(result.negative).toBe('bad')
     })
   })
 
@@ -304,4 +257,20 @@ describe('Prompt Composition Engine', () => {
       expect(result.negative).toBe('worst quality')
     })
   })
+})
+
+describe('shared preview and execution policy', () => {
+  it.each([0, 0.5, 1, 1.5])(
+    'preserves weight %s for both positive and negative modules',
+    (weight) => {
+      const modules = ['custom', 'negative'].map((type) => ({
+        type,
+        items: [{ prompt: '{{name}}', negative: 'ignored legacy field', weight, enabled: true }]
+      }))
+      const generated = buildPrompt(modules, { name: 'test' }, 0)
+      expect(generated).toEqual(previewPrompt(modules, { name: 'test' }))
+      expect(generated.positive).toBe(applyWeight('test', weight))
+      expect(generated.negative).toBe(applyWeight('test', weight))
+    }
+  )
 })

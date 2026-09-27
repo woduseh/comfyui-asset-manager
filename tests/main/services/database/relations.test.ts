@@ -232,3 +232,36 @@ describe('job summaries and terminal counters', () => {
     expect(fixture.db.exec('PRAGMA foreign_key_check')[0].values).toHaveLength(1)
   })
 })
+
+describe('execution identity migration', () => {
+  it('adds nullable server identities and pending indexes without inventing an origin for legacy prompts', async () => {
+    const jobs = new BatchJobRepository(),
+      tasks = new BatchTaskRepository()
+    const id = jobs.create({ name: 'Legacy', config: '{}' })
+    const task = tasks.createSingle({
+      job_id: id,
+      prompt_data: '{}',
+      metadata: '{}',
+      sort_order: 1
+    })
+    tasks.updateStatus(task, 'pending', { comfyui_prompt_id: 'legacy-prompt' })
+    fixture.db.run('ALTER TABLE batch_tasks DROP COLUMN comfyui_server_url')
+    fixture.db.run('DROP INDEX idx_batch_tasks_pending')
+    await fixture.database.closeDatabase()
+    fixture.db = await fixture.database.initDatabase()
+    expect(tasks.get(task)).toMatchObject({
+      comfyui_prompt_id: 'legacy-prompt',
+      comfyui_server_url: null
+    })
+    const prepare = vi.spyOn(fixture.db, 'prepare')
+    expect(tasks.listByJobPending(id, 10)).toHaveLength(1)
+    const sql = prepare.mock.calls[0][0]
+    expect(
+      fixture.db
+        .exec(`EXPLAIN QUERY PLAN ${sql}`, [id, 10])[0]
+        .values.map((row) => row[3])
+        .join(' ')
+    ).toContain('idx_batch_tasks_pending')
+    expect(tasks.pendingServerConflict(id, 'http://localhost:8188')).toEqual({ serverUrl: null })
+  })
+})

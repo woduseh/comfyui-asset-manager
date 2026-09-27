@@ -39,9 +39,18 @@ vi.mock('../../../../src/main/services/batch/output-journal', () => ({
 vi.mock('../../../../src/main/services/comfyui/manager', () => ({
   comfyuiManager: {
     isConnected: false,
+    acquireExecution() {
+      return {
+        client: this.restClient,
+        serverUrl: this.restClient.serverUrl,
+        clientId: 'test-client',
+        webSocket: null,
+        release: vi.fn()
+      }
+    },
     clientId: 'test-client',
     restClient: {
-      interrupt: vi.fn().mockResolvedValue(undefined),
+      serverUrl: 'http://localhost:8188',
       queuePrompt: vi.fn(),
       getImage: vi.fn(),
       deleteFromHistory: vi.fn()
@@ -87,10 +96,10 @@ describe('QueueManager Recovery', () => {
       _maxRetries: 3,
       recoveryError: null,
       stopping: false,
-      activeRun: null
+      activeRun: null,
+      execution: comfyuiManager.acquireExecution()
     })
     ;(comfyuiManager as { isConnected: boolean }).isConnected = false
-    vi.mocked(comfyuiManager.restClient.interrupt).mockReset().mockResolvedValue(undefined)
     journalMocks.recover.mockReset().mockReturnValue([])
     vi.mocked(comfyuiManager.restClient.queuePrompt).mockReset()
     vi.mocked(comfyuiManager.restClient.getImage).mockReset()
@@ -327,7 +336,6 @@ describe('QueueManager Recovery', () => {
 
     it('hot-cancels unsubmitted tasks without globally interrupting unrelated server work', async () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
-      const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
       const jobId = jobRepo.create({ name: 'Active Job', config: '{}' })
       jobRepo.updateStatus(jobId, 'running')
       taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
@@ -343,7 +351,7 @@ describe('QueueManager Recovery', () => {
       expect(queueManager.isPaused).toBe(false)
       expect(jobRepo.get(jobId)?.status).toBe('cancelled')
       expect(taskRepo.listByJob(jobId)[0].status).toBe('cancelled')
-      expect(comfyuiManager.restClient.interrupt).not.toHaveBeenCalled()
+      expect(taskRepo.listByJob(jobId).every((task) => task.status !== 'submitting')).toBe(true)
     })
   })
 

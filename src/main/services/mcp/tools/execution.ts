@@ -57,12 +57,10 @@ export function registerExecutionTools(server: McpServer): void {
 
   server.tool(
     'connect_comfyui',
-    'Connect to the ComfyUI host and port already saved in app Settings. No arbitrary address input. Refuses while a batch is processing; already connected is a no-op. On failure, check Settings and server availability.',
+    'Connect to the ComfyUI host and port already saved in app Settings. No arbitrary address input. During a batch only reconnecting to its original server is allowed; an already connected server is a no-op. On failure, check Settings and server availability.',
     {},
     async () => {
       try {
-        if (queueManager.isProcessing)
-          throw new Error('Cannot reconnect while a batch is processing')
         if (comfyuiManager.isConnected)
           return jsonResult({ connected: true, already_connected: true })
         const host = settings.get('comfyui_host') ?? 'localhost'

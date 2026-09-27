@@ -80,11 +80,14 @@ describe('TagService', () => {
     it('should use online fallback for unknown tags', async () => {
       vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
       vi.mocked(validateTagOnline).mockResolvedValueOnce({
-        id: 99999,
-        name: 'rare_online_tag',
-        category: 0,
-        post_count: 50,
-        is_deprecated: false
+        kind: 'found',
+        tag: {
+          id: 99999,
+          name: 'rare_online_tag',
+          category: 0,
+          post_count: 50,
+          is_deprecated: false
+        }
       })
 
       const { results, onlineAvailable } = await tagService.validate(['rare_online_tag'], true)
@@ -99,11 +102,14 @@ describe('TagService', () => {
     it('should reject deprecated online tags', async () => {
       vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
       vi.mocked(validateTagOnline).mockResolvedValueOnce({
-        id: 99999,
-        name: 'deprecated_tag',
-        category: 0,
-        post_count: 10,
-        is_deprecated: true
+        kind: 'found',
+        tag: {
+          id: 99999,
+          name: 'deprecated_tag',
+          category: 0,
+          post_count: 10,
+          is_deprecated: true
+        }
       })
 
       const { results } = await tagService.validate(['deprecated_tag'], true)
@@ -303,5 +309,21 @@ describe('TagService', () => {
         }
       ])
     })
+  })
+  it('does not probe the network for all-local validation and deduplicates normalized misses', async () => {
+    vi.mocked(checkOnlineAvailability).mockReset().mockResolvedValue(true)
+    vi.mocked(validateTagOnline).mockReset().mockResolvedValue({ kind: 'not_found' })
+    await tagService.validate(['blue_eyes', 'long_hair'])
+    expect(checkOnlineAvailability).not.toHaveBeenCalled()
+    const result = await tagService.validate(['not_a_real_tag', 'NOT A REAL TAG'])
+    expect(validateTagOnline).toHaveBeenCalledTimes(1)
+    expect(result.results.map((row) => row.valid)).toEqual([false, false])
+  })
+  it('keeps individual API failures unverified after a successful probe', async () => {
+    vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(true)
+    vi.mocked(validateTagOnline).mockResolvedValueOnce({ kind: 'unavailable' })
+    const result = await tagService.validate(['rare_timeout_tag'])
+    expect(result.onlineAvailable).toBe(false)
+    expect(result.results[0]).toMatchObject({ valid: null, source: 'unverified' })
   })
 })

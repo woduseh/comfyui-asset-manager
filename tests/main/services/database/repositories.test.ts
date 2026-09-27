@@ -556,15 +556,15 @@ describe('Database Repositories', () => {
     it('lists jobs', () => {
       repo.create({ name: 'J1', config: '{}' })
       repo.create({ name: 'J2', config: '{}' })
-      expect(repo.list()).toHaveLength(2)
+      expect(repo.listSummaries(-1, 0).items).toHaveLength(2)
     })
 
     it('filters by status', () => {
       const id1 = repo.create({ name: 'J1', config: '{}' })
       repo.create({ name: 'J2', config: '{}' })
       repo.updateStatus(id1, 'running')
-      expect(repo.list('running')).toHaveLength(1)
-      expect(repo.list('draft')).toHaveLength(1)
+      expect(repo.listSummaries(-1, 0, 'running').items).toHaveLength(1)
+      expect(repo.listSummaries(-1, 0, 'draft').items).toHaveLength(1)
     })
 
     it('updates status', () => {
@@ -635,7 +635,7 @@ describe('Database Repositories', () => {
 
       expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
       expect(runSpy).toHaveBeenCalledWith('COMMIT')
-      expect(repo.list().map((job) => job.id)).toEqual([secondId, firstId])
+      expect(repo.listSummaries(-1, 0).items.map((job) => job.id)).toEqual([secondId, firstId])
     })
   })
 
@@ -820,7 +820,9 @@ describe('Database Repositories', () => {
       expect(taskRepo.countByJobStatus(jobId)).toEqual({ uncertain: 3 })
       expect(taskRepo.listByJobPending(jobId, 50)).toEqual([])
       expect(jobRepo.get(jobId)?.uncertain_tasks).toBe(3)
-      expect(jobRepo.list().find((job) => job.id === jobId)?.uncertain_tasks).toBe(3)
+      expect(
+        jobRepo.listSummaries(-1, 0).items.find((job) => job.id === jobId)?.uncertain_tasks
+      ).toBe(3)
     })
 
     it('never converts a remotely submitted or uncertain task into confirmed cancellation', () => {

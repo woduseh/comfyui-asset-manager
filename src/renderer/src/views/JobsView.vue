@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createLatestRequest } from '@renderer/utils/latest-request'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
@@ -38,12 +39,14 @@ let jobRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let recentImagesRequestId = 0
 
 const statusLabels = computed(() => buildBatchStatusLabels(t))
-const runningJob = computed(
-  () =>
-    batchJobs.value.find((job) => job.status === 'running') ||
-    batchJobs.value.find((job) => job.status === 'paused') ||
-    null
-)
+const runningJob = computed(() => {
+  const activeId = queueStatus.value.currentJobId
+  if (activeId) return batchJobs.value.find((job) => job.id === activeId) ?? null
+  // No live execution: retain access to recovered paused work without guessing an active target.
+  return queueStatus.value.isProcessing
+    ? null
+    : (batchJobs.value.find((job) => job.status === 'paused') ?? null)
+})
 const queuedJobs = computed(() =>
   batchJobs.value.filter(
     (job) =>
@@ -67,50 +70,32 @@ const historyLoading = ref(false)
 const historyError = ref<string | null>(null)
 const historyPageSize = 50
 let historyTargetPage = 1
-let pendingHistoryPage: number | null = null
-let historyPromise: Promise<void> | null = null
 let disposed = false
 let wizardRequest = 0
-
+const historyRequests = createLatestRequest({
+  read: (page: number) =>
+    invokeIpc(IPC_CHANNELS.BATCH_LIST, { scope: 'history', page, pageSize: historyPageSize }),
+  commit: (result, page) => {
+    const lastPage = Math.max(1, Math.ceil(result.total / historyPageSize))
+    if (page > lastPage) {
+      void loadHistory(lastPage)
+      return
+    }
+    completedJobs.value = result.items
+    historyTotal.value = result.total
+    historyPage.value = page
+    historyError.value = null
+  },
+  loading: (value) => {
+    historyLoading.value = value
+  },
+  error: (error) => {
+    historyError.value = error instanceof Error ? error.message : String(error)
+  }
+})
 function loadHistory(page = historyTargetPage): Promise<void> {
   historyTargetPage = page
-  pendingHistoryPage = page
-  if (!historyPromise) {
-    historyLoading.value = true
-    historyPromise = Promise.resolve().then(async () => {
-      try {
-        while (pendingHistoryPage !== null && !disposed) {
-          const requestedPage = pendingHistoryPage
-          pendingHistoryPage = null
-          const result = await invokeIpc(IPC_CHANNELS.BATCH_LIST, {
-            scope: 'history',
-            page: requestedPage,
-            pageSize: historyPageSize
-          }).catch((error) => {
-            if (disposed || pendingHistoryPage !== null) return null
-            throw error
-          })
-          if (!result || disposed || pendingHistoryPage !== null) continue
-          const lastPage = Math.max(1, Math.ceil(result.total / historyPageSize))
-          if (requestedPage > lastPage) {
-            historyTargetPage = lastPage
-            pendingHistoryPage = lastPage
-            continue
-          }
-          completedJobs.value = result.items
-          historyTotal.value = result.total
-          historyPage.value = requestedPage
-          historyError.value = null
-        }
-      } catch (error) {
-        historyError.value = error instanceof Error ? error.message : String(error)
-      } finally {
-        historyLoading.value = false
-        historyPromise = null
-      }
-    })
-  }
-  return historyPromise
+  return historyRequests.request(page).catch(() => {})
 }
 watch(batchJobs, () => void loadHistory())
 
@@ -143,26 +128,21 @@ async function loadRecentImages(): Promise<void> {
   loadingRecentImages.value = true
   recentImagesLoadError.value = false
 
-  const query = {
-    page: 1,
-    pageSize: PRODUCTION_RECENT_RESULTS_LIMIT,
-    sortBy: 'created_at' as const,
-    sortOrder: 'desc' as const
-  }
+  const query = { limit: PRODUCTION_RECENT_RESULTS_LIMIT }
 
   try {
     const activeJobId = runningJob.value?.id as string | undefined
-    let result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, {
+    let result = await invokeIpc(IPC_CHANNELS.GALLERY_RECENT, {
       ...query,
       ...(activeJobId ? { jobId: activeJobId } : {})
     })
 
-    if (activeJobId && (!result || result.items.length === 0)) {
-      result = await invokeIpc(IPC_CHANNELS.GALLERY_LIST, query)
+    if (activeJobId && result.length === 0) {
+      result = await invokeIpc(IPC_CHANNELS.GALLERY_RECENT, query)
     }
 
     if (requestId === recentImagesRequestId) {
-      recentImages.value = (result?.items || []) as GalleryImage[]
+      recentImages.value = result as GalleryImage[]
     }
   } catch {
     if (requestId === recentImagesRequestId) {
@@ -309,7 +289,7 @@ onUnmounted(() => {
   disposed = true
   wizardRequest++
   recentImagesRequestId++
-  pendingHistoryPage = null
+  historyRequests.cancel()
   if (refreshInterval) clearInterval(refreshInterval)
   if (jobRefreshTimer) clearTimeout(jobRefreshTimer)
 })

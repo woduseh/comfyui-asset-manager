@@ -15,8 +15,8 @@ describe('ComfyUI REST Client', () => {
     mockFetch.mockReset()
   })
 
-  it('uses the updated server address for requests', async () => {
-    client.setServer('192.168.1.100', 9000)
+  it('uses its immutable configured server address for requests', async () => {
+    client = new ComfyUIClient('192.168.1.100', 9000)
     await client.ping()
     expect(mockFetch).toHaveBeenCalledWith(
       'http://192.168.1.100:9000/system_stats',
@@ -118,17 +118,6 @@ describe('ComfyUI REST Client', () => {
         responseType: 'arrayBuffer',
         timeout: 30_000
       })
-    })
-  })
-
-  describe('interrupt', () => {
-    it('sends interrupt request', async () => {
-      mockFetch.mockResolvedValueOnce(undefined)
-      await client.interrupt()
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8188/interrupt',
-        expect.objectContaining({ method: 'POST' })
-      )
     })
   })
 

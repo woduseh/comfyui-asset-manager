@@ -1,7 +1,6 @@
 export const IPC_CHANNELS = {
   COMFYUI_CONNECT: 'comfyui:connect',
   COMFYUI_DISCONNECT: 'comfyui:disconnect',
-  COMFYUI_STATUS: 'comfyui:status',
   COMFYUI_SYSTEM_STATS: 'comfyui:system-stats',
   COMFYUI_MODELS: 'comfyui:models',
 
@@ -11,9 +10,7 @@ export const IPC_CHANNELS = {
   WORKFLOW_DELETE: 'workflow:delete',
   WORKFLOW_UPDATE: 'workflow:update',
   WORKFLOW_VARIABLES: 'workflow:variables',
-  WORKFLOW_SET_VARIABLES: 'workflow:set-variables',
   WORKFLOW_UPDATE_VARIABLE_ROLE: 'workflow:update-variable-role',
-  WORKFLOW_UPDATE_VARIABLE_VALUE: 'workflow:update-variable-value',
 
   MODULE_LIST: 'module:list',
   MODULE_GET: 'module:get',
@@ -46,6 +43,7 @@ export const IPC_CHANNELS = {
   BATCH_TASKS: 'batch:tasks',
   QUEUE_STATUS: 'queue:status',
 
+  GALLERY_RECENT: 'gallery:recent',
   GALLERY_LIST: 'gallery:list',
   GALLERY_RATE: 'gallery:rate',
   GALLERY_FAVORITE: 'gallery:favorite',
@@ -54,12 +52,8 @@ export const IPC_CHANNELS = {
   GALLERY_SHOW_IN_EXPLORER: 'gallery:show-in-explorer',
 
   PROMPT_PREVIEW: 'prompt:preview',
-
-  SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
   SETTINGS_GET_ALL: 'settings:getAll',
-
-  DIALOG_OPEN_FILE: 'dialog:open-file',
   DIALOG_OPEN_DIRECTORY: 'dialog:open-directory',
 
   TERMINAL_CREATE: 'terminal:create',

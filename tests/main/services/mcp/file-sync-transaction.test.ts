@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { mkdtempSync, rmSync } from 'fs'
-import { tmpdir } from 'os'
-import { basename, isAbsolute, join, relative, resolve, sep } from 'path'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
+import { openTestDatabase, type TestDatabase } from '../../../helpers/database'
 
-const state = vi.hoisted(() => ({ userDataPath: '', parse: vi.fn() }))
+const state = vi.hoisted(() => ({ userDataPath: '' }))
 vi.mock('electron', () => ({ app: { getPath: () => state.userDataPath } }))
 vi.mock('@main/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
-}))
-vi.mock('../../../../src/main/services/mcp/file-parser', () => ({
-  parseModuleItemsFile: state.parse
 }))
 
 type Handler = (args: Record<string, unknown>) => Promise<CallToolResult>
@@ -19,12 +16,16 @@ let database: typeof import('../../../../src/main/services/database')
 let shared: typeof import('../../../../src/main/services/mcp/tools/shared')
 let sync: Handler
 let moduleId: string
+let fixture: TestDatabase
+let filePath: string
 
 beforeEach(async () => {
   vi.resetModules()
-  state.userDataPath = mkdtempSync(join(tmpdir(), 'comfyui-mcp-sync-test-'))
-  database = await import('../../../../src/main/services/database')
-  await database.initDatabase()
+  fixture = await openTestDatabase((path) => {
+    state.userDataPath = path
+  })
+  database = fixture.database
+  filePath = join(fixture.directory, 'items.json')
   shared = await import('../../../../src/main/services/mcp/tools/shared')
   moduleId = shared.moduleRepo.create({ name: 'Characters', type: 'character' })
   shared.moduleItemRepo.create({ module_id: moduleId, name: 'Alice', prompt: 'original' })
@@ -38,36 +39,88 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  await database.closeDatabase()
-  const target = resolve(state.userDataPath)
-  const relativePath = relative(resolve(tmpdir()), target)
-  if (
-    !relativePath ||
-    relativePath === '..' ||
-    relativePath.startsWith(`..${sep}`) ||
-    isAbsolute(relativePath) ||
-    !basename(target).startsWith('comfyui-mcp-sync-test-')
-  ) {
-    throw new Error(`Refusing to remove unexpected test directory: ${target}`)
-  }
-  rmSync(target, { recursive: true, force: true })
+  await fixture.close()
 })
 
 describe('MCP file sync transaction integration', () => {
+  it('applies a real source file atomically and preserves its fields after reopening', async () => {
+    shared.moduleItemRepo.update(String(shared.moduleItemRepo.list(moduleId)[0].id), {
+      negative: 'keep negative',
+      prompt_variants: '{"tags":{"prompt":"keep variant","negative":""}}'
+    })
+    shared.moduleItemRepo.create({ module_id: moduleId, name: 'Removed', prompt: 'old' })
+    writeFileSync(
+      filePath,
+      JSON.stringify([
+        { name: ' alice ', prompt: 'changed' },
+        {
+          name: 'Bob',
+          prompt: 'new',
+          negative: 'blurry',
+          prompt_variants: { tags: { prompt: 'new variant', negative: '' } }
+        }
+      ])
+    )
+    const result = await sync({ module_id: moduleId, file_path: filePath, delete_missing: true })
+    expect(result.isError).not.toBe(true)
+    expect(result.structuredContent).toMatchObject({
+      created: 1,
+      updated: 1,
+      deleted: 1,
+      errors: []
+    })
+    await database.closeDatabase()
+    await database.initDatabase()
+    expect(
+      shared.moduleItemRepo.list(moduleId).map(({ name, prompt, negative, prompt_variants }) => ({
+        name,
+        prompt,
+        negative,
+        prompt_variants
+      }))
+    ).toEqual([
+      {
+        name: 'Alice',
+        prompt: 'changed',
+        negative: 'keep negative',
+        prompt_variants: '{"tags":{"prompt":"keep variant","negative":""}}'
+      },
+      {
+        name: 'Bob',
+        prompt: 'new',
+        negative: 'blurry',
+        prompt_variants: '{"tags":{"prompt":"new variant","negative":""}}'
+      }
+    ])
+  })
+
+  it('rejects a partially valid source file before changing or deleting stored items', async () => {
+    const before = shared.moduleItemRepo.list(moduleId)
+    writeFileSync(filePath, '[{"name":"Bob","prompt":"new"},{"name":"Invalid"}]')
+    const result = await sync({ module_id: moduleId, file_path: filePath, delete_missing: true })
+    expect(result.isError).toBe(true)
+    expect(result.structuredContent).toMatchObject({
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      parse_errors: [{ line: 2, error: expect.stringContaining('prompt') }]
+    })
+    expect(shared.moduleItemRepo.list(moduleId)).toEqual(before)
+  })
+
   it('rolls back successful inserts when another insert fails in the same bulk call', async () => {
     database.getDatabase().run(`CREATE TRIGGER reject_insert BEFORE INSERT ON module_items
       WHEN NEW.name = 'Rejected' BEGIN SELECT RAISE(ABORT, 'Rejected by test'); END`)
-    state.parse.mockReturnValue({
-      format: 'json',
-      errors: [],
-      items: [
+    writeFileSync(
+      filePath,
+      JSON.stringify([
         { name: 'Bob', prompt: 'new' },
         { name: 'Rejected', prompt: 'new' }
-      ]
-    })
+      ])
+    )
     const result = await sync({
       module_id: moduleId,
-      file_path: '/unused.json',
+      file_path: filePath,
       delete_missing: true
     })
     expect(result.isError).toBe(true)
@@ -78,17 +131,16 @@ describe('MCP file sync transaction integration', () => {
     shared.moduleItemRepo.create({ module_id: moduleId, name: 'Retained', prompt: 'old' })
     database.getDatabase().run(`CREATE TRIGGER reject_delete BEFORE DELETE ON module_items
       WHEN OLD.name = 'Alice' BEGIN SELECT RAISE(ABORT, 'Rejected by test'); END`)
-    state.parse.mockReturnValue({
-      format: 'json',
-      errors: [],
-      items: [
+    writeFileSync(
+      filePath,
+      JSON.stringify([
         { name: 'Bob', prompt: 'new' },
         { name: 'Retained', prompt: 'changed' }
-      ]
-    })
+      ])
+    )
     const result = await sync({
       module_id: moduleId,
-      file_path: '/unused.json',
+      file_path: filePath,
       delete_missing: true
     })
     expect(result.isError).toBe(true)

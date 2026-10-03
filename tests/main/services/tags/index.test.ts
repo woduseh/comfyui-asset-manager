@@ -213,19 +213,18 @@ describe('TagService', () => {
         { id: 1, name: 'rare_tag_from_api', category: 0, post_count: 100, is_deprecated: false }
       ])
 
-      await tagService.searchWithOnline('rare_tag_from', undefined, 20)
-      expect(checkOnlineAvailability).toHaveBeenCalled()
-      expect(searchTagsOnline).toHaveBeenCalled()
+      const results = await tagService.searchWithOnline('rare_tag_from', undefined, 20)
+      expect(results).toEqual([{ id: 1, name: 'rare_tag_from_api', category: 0, count: 100 }])
     })
 
     it('should skip online when network is unavailable', async () => {
       vi.mocked(checkOnlineAvailability).mockResolvedValueOnce(false)
 
-      const results = await tagService.searchWithOnline('rare_tag_xyz', undefined, 20)
-      expect(checkOnlineAvailability).toHaveBeenCalled()
+      const localResults = tagService.search('blue_eyes', undefined, 20)
+      expect(localResults).toContainEqual(expect.objectContaining({ name: 'blue_eyes' }))
+      const results = await tagService.searchWithOnline('blue_eyes', undefined, 20)
+      expect(results).toEqual(localResults)
       expect(searchTagsOnline).not.toHaveBeenCalled()
-      // Returns local results only (may be empty for rare query)
-      expect(Array.isArray(results)).toBe(true)
     })
   })
 

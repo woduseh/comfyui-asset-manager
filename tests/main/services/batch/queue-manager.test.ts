@@ -493,7 +493,7 @@ describe('QueueManager Recovery', () => {
       const { queueManager } = await import('../../../../src/main/services/batch/queue-manager')
       const { comfyuiManager } = await import('../../../../src/main/services/comfyui/manager')
 
-      settingsRepo.set('batch.maxRetries', 'not-a-number')
+      settingsRepo.set('max_retries', 'not-a-number')
       ;(comfyuiManager as { isConnected: boolean }).isConnected = true
       vi.spyOn(
         queueManager as unknown as { processJob: (jobId: string) => Promise<void> },

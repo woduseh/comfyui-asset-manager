@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-
 import { serializeModuleItems } from '../../../../src/main/services/mcp/file-serializer'
 import { parseModuleItemsContent } from '../../../../src/main/services/mcp/file-parser'
 import type { ParsedModuleItem } from '../../../../src/main/services/mcp/file-parser'
@@ -14,89 +13,65 @@ const sampleItems: ParsedModuleItem[] = [
   }
 ]
 
+// CSV includes blank optional columns; Markdown deliberately exports only base prompts.
+const csvItems: ParsedModuleItem[] = [
+  sampleItems[0],
+  { ...sampleItems[1], negative: '' },
+  { ...sampleItems[2], negative: '' }
+]
+const markdownItems: ParsedModuleItem[] = [
+  sampleItems[0],
+  sampleItems[1],
+  { name: 'Carol', prompt: '1girl, carol' }
+]
+
 describe('File Serializer', () => {
-  describe('JSON format', () => {
-    it('serializes items to JSON', () => {
-      const json = serializeModuleItems(sampleItems, 'json')
-      const parsed = JSON.parse(json)
-      expect(parsed).toHaveLength(3)
-      expect(parsed[0].name).toBe('Alice')
-      expect(parsed[0].prompt).toBe('1girl, alice, blue_eyes')
-      expect(parsed[0].negative).toBe('lowres')
-      expect(parsed[1].negative).toBeUndefined()
-      expect(parsed[2].prompt_variants).toBeDefined()
-    })
+  it('exports every JSON field and item without adding absent optional fields', () => {
+    expect(JSON.parse(serializeModuleItems(sampleItems, 'json'))).toEqual(sampleItems)
+  })
 
-    it('roundtrips JSON (serialize→parse)', () => {
-      const json = serializeModuleItems(sampleItems, 'json')
-      const result = parseModuleItemsContent(json, 'json')
-      expect(result.items).toHaveLength(3)
-      expect(result.items[0].name).toBe('Alice')
-      expect(result.items[0].prompt).toBe('1girl, alice, blue_eyes')
-      expect(result.errors).toHaveLength(0)
+  it('exports ordered CSV columns and escapes commas, quotes and variant JSON', () => {
+    expect(serializeModuleItems(sampleItems, 'csv')).toBe(
+      'name,prompt,negative,prompt_variants\n' +
+        'Alice,"1girl, alice, blue_eyes",lowres,\n' +
+        'Bob,"1boy, bob",,\n' +
+        'Carol,"1girl, carol",,"{""tags"":{""prompt"":""tag_prompt"",""negative"":""tag_neg""}}"'
+    )
+    const quoted = [{ name: '앨리스 "A"', prompt: 'portrait, "blue eyes"' }]
+    const csv = serializeModuleItems(quoted, 'csv')
+    expect(csv).toBe('name,prompt\n"앨리스 ""A""","portrait, ""blue eyes"""')
+    expect(parseModuleItemsContent(csv, 'csv')).toEqual({
+      format: 'csv',
+      items: quoted,
+      errors: []
     })
   })
 
-  describe('CSV format', () => {
-    it('serializes items to CSV with header', () => {
-      const csv = serializeModuleItems(sampleItems, 'csv')
-      const lines = csv.split('\n')
-      expect(lines[0]).toContain('name')
-      expect(lines[0]).toContain('prompt')
-      expect(lines[0]).toContain('negative')
-      expect(lines.length).toBe(4) // header + 3 items
-    })
-
-    it('handles commas in prompts via quoting', () => {
-      const csv = serializeModuleItems(
-        [{ name: 'Test', prompt: '1girl, blue_eyes, long_hair' }],
-        'csv'
-      )
-      expect(csv).toContain('"1girl, blue_eyes, long_hair"')
-    })
-
-    it('roundtrips CSV (serialize→parse)', () => {
-      const csv = serializeModuleItems(sampleItems, 'csv')
-      const result = parseModuleItemsContent(csv, 'csv')
-      expect(result.items).toHaveLength(3)
-      expect(result.items[0].name).toBe('Alice')
-      expect(result.items[0].prompt).toBe('1girl, alice, blue_eyes')
-    })
+  it('exports Markdown item boundaries and only nonempty negative sections', () => {
+    expect(serializeModuleItems(sampleItems, 'md')).toBe(
+      '## Alice\n1girl, alice, blue_eyes\n### Negative\nlowres\n\n' +
+        '## Bob\n1boy, bob\n\n## Carol\n1girl, carol'
+    )
   })
 
-  describe('Markdown format', () => {
-    it('serializes items to Markdown', () => {
-      const md = serializeModuleItems(sampleItems, 'md')
-      expect(md).toContain('## Alice')
-      expect(md).toContain('1girl, alice, blue_eyes')
-      expect(md).toContain('### Negative')
-      expect(md).toContain('lowres')
-      expect(md).toContain('## Bob')
-    })
+  it.each([
+    ['json', sampleItems],
+    ['csv', csvItems],
+    ['md', markdownItems]
+  ] as const)(
+    'roundtrips all supported %s fields and items without parse errors',
+    (format, items) => {
+      expect(parseModuleItemsContent(serializeModuleItems(sampleItems, format), format)).toEqual({
+        format,
+        items,
+        errors: []
+      })
+    }
+  )
 
-    it('omits Negative section when empty', () => {
-      const md = serializeModuleItems([{ name: 'Test', prompt: 'prompt' }], 'md')
-      expect(md).not.toContain('Negative')
-    })
-
-    it('roundtrips Markdown (serialize→parse)', () => {
-      const simpleItems: ParsedModuleItem[] = [
-        { name: 'Alice', prompt: '1girl, alice', negative: 'lowres' },
-        { name: 'Bob', prompt: '1boy, bob' }
-      ]
-      const md = serializeModuleItems(simpleItems, 'md')
-      const result = parseModuleItemsContent(md, 'md')
-      expect(result.items).toHaveLength(2)
-      expect(result.items[0].name).toBe('Alice')
-      expect(result.items[0].negative).toBe('lowres')
-    })
-  })
-
-  describe('empty items', () => {
-    it('handles empty array for all formats', () => {
-      expect(serializeModuleItems([], 'json')).toBe('[]')
-      expect(serializeModuleItems([], 'csv')).toBe('name,prompt')
-      expect(serializeModuleItems([], 'md')).toBe('')
-    })
+  it('handles empty arrays in each export format', () => {
+    expect(serializeModuleItems([], 'json')).toBe('[]')
+    expect(serializeModuleItems([], 'csv')).toBe('name,prompt')
+    expect(serializeModuleItems([], 'md')).toBe('')
   })
 })

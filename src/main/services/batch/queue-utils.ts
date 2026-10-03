@@ -100,7 +100,7 @@ export function resolveFileName(
     emotion: metadata.emotionName || 'emotion',
     style: metadata.styleName || 'style',
     index: String((metadata.imageIndex || 0) + 1).padStart(4, '0'),
-    seed: String(seed || ''),
+    seed: String(seed),
     date: new Date().toISOString().split('T')[0]
   }
 

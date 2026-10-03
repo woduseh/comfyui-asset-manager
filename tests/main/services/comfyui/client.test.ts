@@ -112,12 +112,14 @@ describe('ComfyUI REST Client', () => {
   describe('getImage', () => {
     it('fetches image with correct query params', async () => {
       const buffer = Buffer.from('fake-image-data')
-      mockFetch.mockResolvedValueOnce(buffer)
-      await client.getImage('output.png', 'subfolder', 'output')
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('/view?'), {
-        responseType: 'arrayBuffer',
-        timeout: 30_000
-      })
+      mockFetch.mockResolvedValueOnce(Uint8Array.from(buffer).buffer)
+      const image = await client.getImage('portrait 한&1.png', 'job/character', 'temp')
+      expect(image).toEqual(buffer)
+      expect(Buffer.isBuffer(image)).toBe(true)
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8188/view?filename=portrait+%ED%95%9C%261.png&subfolder=job%2Fcharacter&type=temp',
+        { responseType: 'arrayBuffer', timeout: 30_000 }
+      )
     })
   })
 

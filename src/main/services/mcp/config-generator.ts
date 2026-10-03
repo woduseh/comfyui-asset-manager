@@ -116,7 +116,10 @@ function writeGeminiConfig(url: string, token: string | undefined, homeDir: stri
       try {
         const raw = readFileSync(filePath, 'utf-8')
         const parsed = parseJsonConfigText<GeminiSettings>(raw, 'Gemini settings')
-        if (!parsed) {
+        if (
+          !isJsonObject(parsed) ||
+          (parsed.mcpServers !== undefined && !isJsonObject(parsed.mcpServers))
+        ) {
           return null
         }
         settings = parsed
@@ -164,7 +167,10 @@ function writeCopilotCliConfig(
       try {
         const raw = readFileSync(filePath, 'utf-8')
         const parsed = parseJsonConfigText<McpJsonConfig>(raw, 'Copilot CLI MCP config')
-        if (!parsed) {
+        if (
+          !isJsonObject(parsed) ||
+          (parsed.mcpServers !== undefined && !isJsonObject(parsed.mcpServers))
+        ) {
           return null
         }
         config = parsed

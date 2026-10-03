@@ -37,11 +37,11 @@ export const useConnectionStore = defineStore('connection', () => {
         connectionState.value = 'connected'
         return true
       }
-      connectionState.value = 'disconnected'
+      connectionState.value = status.value.connected ? 'connected' : 'disconnected'
       lastError.value = 'Unable to reach ComfyUI server'
       return false
     } catch (error) {
-      connectionState.value = 'disconnected'
+      connectionState.value = status.value.connected ? 'connected' : 'disconnected'
       lastError.value = error instanceof Error ? error.message : String(error)
       return false
     }
@@ -60,7 +60,7 @@ export const useConnectionStore = defineStore('connection', () => {
       )
       return connect(host, port)
     } catch (error) {
-      connectionState.value = 'disconnected'
+      connectionState.value = status.value.connected ? 'connected' : 'disconnected'
       lastError.value = error instanceof Error ? error.message : String(error)
       return false
     }

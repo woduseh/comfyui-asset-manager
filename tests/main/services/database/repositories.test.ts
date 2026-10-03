@@ -267,7 +267,7 @@ describe('Database Repositories', () => {
       expect(items.map((i) => i.name)).toEqual(['First', 'Second', 'Third'])
     })
 
-    it('wraps reorder updates in a transaction', () => {
+    it('reorders items and preserves the previous order if a later update fails', () => {
       const firstId = itemRepo.create({
         module_id: moduleId,
         name: 'First',
@@ -280,13 +280,14 @@ describe('Database Repositories', () => {
         prompt: 'b',
         sort_order: 1
       })
-      const runSpy = vi.spyOn(mockDb, 'run')
-
       itemRepo.reorder([secondId, firstId])
-
-      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
-      expect(runSpy).toHaveBeenCalledWith('COMMIT')
       expect(itemRepo.list(moduleId).map((item) => item.id)).toEqual([secondId, firstId])
+      const before = itemRepo.list(moduleId)
+      mockDb.run(`CREATE TRIGGER reject_item_reorder BEFORE UPDATE OF sort_order ON module_items
+        WHEN NEW.name = 'Second' BEGIN SELECT RAISE(ABORT, 'reorder failure'); END`)
+
+      expect(() => itemRepo.reorder([firstId, secondId])).toThrow('reorder failure')
+      expect(itemRepo.list(moduleId)).toEqual(before)
     })
 
     it('gets a single item by id', () => {
@@ -591,8 +592,6 @@ describe('Database Repositories', () => {
       const taskRepo = new BatchTaskRepository()
       const id = repo.create({ name: 'Before', config: '{"before":true}', total_tasks: 1 })
       taskRepo.createSingle({ job_id: id, prompt_data: '{}', sort_order: 0, metadata: '{}' })
-      const runSpy = vi.spyOn(mockDb, 'run')
-
       repo.updateDraft(id, {
         name: 'After',
         description: 'Updated',
@@ -601,8 +600,6 @@ describe('Database Repositories', () => {
         module_data_snapshot: '[]'
       })
 
-      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
-      expect(runSpy).toHaveBeenCalledWith('COMMIT')
       expect(taskRepo.listByJob(id)).toHaveLength(0)
       expect(repo.get(id)).toMatchObject({
         name: 'After',
@@ -613,6 +610,22 @@ describe('Database Repositories', () => {
         failed_tasks: 0,
         status: 'draft'
       })
+      taskRepo.createSingle({
+        job_id: id,
+        prompt_data: '{"retained":true}',
+        sort_order: 0,
+        metadata: '{}'
+      })
+      const beforeJob = repo.get(id)
+      const beforeTasks = taskRepo.listByJob(id)
+      mockDb.run(`CREATE TRIGGER reject_draft_edit BEFORE UPDATE ON batch_jobs
+        BEGIN SELECT RAISE(ABORT, 'draft edit failure'); END`)
+
+      expect(() => repo.updateDraft(id, { name: 'Rejected', config: '{}' })).toThrow(
+        'draft edit failure'
+      )
+      expect(repo.get(id)).toEqual(beforeJob)
+      expect(taskRepo.listByJob(id)).toEqual(beforeTasks)
     })
 
     it('rejects edits after a draft has started and preserves the original job', () => {
@@ -626,16 +639,17 @@ describe('Database Repositories', () => {
       expect(repo.get(id)?.status).toBe('running')
     })
 
-    it('wraps job reorder updates in a transaction', () => {
+    it('reorders jobs and preserves the previous order if a later update fails', () => {
       const firstId = repo.create({ name: 'First', config: '{}' })
       const secondId = repo.create({ name: 'Second', config: '{}' })
-      const runSpy = vi.spyOn(mockDb, 'run')
-
       repo.reorder([secondId, firstId])
-
-      expect(runSpy).toHaveBeenCalledWith('BEGIN TRANSACTION')
-      expect(runSpy).toHaveBeenCalledWith('COMMIT')
       expect(repo.listSummaries(-1, 0).items.map((job) => job.id)).toEqual([secondId, firstId])
+      const before = repo.listSummaries(-1, 0)
+      mockDb.run(`CREATE TRIGGER reject_job_reorder BEFORE UPDATE OF sort_order ON batch_jobs
+        WHEN NEW.name = 'Second' BEGIN SELECT RAISE(ABORT, 'reorder failure'); END`)
+
+      expect(() => repo.reorder([firstId, secondId])).toThrow('reorder failure')
+      expect(repo.listSummaries(-1, 0)).toEqual(before)
     })
   })
 

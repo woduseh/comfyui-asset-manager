@@ -110,21 +110,24 @@ describe('queue-utils', () => {
     expect(computeEta([], 2)).toBeUndefined()
   })
 
-  it('builds sanitized filenames and preserves the original extension', () => {
-    const date = new Date().toISOString().split('T')[0]
+  it.each([0, 42])(
+    'builds sanitized filenames preserving seed %s and the original extension',
+    (seed) => {
+      const date = new Date().toISOString().split('T')[0]
 
-    expect(
-      resolveFileName(
-        '{character}_{index}_{seed}_{date}',
-        {
-          characterName: 'A<B>',
-          combinationIndex: 0,
-          imageIndex: 1,
-          totalInCombination: 3
-        },
-        42,
-        'image.jpg'
-      )
-    ).toBe(`A_B__0002_42_${date}.jpg`)
-  })
+      expect(
+        resolveFileName(
+          '{character}_{index}_{seed}_{date}',
+          {
+            characterName: 'A<B>',
+            combinationIndex: 0,
+            imageIndex: 1,
+            totalInCombination: 3
+          },
+          seed,
+          'image.jpg'
+        )
+      ).toBe(`A_B__0002_${seed}_${date}.jpg`)
+    }
+  )
 })

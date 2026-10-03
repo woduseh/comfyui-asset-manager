@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 const repositoryMocks = vi.hoisted(() => ({
@@ -47,6 +47,7 @@ function registerTools(): Map<string, ToolHandler> {
 }
 
 describe('MCP module tools', () => {
+  beforeEach(() => vi.clearAllMocks())
   it('lists modules with the requested filter', async () => {
     const result = await registerTools().get('list_modules')!({ type: 'character' })
 
@@ -76,6 +77,7 @@ describe('MCP module tools', () => {
 
     expect(result.isError).toBe(true)
     expect(result.content[0].text).toContain('missing')
+    expect(repositoryMocks.itemList).not.toHaveBeenCalled()
   })
 
   it('creates, updates, and deletes modules through repositories', async () => {

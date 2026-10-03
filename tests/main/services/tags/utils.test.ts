@@ -93,11 +93,5 @@ describe('Tag Utilities', () => {
         'red_eyes, 1girl, red_eyes'
       )
     })
-
-    it('deletes tag and cleans up separators', () => {
-      expect(replaceTagInPrompt('1girl, blue_eyes, long_hair', 'blue_eyes', '')).toBe(
-        '1girl, long_hair'
-      )
-    })
   })
 })

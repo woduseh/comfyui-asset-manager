@@ -214,6 +214,25 @@ describe('writeMcpJsonConfig', () => {
     expect(readFileSync(codexPath, 'utf-8')).toBe(original)
   })
 
+  it.each(['[]', '{"mcpServers":[]}', '{"mcpServers":null}', '{"mcpServers":""}'])(
+    'preserves invalid optional client config shapes: %s',
+    async (original) => {
+      const homeDir = createTempHome()
+      const paths = [
+        join(homeDir, '.gemini', 'settings.json'),
+        join(homeDir, '.copilot', 'mcp-config.json')
+      ]
+      mkdirSync(join(homeDir, '.gemini'))
+      mkdirSync(join(homeDir, '.copilot'))
+      for (const path of paths) writeFileSync(path, original, 'utf-8')
+      const { writeMcpJsonConfig } = await loadConfigGenerator(homeDir)
+
+      writeMcpJsonConfig('http://127.0.0.1:39464/mcp', TEST_TOKEN, homeDir)
+
+      expect(paths.map((path) => readFileSync(path, 'utf-8'))).toEqual([original, original])
+    }
+  )
+
   it('writes authenticated Gemini and Copilot HTTP configurations', async () => {
     const homeDir = createTempHome()
     mkdirSync(join(homeDir, '.gemini'))

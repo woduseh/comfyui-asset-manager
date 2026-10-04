@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NCard,
@@ -29,7 +29,9 @@ import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
 import { safeJsonParse } from '@shared/safe-json'
-import { invokeIpc } from '@renderer/utils/ipc'
+import { invokeIpc, onIpc } from '@renderer/utils/ipc'
+import { createLatestRequest } from '@renderer/utils/latest-request'
+import type { WorkflowRecord } from '@shared/ipc-contract'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { groupWorkflowVariables } from '@renderer/utils/workflow-variable-groups'
 import {
@@ -51,6 +53,7 @@ const editName = ref('')
 const editDescription = ref('')
 const originalName = ref('')
 const originalDescription = ref('')
+const detailWorkflowId = ref<string | null>(null)
 
 const hasMetadataChanges = computed(
   () => editName.value !== originalName.value || editDescription.value !== originalDescription.value
@@ -147,17 +150,45 @@ async function handleImport(): Promise<void> {
   }
 }
 
-async function handleViewDetail(id: string): Promise<void> {
-  detailWorkflow.value = await invokeIpc(IPC_CHANNELS.WORKFLOW_GET, { id })
-  if (detailWorkflow.value) {
-    editName.value = (detailWorkflow.value.name as string) || ''
-    editDescription.value = (detailWorkflow.value.description as string) || ''
-    originalName.value = editName.value
-    originalDescription.value = editDescription.value
-    detailVariables.value = await invokeIpc(IPC_CHANNELS.WORKFLOW_VARIABLES, {
-      workflowId: id
-    })
+const detailRequests = createLatestRequest({
+  read: async (id: string) => {
+    const [workflow, variables] = await Promise.all([
+      invokeIpc(IPC_CHANNELS.WORKFLOW_GET, { id }),
+      invokeIpc(IPC_CHANNELS.WORKFLOW_VARIABLES, { workflowId: id })
+    ])
+    return { workflow, variables }
+  },
+  commit: ({ workflow, variables }) => {
+    if (!workflow) {
+      if (!hasMetadataChanges.value) {
+        detailWorkflowId.value = null
+        detailWorkflow.value = null
+        detailVariables.value = []
+        showDetailDrawer.value = false
+      }
+      return
+    }
+    if (!hasMetadataChanges.value) {
+      editName.value = originalName.value = workflow.name || ''
+      editDescription.value = originalDescription.value = workflow.description || ''
+    }
+    detailWorkflow.value = workflow
+    detailVariables.value = variables
     showDetailDrawer.value = true
+  },
+  loading: () => {},
+  error: () => {}
+})
+
+async function handleViewDetail(id: string): Promise<void> {
+  detailWorkflowId.value = id
+  detailWorkflow.value = null
+  editName.value = originalName.value = ''
+  editDescription.value = originalDescription.value = ''
+  try {
+    await detailRequests.request(id)
+  } catch (error) {
+    if (id === detailWorkflowId.value) message.error(String(error))
   }
 }
 
@@ -170,7 +201,10 @@ async function handleDelete(id: string): Promise<void> {
   }
 }
 
-async function handleCategoryChange(id: string, category: string): Promise<void> {
+async function handleCategoryChange(
+  id: string,
+  category: WorkflowRecord['category']
+): Promise<void> {
   await workflowStore.updateWorkflow(id, { category })
   if (detailWorkflow.value && detailWorkflow.value.id === id) {
     detailWorkflow.value.category = category
@@ -190,6 +224,8 @@ async function handleSaveWorkflow(): Promise<void> {
     originalName.value = editName.value
     originalDescription.value = editDescription.value
     message.success(t('workflow.msg.updated'))
+    detailRequests.cancel()
+    detailWorkflowId.value = null
     showDetailDrawer.value = false
   } catch (e) {
     message.error(
@@ -200,6 +236,8 @@ async function handleSaveWorkflow(): Promise<void> {
 
 function requestCloseDetail(): void {
   if (!hasMetadataChanges.value) {
+    detailRequests.cancel()
+    detailWorkflowId.value = null
     showDetailDrawer.value = false
     return
   }
@@ -210,6 +248,8 @@ function requestCloseDetail(): void {
     positiveText: t('common.discard'),
     negativeText: t('common.cancel'),
     onPositiveClick: () => {
+      detailRequests.cancel()
+      detailWorkflowId.value = null
       editName.value = originalName.value
       editDescription.value = originalDescription.value
       showDetailDrawer.value = false
@@ -252,8 +292,19 @@ async function handleRoleChange(variableId: string, role: string): Promise<void>
   if (variable) variable.role = role
 }
 
+let unsubscribeData: (() => void) | undefined
 onMounted(() => {
-  workflowStore.loadWorkflows()
+  unsubscribeData = onIpc(IPC_CHANNELS.DATA_CHANGED, ({ scopes }) => {
+    if (!scopes.includes('workflows')) return
+    const reads = [workflowStore.loadWorkflows()]
+    if (detailWorkflowId.value) reads.push(detailRequests.request(detailWorkflowId.value))
+    void Promise.all(reads).catch((error) => message.error(String(error)))
+  })
+  void workflowStore.loadWorkflows().catch((error) => message.error(String(error)))
+})
+onBeforeUnmount(() => {
+  unsubscribeData?.()
+  detailRequests.cancel()
 })
 </script>
 
@@ -310,7 +361,8 @@ onMounted(() => {
               :value="detailWorkflow.category as string"
               :options="categoryOptions"
               @update:value="
-                (value: string) => handleCategoryChange(detailWorkflow!.id as string, value)
+                (value: WorkflowRecord['category']) =>
+                  handleCategoryChange(detailWorkflow!.id as string, value)
               "
             />
           </NFormItem>

@@ -80,7 +80,7 @@ export async function downloadTaskImages(options: {
   jobId: string
   getImage: (filename: string, subfolder: string, type: string) => Promise<Buffer>
   target: { savedPaths: string[]; imageRecords: TaskImageRecord[] }
-  journal?: TaskOutputJournal
+  journal: TaskOutputJournal
 }): Promise<void> {
   for (const nodeOutput of Object.values(options.outputs ?? {})) {
     const images = (nodeOutput as { images?: ComfyImage[] }).images ?? []
@@ -95,7 +95,7 @@ export async function downloadTaskImages(options: {
       const savePath = allocateUniqueOutputPath(
         resolveSafeOutputFile(options.outputRoot, options.outputDirectory, fileName)
       )
-      options.journal?.plan(savePath)
+      options.journal.plan(savePath)
       const descriptor = openSync(savePath, 'wx')
       options.target.savedPaths.push(savePath)
       try {

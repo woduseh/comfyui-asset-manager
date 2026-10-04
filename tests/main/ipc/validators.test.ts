@@ -301,11 +301,22 @@ describe('entity mutation validators', () => {
   })
 
   it('validates workflow updates and roles', () => {
-    expect(() => validateWorkflowUpdate({ name: 'Workflow', category: 'generation' })).not.toThrow()
+    expect(() =>
+      validateWorkflowUpdate({ name: 'Workflow', description: '', category: 'generation' })
+    ).not.toThrow()
     expect(() => validateWorkflowUpdate({ category: 'invalid' })).toThrow('workflow category')
     expect(validateWorkflowRole('prompt_positive')).toBe('prompt_positive')
     expect(() => validateWorkflowRole('administrator')).toThrow('workflow role')
   })
+
+  it.each(['api_json', 'ui_json', 'variables', 'thumbnail', 'updated_at'])(
+    'rejects workflow graph and database-owned field %s',
+    (field) => {
+      expect(() => validateWorkflowUpdate({ name: 'Workflow', [field]: '{}' })).toThrow(
+        `Unknown workflow update field: ${field}`
+      )
+    }
+  )
 
   it('validates module item prompt variants strictly', () => {
     expect(() =>

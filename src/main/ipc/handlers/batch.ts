@@ -1,17 +1,11 @@
 import { notifyBatchChanged } from '../../services/batch/changes'
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
-import {
-  validateBatchPreviewInput,
-  validateBatchListQuery,
-  validateId,
-  validateStringArray
-} from '../validators'
+import { validateBatchListQuery, validateId, validateStringArray } from '../validators'
 import { BatchJobRepository, BatchTaskRepository } from '../../services/database/repositories'
 import { withTransaction } from '../../services/database'
 import { batchJobService } from '../../services/batch/batch-job-service'
 import { queueManager } from '../../services/batch/queue-manager'
-import { calculateTaskCount } from '../../services/batch/task-generator'
 import type { BatchConfig, BatchModuleSelection, BatchListQuery } from '@shared/ipc-contract'
 
 const batchJobRepo = new BatchJobRepository()
@@ -97,8 +91,7 @@ export function registerBatchHandlers(): void {
         countPerCombination
       }: { moduleSelections: BatchModuleSelection[]; countPerCombination: number }
     ) => {
-      validateBatchPreviewInput(moduleSelections, countPerCombination)
-      return calculateTaskCount(moduleSelections, countPerCombination)
+      return batchJobService.previewCount(moduleSelections, countPerCombination)
     }
   )
 

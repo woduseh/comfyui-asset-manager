@@ -244,7 +244,11 @@ describe('execution identity migration', () => {
       metadata: '{}',
       sort_order: 1
     })
-    tasks.updateStatus(task, 'pending', { comfyui_prompt_id: 'legacy-prompt' })
+    // An older database can contain an accepted request without its server address.
+    fixture.db.run('UPDATE batch_tasks SET comfyui_prompt_id = ? WHERE id = ?', [
+      'legacy-prompt',
+      task
+    ])
     fixture.db.run('ALTER TABLE batch_tasks DROP COLUMN comfyui_server_url')
     fixture.db.run('DROP INDEX idx_batch_tasks_pending')
     await fixture.database.closeDatabase()

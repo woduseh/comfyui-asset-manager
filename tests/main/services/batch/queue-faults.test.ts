@@ -180,9 +180,9 @@ describe('batch fault boundaries with a real loopback ComfyUI server', () => {
   it('restores the persisted prompt id instead of resetting an interrupted request', async () => {
     const result = await client.queuePrompt({}, ws.clientId)
     server.complete(result.prompt_id)
-    new repos.BatchTaskRepository().updateStatus(taskId, 'running', {
-      comfyui_prompt_id: result.prompt_id,
-      comfyui_server_url: client.serverUrl
+    new repos.BatchTaskRepository().markAccepted(taskId, {
+      promptId: result.prompt_id,
+      serverUrl: client.serverUrl
     })
     new repos.BatchJobRepository().updateStatus(jobId, 'paused')
     await db.flushDatabase()
@@ -258,7 +258,7 @@ describe('batch fault boundaries with a real loopback ComfyUI server', () => {
 
   it('recovers a persisted submitting intent as uncertain and never resends it', async () => {
     const accepted = await client.queuePrompt({}, ws.clientId)
-    new repos.BatchTaskRepository().updateStatus(taskId, 'submitting')
+    new repos.BatchTaskRepository().markSubmitting(taskId, client.serverUrl)
     new repos.BatchJobRepository().updateStatus(jobId, 'running')
     await db.flushDatabase()
     await db.closeDatabase()

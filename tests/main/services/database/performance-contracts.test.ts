@@ -109,7 +109,7 @@ describe('completed prompt cleanup', () => {
 
     tasks.clearPromptDataForCompleted('job')
     expect(db.getRowsModified()).toBe(0)
-    tasks.updateStatus('pending', 'completed')
+    tasks.finish('pending', 'completed')
     tasks.clearPromptDataForCompleted('job')
     expect(db.getRowsModified()).toBe(1)
     expect(tasks.get('pending')).toMatchObject({
@@ -127,7 +127,7 @@ describe('completed prompt cleanup', () => {
       sort_order: 0,
       metadata: '{}'
     })
-    tasks.updateStatus(id, 'completed')
+    tasks.finish(id, 'completed')
     db.run('DROP INDEX idx_batch_tasks_prompt_cleanup')
     const before = tasks.get(id)
     await database.closeDatabase()

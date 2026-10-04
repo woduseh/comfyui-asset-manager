@@ -1,4 +1,5 @@
 import { onBatchChanged } from './services/batch/changes'
+import { onDatabaseChanged } from './services/database/changes'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { app, shell, BrowserWindow, protocol, net } from 'electron'
 import { join } from 'path'
@@ -125,6 +126,12 @@ app.whenReady().then(async () => {
   onBatchChanged(() => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.BATCH_CHANGED, null)
+    }
+  })
+
+  onDatabaseChanged((event) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.DATA_CHANGED, event)
     }
   })
 

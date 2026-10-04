@@ -29,6 +29,12 @@ export interface WorkflowRecord extends Record<string, unknown> {
   updated_at: string
 }
 
+export interface WorkflowMetadataPatch {
+  name?: string
+  description?: string
+  category?: WorkflowRecord['category']
+}
+
 export interface WorkflowVariableRecord extends Record<string, unknown> {
   id: string
   workflow_id: string
@@ -306,7 +312,7 @@ export interface IpcInvokeContract {
   [IPC_CHANNELS.WORKFLOW_LIST]: IpcCall<{ category?: string } | undefined, WorkflowRecord[]>
   [IPC_CHANNELS.WORKFLOW_GET]: IpcCall<{ id: string }, WorkflowRecord | null>
   [IPC_CHANNELS.WORKFLOW_DELETE]: IpcCall<{ id: string }, boolean>
-  [IPC_CHANNELS.WORKFLOW_UPDATE]: IpcCall<{ id: string; data: Record<string, unknown> }, boolean>
+  [IPC_CHANNELS.WORKFLOW_UPDATE]: IpcCall<{ id: string; data: WorkflowMetadataPatch }, boolean>
   [IPC_CHANNELS.WORKFLOW_VARIABLES]: IpcCall<{ workflowId: string }, WorkflowVariableRecord[]>
   [IPC_CHANNELS.WORKFLOW_UPDATE_VARIABLE_ROLE]: IpcCall<
     { variableId: string; role: string },
@@ -425,7 +431,15 @@ export interface QueueTaskFailedEvent {
   etaMs?: number
 }
 
+export type DataChangeScope = 'modules' | 'workflows' | 'gallery'
+
+/** Successful in-memory mutations invalidate reads; this is not a persistence receipt. */
+export interface DataChangedEvent {
+  scopes: DataChangeScope[]
+}
+
 export interface IpcEventContract {
+  [IPC_CHANNELS.DATA_CHANGED]: DataChangedEvent
   [IPC_CHANNELS.COMFYUI_CONNECTION_CHANGED]: boolean
   [IPC_CHANNELS.QUEUE_TASK_COMPLETED]: QueueTaskCompletedEvent
   [IPC_CHANNELS.QUEUE_TASK_FAILED]: QueueTaskFailedEvent

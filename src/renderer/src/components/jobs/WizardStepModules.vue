@@ -117,7 +117,11 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
               <NButton
                 size="tiny"
                 quaternary
-                @click="sel.selectedItemIds = sel.items.map((i) => i.id)"
+                @click="
+                  sel.selectedItemIds = sel.items
+                    .filter((item) => item.enabled)
+                    .map((item) => item.id)
+                "
                 >{{ t('batch.wizard.selectAllShort') }}</NButton
               >
               <NButton size="tiny" quaternary @click="sel.selectedItemIds = []">{{
@@ -139,6 +143,7 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
                 :key="item.id"
                 :value="item.id"
                 :label="item.name"
+                :disabled="!item.enabled"
               />
             </NSpace>
           </NCheckboxGroup>

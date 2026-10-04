@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { ModuleType } from '@shared/ipc-contract'
 import { invokeIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
+import { createLatestRequest } from '@renderer/utils/latest-request'
 
 export interface PromptModule {
   id: string
@@ -33,16 +34,28 @@ export const useModuleStore = defineStore('module', () => {
   const currentItems = ref<ModuleItem[]>([])
   const loading = ref(false)
   const currentModuleId = ref<string | null>(null)
-  let itemRequest = 0
-
-  async function loadModules(type?: string): Promise<void> {
-    loading.value = true
-    try {
-      const result = await invokeIpc(IPC_CHANNELS.MODULE_LIST, type ? { type } : undefined)
+  const moduleRequests = createLatestRequest({
+    read: (type: string | undefined) =>
+      invokeIpc(IPC_CHANNELS.MODULE_LIST, type ? { type } : undefined),
+    commit: (result) => {
       modules.value = (result || []) as PromptModule[]
-    } finally {
-      loading.value = false
-    }
+    },
+    loading: (value) => {
+      loading.value = value
+    },
+    error: () => {}
+  })
+  const itemRequests = createLatestRequest({
+    read: (moduleId: string) => invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, { moduleId }),
+    commit: (result, moduleId) => {
+      if (moduleId === currentModuleId.value) currentItems.value = result as ModuleItem[]
+    },
+    loading: () => {},
+    error: () => {}
+  })
+
+  function loadModules(type?: string): Promise<void> {
+    return moduleRequests.request(type)
   }
 
   async function createModule(data: {
@@ -68,17 +81,13 @@ export const useModuleStore = defineStore('module', () => {
 
   function selectModule(id: string | null): void {
     currentModuleId.value = id
-    itemRequest++
+    itemRequests.cancel()
     currentItems.value = []
   }
 
-  async function loadItems(moduleId: string): Promise<void> {
-    if (moduleId !== currentModuleId.value) return
-    const request = ++itemRequest
-    const result = await invokeIpc(IPC_CHANNELS.MODULE_ITEM_LIST, { moduleId })
-    if (request === itemRequest && moduleId === currentModuleId.value) {
-      currentItems.value = result as ModuleItem[]
-    }
+  function loadItems(moduleId: string): Promise<void> {
+    if (moduleId !== currentModuleId.value) return Promise.resolve()
+    return itemRequests.request(moduleId)
   }
 
   async function createItem(data: {

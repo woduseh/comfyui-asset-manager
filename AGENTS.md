@@ -24,8 +24,11 @@ Electron + Vue 앱이며 ComfyUI API JSON 워크플로우로 대량 이미지를
 - 목록은 스냅샷 없는 요약을 사용하고 완료 이력은 페이지 조회한다. 편집·복제는 상세를 조회하며 IPC·MCP 변경 모두 화면 갱신을 알린다.
 - Repository mutation이 저장을 예약한다. 여러 mutation은 `withTransaction()`으로 묶고
   handler/service에서 저장을 중복 예약하지 않는다. 구현은 `src/main/services/database/`에 있다.
+  트랜잭션 콜백은 동기 함수이며 비동기 작업은 앞뒤에서 수행한다. 모듈·워크플로우·갤러리 mutation은
+  `saveDatabase(scope)`로 조회 무효화도 예약하며, 알림은 트랜잭션 성공 후 전달한다. 알림 자체는 디스크 저장 확인이 아니다.
 - 새 DB 필드는 기존 DB 업그레이드 경로도 고려한다. 일반 update 허용 목록에는 외부에서 수정하도록
   의도한 필드만 추가한다. 서버 소유 필드를 새 컬럼이라는 이유로 공개하지 않는다.
+  일반 워크플로우 수정은 메타데이터만 받으며 그래프·변수 저장은 검증된 import 경로를 사용한다.
 - IPC/MCP 배치 생성·draft 수정은 `src/main/services/batch/batch-job-service.ts`를 공유한다.
   필요한 조합만 인덱스로 계산하며 전체 조합 배열을 미리 만들지 않는다.
   스냅샷 없는 레거시 작업의 실행 호환성을 유지한다.

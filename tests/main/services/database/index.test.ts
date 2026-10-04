@@ -61,6 +61,31 @@ afterEach(async () => {
 })
 
 describe('database transactions', () => {
+  it('rejects async callbacks before they can write or resume outside the transaction', async () => {
+    expect(() =>
+      // @ts-expect-error Async callbacks cannot keep writes within a synchronous transaction.
+      databaseModule.withTransaction(async () => {
+        databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('before-await')")
+        await Promise.resolve()
+        databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('after-await')")
+      })
+    ).toThrow('synchronous callback')
+
+    await Promise.resolve()
+    expect(getRows()).toEqual([])
+  })
+
+  it('rolls back when an untyped synchronous callback returns a Promise', () => {
+    expect(() =>
+      // @ts-expect-error A synchronous callback must not return a Promise either.
+      databaseModule.withTransaction(() => {
+        databaseModule.getDatabase().run("INSERT INTO transaction_test VALUES ('rolled-back')")
+        return Promise.resolve('not a synchronous result')
+      })
+    ).toThrow('must not return a Promise')
+    expect(getRows()).toEqual([])
+  })
+
   it('commits mutations and schedules one save for nested work', async () => {
     const renameSpy = vi.spyOn(fsPromises, 'rename')
 

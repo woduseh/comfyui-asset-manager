@@ -1,5 +1,5 @@
 import { buildPrompt } from '../prompt/composition-engine'
-import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
+import type { BatchConfig } from '@shared/ipc-contract'
 
 export interface GeneratedTask {
   promptData: {
@@ -38,31 +38,6 @@ export interface GeneratedTask {
   sortOrder: number
 }
 
-/**
- * Calculate total task count without generating tasks (for preview)
- */
-export function calculateTaskCount(
-  moduleSelections: BatchModuleSelection[],
-  countPerCombination: number
-): { totalCombinations: number; totalTasks: number } {
-  let totalCombinations = 1
-  let hasDimensions = false
-
-  for (const selection of moduleSelections) {
-    if (selection.selectedItemIds.length > 0) {
-      totalCombinations *= selection.selectedItemIds.length
-      hasDimensions = true
-    }
-  }
-
-  if (!hasDimensions) return { totalCombinations: 0, totalTasks: 0 }
-
-  return {
-    totalCombinations,
-    totalTasks: totalCombinations * countPerCombination
-  }
-}
-
 export type ModuleDataSnapshot = Array<{
   moduleId: string
   moduleType: string
@@ -87,7 +62,7 @@ interface SelectedModuleItem {
  * Count total tasks from resolved module data (accurate — accounts for enabled items)
  */
 export function countTotalTasksFromData(
-  config: BatchConfig,
+  config: Pick<BatchConfig, 'moduleSelections' | 'countPerCombination'>,
   moduleData: ModuleDataSnapshot
 ): number {
   const dimensions = buildDimensions(config, moduleData)
@@ -142,7 +117,7 @@ export function expandBatchToTasksChunk(
 }
 
 function buildDimensions(
-  config: BatchConfig,
+  config: Pick<BatchConfig, 'moduleSelections'>,
   moduleData: ModuleDataSnapshot
 ): SelectedModuleItem[][] {
   const dimensions: SelectedModuleItem[][] = []

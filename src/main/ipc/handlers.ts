@@ -9,6 +9,7 @@ import {
 } from 'electron'
 import { existsSync } from 'fs'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
+import type { WorkflowMetadataPatch } from '@shared/ipc-contract'
 import log from '../logger'
 import {
   validateGalleryQuery,
@@ -214,7 +215,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.WORKFLOW_UPDATE,
-    (_event, { id, data }: { id: string; data: Record<string, unknown> }) => {
+    (_event, { id, data }: { id: string; data: WorkflowMetadataPatch }) => {
       validateId(id)
       validateWorkflowUpdate(data)
       workflowRepo.update(id, data)

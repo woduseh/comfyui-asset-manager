@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     batchUpdateStatus: vi.fn(),
     batchServiceCreate: vi.fn(() => ({ jobId: 'batch-id', totalTasks: 1 })),
     batchServiceUpdateDraft: vi.fn((id: string) => ({ jobId: id, totalTasks: 1 })),
+    batchServicePreviewCount: vi.fn(() => 3),
     queuePreflight: vi.fn<typeof queueManager.preflightStart>(() => ({ success: true })),
     queueRequestStart: vi.fn<typeof queueManager.requestStart>(() => ({ success: true })),
     queueResume: vi.fn(),
@@ -143,7 +144,8 @@ vi.mock('../../../src/main/services/batch/queue-manager', () => ({
 vi.mock('../../../src/main/services/batch/batch-job-service', () => ({
   batchJobService: {
     create: mocks.batchServiceCreate,
-    updateDraft: mocks.batchServiceUpdateDraft
+    updateDraft: mocks.batchServiceUpdateDraft,
+    previewCount: mocks.batchServicePreviewCount
   }
 }))
 
@@ -256,6 +258,25 @@ describe('registerIpcHandlers validation boundary', () => {
     expect(mocks.workflowUpdate).not.toHaveBeenCalled()
   })
 
+  it.each(['api_json', 'ui_json', 'variables'])(
+    'rejects workflow %s changes before repository mutation',
+    (field) => {
+      const handler = getHandler(IPC_CHANNELS.WORKFLOW_UPDATE)
+
+      expect(() => handler({}, { id: 'workflow-id', data: { [field]: '{}' } })).toThrow(
+        `Unknown workflow update field: ${field}`
+      )
+      expect(mocks.workflowUpdate).not.toHaveBeenCalled()
+    }
+  )
+
+  it('passes editable workflow metadata to the repository', () => {
+    const data = { name: 'Renamed', description: 'New description', category: 'custom' }
+
+    expect(getHandler(IPC_CHANNELS.WORKFLOW_UPDATE)({}, { id: 'workflow-id', data })).toBe(true)
+    expect(mocks.workflowUpdate).toHaveBeenCalledWith('workflow-id', data)
+  })
+
   it('rejects malformed destructive IDs before repository mutation', () => {
     const handler = getHandler(IPC_CHANNELS.WORKFLOW_DELETE)
 
@@ -277,6 +298,21 @@ describe('registerIpcHandlers validation boundary', () => {
 
     expect(handler({}, config)).toEqual({ jobId: 'batch-id', totalTasks: 1 })
     expect(mocks.batchServiceCreate).toHaveBeenCalledWith(config)
+  })
+
+  it('previews counts through the same module resolver as batch creation', () => {
+    const moduleSelections = [
+      { moduleId: 'module-id', moduleType: 'character', selectedItemIds: ['enabled', 'disabled'] }
+    ]
+    const result = getHandler(IPC_CHANNELS.BATCH_PREVIEW_COUNT)(
+      {},
+      {
+        moduleSelections,
+        countPerCombination: 3
+      }
+    )
+    expect(result).toBe(3)
+    expect(mocks.batchServicePreviewCount).toHaveBeenCalledWith(moduleSelections, 3)
   })
 
   it('validates draft batch updates before replacing persisted configuration', () => {

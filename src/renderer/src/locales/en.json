@@ -406,6 +406,8 @@
       "summary": "Generation summary",
       "formula": "{combinations} combinations × {count} images each",
       "selectItemsHint": "Select module items to calculate the image count.",
+      "previewLoading": "Calculating the generation count…",
+      "previewFailed": "Could not calculate the generation count: {error}",
       "saveHint": "Saving adds the job to your queue. Generation begins only when you start the job.",
       "requiredHint": "A job name, workflow and at least one item combination are required.",
       "editRoles": "Configure workflow variable roles",

@@ -15,9 +15,10 @@ import {
 import { useModuleStore, type ModuleItem, type PromptModule } from '@renderer/stores/module.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useWorkflowStore } from '@renderer/stores/workflow.store'
-import { invokeIpc } from '@renderer/utils/ipc'
+import { invokeIpc, onIpc } from '@renderer/utils/ipc'
+import { createLatestRequest } from '@renderer/utils/latest-request'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
-import type { WorkflowVariableRecord } from '@shared/ipc-contract'
+import type { BatchModuleSelection, WorkflowVariableRecord } from '@shared/ipc-contract'
 import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 import {
   buildBatchSeedModeOptions,
@@ -80,6 +81,9 @@ const showOverrides = ref(false)
 const batchResources = ref<BatchResources | null>(null)
 const outputPattern = ref('{job}/{character}/{outfit}/{emotion}')
 const filePattern = ref('{character}_{outfit}_{emotion}_{index}')
+const taskPreview = ref({ totalCombinations: 0, totalTasks: 0 })
+const previewLoading = ref(false)
+const previewError = ref<string | null>(null)
 
 const showWizard = computed({
   get: () => props.show,
@@ -93,19 +97,57 @@ const workflowOptions = computed(() =>
 const generationWorkflowHint = computed(() => getGenerationWorkflowHint(workflowStore.workflows, t))
 const seedModeOptions = computed(() => buildBatchSeedModeOptions(t))
 const varTypeLabels = computed(() => buildWorkflowVarTypeLabels(t))
-const taskPreview = computed(() => {
-  const selections = moduleSelections.value.filter(
-    (selection) => selection.selectedItemIds.length > 0
-  )
-  if (selections.length === 0) return { totalCombinations: 0, totalTasks: 0 }
-  const totalCombinations = selections.reduce(
-    (total, selection) => total * selection.selectedItemIds.length,
-    1
-  )
-  return {
-    totalCombinations,
-    totalTasks: totalCombinations * countPerCombination.value
+const previewInput = computed(() => ({
+  moduleSelections: moduleSelections.value.map((selection) => ({
+    moduleId: selection.moduleId,
+    moduleType: selection.moduleType,
+    selectedItemIds: [...selection.selectedItemIds]
+  })),
+  countPerCombination: countPerCombination.value
+}))
+const previewRequests = createLatestRequest<
+  { moduleSelections: BatchModuleSelection[]; countPerCombination: number },
+  number
+>({
+  read: (query) => invokeIpc(IPC_CHANNELS.BATCH_PREVIEW_COUNT, query),
+  commit: (totalTasks, query) => {
+    taskPreview.value = {
+      totalTasks,
+      totalCombinations: totalTasks / query.countPerCombination
+    }
+    previewError.value = null
+  },
+  loading: (value) => {
+    previewLoading.value = value
+  },
+  error: (error) => {
+    previewError.value = error instanceof Error ? error.message : String(error)
   }
+})
+
+function refreshTaskPreview(): void {
+  previewRequests.cancel()
+  taskPreview.value = { totalCombinations: 0, totalTasks: 0 }
+  previewError.value = null
+  if (
+    !props.show ||
+    initializing.value ||
+    !previewInput.value.moduleSelections.some((selection) => selection.selectedItemIds.length)
+  ) {
+    previewLoading.value = false
+    return
+  }
+  previewLoading.value = true
+  void previewRequests.request(previewInput.value).catch(() => {})
+}
+
+watch(() => [props.show, initializing.value, previewInput.value], refreshTaskPreview, {
+  deep: true,
+  flush: 'sync'
+})
+
+const stopDataChanges = onIpc(IPC_CHANNELS.DATA_CHANGED, ({ scopes }) => {
+  if (scopes.includes('modules') && props.show) refreshTaskPreview()
 })
 const canSave = computed(
   () =>
@@ -114,6 +156,8 @@ const canSave = computed(
     !variablesLoading.value &&
     !variablesError.value &&
     !roleSaving.value &&
+    !previewLoading.value &&
+    !previewError.value &&
     Boolean(batchName.value.trim() && selectedWorkflowId.value) &&
     taskPreview.value.totalTasks > 0
 )
@@ -393,6 +437,8 @@ watch(
 
 onBeforeUnmount(() => {
   wizardGeneration++
+  previewRequests.cancel()
+  stopDataChanges()
 })
 
 async function handleCreateBatch(): Promise<void> {
@@ -554,11 +600,16 @@ async function handleCreateBatch(): Promise<void> {
       </NScrollbar>
       <aside class="batch-editor__summary" aria-live="polite" aria-atomic="true">
         <span class="section-eyebrow">{{ t('batch.editor.summary') }}</span>
-        <div class="batch-editor__total">
+        <p v-if="previewLoading">{{ t('batch.editor.previewLoading') }}</p>
+        <NAlert v-else-if="previewError" type="error">
+          {{ t('batch.editor.previewFailed', { error: previewError }) }}
+          <NButton size="small" @click="refreshTaskPreview">{{ t('common.retry') }}</NButton>
+        </NAlert>
+        <div v-else class="batch-editor__total">
           {{ taskPreview.totalTasks.toLocaleString()
           }}<span>{{ t('jobs.production.imagesUnit') }}</span>
         </div>
-        <p>
+        <p v-if="!previewLoading && !previewError">
           {{
             t('batch.editor.formula', {
               combinations: taskPreview.totalCombinations.toLocaleString(),

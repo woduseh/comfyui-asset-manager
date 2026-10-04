@@ -1,4 +1,5 @@
 export const IPC_CHANNELS = {
+  DATA_CHANGED: 'data:changed',
   COMFYUI_CONNECT: 'comfyui:connect',
   COMFYUI_DISCONNECT: 'comfyui:disconnect',
   COMFYUI_SYSTEM_STATS: 'comfyui:system-stats',

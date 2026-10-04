@@ -212,12 +212,14 @@ describe('MCP batch generation integration', () => {
     expect(started.isError).not.toBe(true)
     expect(state.queue.requestStart).toHaveBeenCalledWith(id)
     state.queue.requestStart.mockClear()
-    repos.workflowRepo.update(workflowId, {
-      api_json: JSON.stringify({
+    // Simulate a graph change outside the metadata-only edit command.
+    database.getDatabase().run('UPDATE workflows SET api_json = ? WHERE id = ?', [
+      JSON.stringify({
         ...workflow,
         '4': { class_type: 'SaveImage', inputs: { filename_prefix: 'changed' } }
-      })
-    })
+      }),
+      workflowId
+    ])
     const stale = await call('start_batch_job', { job_id: id, execution_token: token })
     expect(stale.isError).toBe(true)
     expect(state.queue.requestStart).not.toHaveBeenCalled()
@@ -285,12 +287,13 @@ describe('MCP batch generation integration', () => {
     expect(result.isError).toBe(true)
     expect(repos.batchJobRepo.listSummaries(-1, 0).items).toHaveLength(0)
     const fresh = await call('preview_batch_job', input)
-    repos.workflowRepo.update(workflowId, {
-      api_json: JSON.stringify({
+    database.getDatabase().run('UPDATE workflows SET api_json = ? WHERE id = ?', [
+      JSON.stringify({
         ...workflow,
         '4': { class_type: 'SaveImage', inputs: { filename_prefix: 'changed' } }
-      })
-    })
+      }),
+      workflowId
+    ])
     expect(
       (
         await call('create_batch_job', {
@@ -324,7 +327,13 @@ describe('MCP batch generation integration', () => {
         { inputs: Record<string, unknown> }
       >
       changed['3'].inputs.cfg = value
-      repos.workflowRepo.update(workflowId, { api_json: JSON.stringify(changed) })
+      // Persisted legacy data still needs semantic validation even though normal edits cannot write it.
+      database
+        .getDatabase()
+        .run('UPDATE workflows SET api_json = ? WHERE id = ?', [
+          JSON.stringify(changed),
+          workflowId
+        ])
       await expect(
         call('create_batch_job', {
           ...input,
@@ -374,9 +383,12 @@ describe('MCP batch generation integration', () => {
         metadata: JSON.stringify({ emotionName: emotion })
       })
     )
-    repos.batchTaskRepo.updateStatus(taskIds[0], 'completed')
+    repos.batchTaskRepo.finish(taskIds[0], 'completed')
+    repos.batchTaskRepo.markAccepted(taskIds[1], {
+      promptId: 'keep-prompt-id',
+      serverUrl: 'http://localhost:8188'
+    })
     repos.batchTaskRepo.updateStatus(taskIds[1], 'uncertain', {
-      comfyui_prompt_id: 'keep-prompt-id',
       error_message: 'Response lost'
     })
     const page = await call('list_batch_tasks', { job_id: id, limit: 1, offset: 1 })

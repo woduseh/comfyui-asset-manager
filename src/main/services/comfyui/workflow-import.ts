@@ -32,7 +32,7 @@ interface WorkflowImportRepository {
 interface WorkflowImportDependencies {
   readTextFile: (filePath: string) => string
   getFileSize: (filePath: string) => number
-  runInTransaction: <T>(operation: () => T) => T
+  runInTransaction: typeof withTransaction
 }
 
 export interface WorkflowImportResult {

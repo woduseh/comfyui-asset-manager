@@ -566,7 +566,7 @@ class QueueManager {
     }
     if (!promptId) {
       task.comfyui_server_url = execution.serverUrl
-      batchTaskRepo.updateStatus(taskId, 'submitting', { comfyui_server_url: execution.serverUrl })
+      batchTaskRepo.markSubmitting(taskId, execution.serverUrl)
       await flushDatabase()
       if (this._isCancelled) throw new PromptWaitCancelledError()
       try {
@@ -578,7 +578,7 @@ class QueueManager {
       }
       task.comfyui_prompt_id = promptId
     }
-    batchTaskRepo.updateStatus(taskId, 'running', { comfyui_prompt_id: promptId })
+    batchTaskRepo.markAccepted(taskId, { promptId, serverUrl: execution.serverUrl })
     try {
       await flushDatabase()
     } catch (error) {

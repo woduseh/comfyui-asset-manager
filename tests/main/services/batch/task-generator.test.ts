@@ -3,57 +3,10 @@ import type { BatchConfig } from '@shared/ipc-contract'
 import {
   expandBatchToTasksChunk,
   countTotalTasksFromData,
-  calculateTaskCount,
   resolveOutputPath
 } from '../../../../src/main/services/batch/task-generator'
 
 describe('Task Generator', () => {
-  describe('calculateTaskCount', () => {
-    it('returns correct count for simple selections', () => {
-      const result = calculateTaskCount(
-        [
-          { moduleId: 'm1', moduleType: 'character', selectedItemIds: ['a', 'b'] },
-          { moduleId: 'm2', moduleType: 'emotion', selectedItemIds: ['e1', 'e2', 'e3'] }
-        ],
-        10
-      )
-      expect(result.totalCombinations).toBe(6) // 2 × 3
-      expect(result.totalTasks).toBe(60) // 6 × 10
-    })
-
-    it('returns 0 when no items are selected', () => {
-      const result = calculateTaskCount(
-        [{ moduleId: 'm1', moduleType: 'character', selectedItemIds: [] }],
-        10
-      )
-      expect(result.totalCombinations).toBe(0)
-      expect(result.totalTasks).toBe(0)
-    })
-
-    it('handles single dimension', () => {
-      const result = calculateTaskCount(
-        [{ moduleId: 'm1', moduleType: 'character', selectedItemIds: ['a', 'b', 'c'] }],
-        5
-      )
-      expect(result.totalCombinations).toBe(3)
-      expect(result.totalTasks).toBe(15)
-    })
-
-    it('ignores empty selections', () => {
-      const result = calculateTaskCount(
-        [
-          { moduleId: 'm1', moduleType: 'character', selectedItemIds: ['a'] },
-          { moduleId: 'm2', moduleType: 'emotion', selectedItemIds: [] },
-          { moduleId: 'm3', moduleType: 'outfit', selectedItemIds: ['o1', 'o2'] }
-        ],
-        1
-      )
-      // Empty selections are skipped entirely, so 1 × 2 = 2
-      expect(result.totalCombinations).toBe(2)
-      expect(result.totalTasks).toBe(2)
-    })
-  })
-
   describe('resolveOutputPath', () => {
     it('replaces variable placeholders', () => {
       const result = resolveOutputPath('{job}/{character}/{emotion}', {

@@ -138,8 +138,11 @@ describe('QueueManager Recovery', () => {
         taskRepo.createSingle(task)
       }
       const tasks = taskRepo.listByJob(jobId)
-      taskRepo.updateStatus(tasks[0].id as string, 'completed')
-      taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
+      taskRepo.finish(tasks[0].id as string, 'completed')
+      taskRepo.markAccepted(tasks[1].id as string, {
+        promptId: 'p-1',
+        serverUrl: 'http://localhost:8188'
+      })
       // tasks[2] stays pending
 
       await queueManager.recoverInterruptedJobs()
@@ -192,7 +195,8 @@ describe('QueueManager Recovery', () => {
         sort_order: 0,
         metadata: '{}'
       })
-      taskRepo.updateStatus(taskId, 'completed', { comfyui_prompt_id: 'remote' })
+      taskRepo.markAccepted(taskId, { promptId: 'remote', serverUrl: 'http://localhost:8188' })
+      taskRepo.finish(taskId, 'completed')
       jobRepo.updateProgress(jobId, 1, 0)
       jobRepo.updateStatus(jobId, 'cancelled')
       journalMocks.recover.mockReturnValue([{ taskId, promptId: 'remote', paths: [] }])
@@ -383,7 +387,7 @@ describe('QueueManager Recovery', () => {
         taskRepo.createSingle(task)
       }
       const tasks = taskRepo.listByJob(jobId)
-      taskRepo.updateStatus(tasks[0].id as string, 'completed')
+      taskRepo.finish(tasks[0].id as string, 'completed')
 
       queueManager.cancel(jobId)
 
@@ -550,8 +554,9 @@ describe('QueueManager Recovery', () => {
         taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
         const task = taskRepo.listByJob(jobId)[0]
         if (failureType === 'remote') {
-          taskRepo.updateStatus(task.id as string, 'running', {
-            comfyui_prompt_id: 'failed-remote'
+          taskRepo.markAccepted(task.id as string, {
+            promptId: 'failed-remote',
+            serverUrl: 'http://localhost:8188'
           })
           task.comfyui_prompt_id = 'failed-remote'
         }

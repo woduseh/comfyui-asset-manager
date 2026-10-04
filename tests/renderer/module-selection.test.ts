@@ -4,14 +4,23 @@ import { defineComponent } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { NMessageProvider } from 'naive-ui'
+import { NButton, NInput, NMessageProvider } from 'naive-ui'
 import ModuleView from '@renderer/views/ModuleView.vue'
 import ModuleBrowser from '@renderer/components/modules/ModuleBrowser.vue'
 import { useModuleStore } from '@renderer/stores/module.store'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import en from '@renderer/locales/en.json'
-const invokeIpc = vi.hoisted(() => vi.fn())
-vi.mock('@renderer/utils/ipc', () => ({ invokeIpc }))
+const { invokeIpc, listeners } = vi.hoisted(() => ({
+  invokeIpc: vi.fn(),
+  listeners: new Map<string, (payload: unknown) => void>()
+}))
+vi.mock('@renderer/utils/ipc', () => ({
+  invokeIpc,
+  onIpc: (channel: string, listener: (payload: unknown) => void) => {
+    listeners.set(channel, listener)
+    return () => listeners.delete(channel)
+  }
+}))
 const modA = {
   id: 'a',
   name: 'Module A',
@@ -38,6 +47,7 @@ const itemA = {
 let wrapper: VueWrapper | undefined
 beforeEach(() => {
   invokeIpc.mockReset()
+  listeners.clear()
 })
 afterEach(() => {
   wrapper?.unmount()
@@ -51,13 +61,80 @@ function openView(): { view: VueWrapper; store: ReturnType<typeof useModuleStore
       template: '<NMessageProvider><ModuleView /></NMessageProvider>'
     }),
     {
-      global: { plugins: [pinia, createI18n({ legacy: false, locale: 'en', messages: { en } })] }
+      global: {
+        plugins: [pinia, createI18n({ legacy: false, locale: 'en', messages: { en } })],
+        stubs: { teleport: true }
+      }
     }
   )
   return { view: wrapper, store: useModuleStore(pinia) }
 }
 
 describe('selected module response ownership', () => {
+  it('refreshes external module/item changes while preserving an open item draft', async () => {
+    let currentModule = modA
+    let currentItem = itemA
+    invokeIpc.mockImplementation(async (channel: string) => {
+      if (channel === IPC_CHANNELS.MODULE_LIST) return [{ ...currentModule }]
+      if (channel === IPC_CHANNELS.MODULE_GET) return { ...currentModule }
+      if (channel === IPC_CHANNELS.MODULE_ITEM_LIST) return [{ ...currentItem }]
+      if (channel === IPC_CHANNELS.PROMPT_PREVIEW)
+        return { positive: currentItem.prompt, negative: '' }
+      throw new Error(`Unexpected IPC: ${channel}`)
+    })
+    const { view, store } = openView()
+    await flushPromises()
+    view.findComponent(ModuleBrowser).vm.$emit('select', 'a')
+    await flushPromises()
+    view
+      .findAllComponents(NButton)
+      .find((button) => button.text() === en.module.addItem)!
+      .vm.$emit('click')
+    await flushPromises()
+    const draft = view
+      .findAllComponents(NInput)
+      .find((input) => input.props('placeholder') === en.module.item.namePlaceholder)!
+    draft.vm.$emit('update:value', 'Unsaved item')
+    currentModule = { ...modA, name: 'Renamed externally' }
+    currentItem = { ...itemA, prompt: 'External prompt' }
+    listeners.get(IPC_CHANNELS.DATA_CHANGED)!({ scopes: ['modules'] })
+    await flushPromises()
+    expect(store.modules[0].name).toBe('Renamed externally')
+    expect(view.get('.module-detail').text()).toContain('Renamed externally')
+    expect(store.currentItems[0].prompt).toBe('External prompt')
+    expect(draft.props('value')).toBe('Unsaved item')
+    view.unmount()
+    wrapper = undefined
+    expect(listeners.size).toBe(0)
+  })
+
+  it('discards a selected-module response captured before an external invalidation', async () => {
+    let release!: (value: unknown) => void
+    let read = 0
+    invokeIpc.mockImplementation((channel: string) => {
+      if (channel === IPC_CHANNELS.MODULE_LIST) return Promise.resolve([modA])
+      if (channel === IPC_CHANNELS.MODULE_GET) {
+        if (++read === 1)
+          return new Promise((resolve) => {
+            release = resolve
+          })
+        return Promise.resolve({ ...modA, name: 'Newest module' })
+      }
+      if (channel === IPC_CHANNELS.MODULE_ITEM_LIST) return Promise.resolve([itemA])
+      if (channel === IPC_CHANNELS.PROMPT_PREVIEW)
+        return Promise.resolve({ positive: '', negative: '' })
+      throw new Error(`Unexpected IPC: ${channel}`)
+    })
+    const { view } = openView()
+    await flushPromises()
+    view.findComponent(ModuleBrowser).vm.$emit('select', 'a')
+    await flushPromises()
+    listeners.get(IPC_CHANNELS.DATA_CHANGED)!({ scopes: ['modules'] })
+    release({ ...modA, name: 'Stale module' })
+    await flushPromises()
+    expect(view.get('.module-detail').text()).toContain('Newest module')
+    expect(view.get('.module-detail').text()).not.toContain('Stale module')
+  })
   it('discards metadata from a deselected module and never displays it under a newer selection', async () => {
     let releaseA!: (value: unknown) => void
     let releaseB!: (value: unknown) => void

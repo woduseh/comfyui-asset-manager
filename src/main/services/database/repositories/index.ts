@@ -1,11 +1,17 @@
-import type { BatchJobPage, BatchJobSummary } from '@shared/ipc-contract'
+import type {
+  BatchJobPage,
+  BatchJobSummary,
+  BatchJobStatus,
+  BatchTaskStatus,
+  WorkflowMetadataPatch
+} from '@shared/ipc-contract'
 import { getDatabase, saveDatabase, withTransaction } from '../index'
 import { randomUUID } from 'node:crypto'
 import log from '../../../logger'
 
 // Allowed field names for dynamic update queries (SQL injection prevention)
 const ALLOWED_UPDATE_FIELDS = {
-  workflows: ['name', 'description', 'category', 'api_json', 'ui_json', 'variables'],
+  workflows: ['name', 'description', 'category'],
   prompt_modules: ['name', 'type', 'description', 'parent_id'],
   module_items: [
     'name',
@@ -138,13 +144,13 @@ export class WorkflowRepository {
         data.variables || '[]'
       ]
     )
-    saveDatabase()
+    saveDatabase('workflows')
     return id
   }
 
-  update(id: string, data: Partial<Record<string, unknown>>): void {
+  update(id: string, data: WorkflowMetadataPatch): void {
     const db = getDatabase()
-    const sanitized = sanitizeUpdateFields(data, ALLOWED_UPDATE_FIELDS.workflows)
+    const sanitized = sanitizeUpdateFields({ ...data }, ALLOWED_UPDATE_FIELDS.workflows)
     const fields = Object.keys(sanitized)
     if (fields.length === 0) return
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
@@ -153,13 +159,13 @@ export class WorkflowRepository {
       ...(values as string[]),
       id
     ])
-    saveDatabase()
+    saveDatabase('workflows')
   }
 
   delete(id: string): void {
     const db = getDatabase()
     db.run('DELETE FROM workflows WHERE id = ?', [id])
-    saveDatabase()
+    saveDatabase('workflows')
   }
 
   getVariables(workflowId: string): Record<string, unknown>[] {
@@ -208,19 +214,19 @@ export class WorkflowRepository {
         ]
       )
     }
-    saveDatabase()
+    saveDatabase('workflows')
   }
 
   updateVariableRole(variableId: string, role: string): void {
     const db = getDatabase()
     db.run('UPDATE workflow_variables SET role = ? WHERE id = ?', [role, variableId])
-    saveDatabase()
+    saveDatabase('workflows')
   }
 
   updateValue(variableId: string, value: string): void {
     const db = getDatabase()
     db.run('UPDATE workflow_variables SET default_val = ? WHERE id = ?', [value, variableId])
-    saveDatabase()
+    saveDatabase('workflows')
   }
 }
 
@@ -266,7 +272,7 @@ export class ModuleRepository {
        VALUES (?, ?, ?, ?, ?)`,
       [id, data.name, data.type, data.description || '', data.parent_id || null]
     )
-    saveDatabase()
+    saveDatabase('modules')
     return id
   }
 
@@ -281,13 +287,13 @@ export class ModuleRepository {
       ...(values as string[]),
       id
     ])
-    saveDatabase()
+    saveDatabase('modules')
   }
 
   delete(id: string): void {
     const db = getDatabase()
     db.run('DELETE FROM prompt_modules WHERE id = ?', [id])
-    saveDatabase()
+    saveDatabase('modules')
   }
 
   duplicate(
@@ -344,6 +350,7 @@ export class ModuleRepository {
         )
       }
 
+      saveDatabase('modules')
       return { newModuleId, itemsCopied: sourceItems.length }
     })
   }
@@ -421,7 +428,7 @@ export class ModuleItemRepository {
         data.prompt_variants || '{}'
       ]
     )
-    saveDatabase()
+    saveDatabase('modules')
     return id
   }
 
@@ -433,13 +440,13 @@ export class ModuleItemRepository {
     const setClauses = fields.map((f) => `${f} = ?`).join(', ')
     const values = fields.map((f) => sanitized[f])
     db.run(`UPDATE module_items SET ${setClauses} WHERE id = ?`, [...(values as string[]), id])
-    saveDatabase()
+    saveDatabase('modules')
   }
 
   delete(id: string): void {
     const db = getDatabase()
     db.run('DELETE FROM module_items WHERE id = ?', [id])
-    saveDatabase()
+    saveDatabase('modules')
   }
 
   reorder(itemIds: string[]): void {
@@ -448,6 +455,7 @@ export class ModuleItemRepository {
       for (let i = 0; i < itemIds.length; i++) {
         db.run('UPDATE module_items SET sort_order = ? WHERE id = ?', [i, itemIds[i]])
       }
+      if (itemIds.length) saveDatabase('modules')
     })
   }
 
@@ -480,6 +488,7 @@ export class ModuleItemRepository {
             continue
           }
           succeeded++
+          saveDatabase('modules')
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           errors.push({ id: update.id, error: msg })
@@ -535,6 +544,7 @@ export class ModuleItemRepository {
           )
           ids.push(id)
           succeeded++
+          saveDatabase('modules')
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
           errors.push({ index: i, error: msg })
@@ -685,7 +695,7 @@ export class BatchJobRepository {
     })
   }
 
-  updateStatus(id: string, status: string): void {
+  updateStatus(id: string, status: BatchJobStatus): void {
     const db = getDatabase()
     const extra =
       status === 'running'
@@ -713,6 +723,7 @@ export class BatchJobRepository {
       new BatchTaskRepository().deleteByJob(id)
       db.run('UPDATE generated_images SET job_id = NULL WHERE job_id = ?', [id])
       db.run('DELETE FROM batch_jobs WHERE id = ?', [id])
+      saveDatabase('gallery')
     })
   }
 
@@ -725,6 +736,16 @@ export class BatchJobRepository {
     })
   }
 }
+
+export interface AcceptedTaskRequest {
+  promptId: string
+  serverUrl: string
+}
+
+type TaskRecoveryStatus = Extract<
+  BatchTaskStatus,
+  'pending' | 'retrying' | 'uncertain' | 'cancelled'
+>
 
 export class BatchTaskRepository {
   listPage(
@@ -813,11 +834,39 @@ export class BatchTaskRepository {
 
   updateStatus(
     id: string,
-    status: string,
+    status: TaskRecoveryStatus,
+    extra?: {
+      comfyui_prompt_id?: null
+      error_message?: string
+    }
+  ): void {
+    if (!['pending', 'retrying', 'uncertain', 'cancelled'].includes(status)) {
+      throw new Error('Use submission methods or finish() for this task transition')
+    }
+    this.writeStatus(id, status, extra)
+  }
+
+  markSubmitting(id: string, serverUrl: string): void {
+    if (!serverUrl) throw new Error('Submitting a task requires its ComfyUI server URL')
+    this.writeStatus(id, 'submitting', { comfyui_server_url: serverUrl })
+  }
+
+  markAccepted(id: string, request: AcceptedTaskRequest): void {
+    if (!request.promptId || !request.serverUrl) {
+      throw new Error('An accepted task requires both its prompt ID and ComfyUI server URL')
+    }
+    this.writeStatus(id, 'running', {
+      comfyui_prompt_id: request.promptId,
+      comfyui_server_url: request.serverUrl
+    })
+  }
+
+  private writeStatus(
+    id: string,
+    status: TaskRecoveryStatus | 'submitting' | 'running',
     extra?: {
       comfyui_prompt_id?: string | null
       comfyui_server_url?: string
-      result_path?: string
       error_message?: string
     }
   ): void {
@@ -833,16 +882,9 @@ export class BatchTaskRepository {
       query += ', comfyui_server_url = ?'
       params.push(extra.comfyui_server_url)
     }
-    if (extra?.result_path) {
-      query += ', result_path = ?'
-      params.push(extra.result_path)
-    }
     if (extra?.error_message) {
       query += ', error_message = ?'
       params.push(extra.error_message)
-    }
-    if (status === 'completed' || status === 'failed') {
-      query += ", completed_at = datetime('now')"
     }
     if (status === 'retrying') {
       query += ', retry_count = retry_count + 1'
@@ -910,6 +952,7 @@ export class BatchTaskRepository {
         [jobId]
       )
       db.run('DELETE FROM batch_tasks WHERE job_id = ?', [jobId])
+      saveDatabase('gallery')
     })
   }
 
@@ -1120,7 +1163,7 @@ export class GeneratedImageRepository {
         data.style_name || null
       ]
     )
-    saveDatabase()
+    saveDatabase('gallery')
     return id
   }
 
@@ -1151,19 +1194,19 @@ export class GeneratedImageRepository {
   updateRating(id: string, rating: number): void {
     const db = getDatabase()
     db.run('UPDATE generated_images SET rating = ? WHERE id = ?', [rating, id])
-    saveDatabase()
+    saveDatabase('gallery')
   }
 
   updateFavorite(id: string, isFavorite: boolean): void {
     const db = getDatabase()
     db.run('UPDATE generated_images SET is_favorite = ? WHERE id = ?', [isFavorite ? 1 : 0, id])
-    saveDatabase()
+    saveDatabase('gallery')
   }
 
   delete(ids: string[]): void {
     const db = getDatabase()
     const placeholders = ids.map(() => '?').join(',')
     db.run(`DELETE FROM generated_images WHERE id IN (${placeholders})`, ids)
-    saveDatabase()
+    saveDatabase('gallery')
   }
 }

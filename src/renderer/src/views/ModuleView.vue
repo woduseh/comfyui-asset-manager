@@ -35,7 +35,8 @@ import PageHeader from '@renderer/components/common/PageHeader.vue'
 import OverflowActionMenu, {
   type OverflowAction
 } from '@renderer/components/common/OverflowActionMenu.vue'
-import { invokeIpc } from '@renderer/utils/ipc'
+import { invokeIpc, onIpc } from '@renderer/utils/ipc'
+import { createLatestRequest } from '@renderer/utils/latest-request'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import ModuleTypeFilter from '@renderer/components/modules/ModuleTypeFilter.vue'
 import ModuleBrowser from '@renderer/components/modules/ModuleBrowser.vue'
@@ -105,40 +106,57 @@ const filteredModules = computed(() => {
   })
 })
 
-let previewRequest = 0
-watch(selectedModuleId, async (id, _previous, onCleanup) => {
-  let current = true
-  onCleanup(() => {
-    current = false
-  })
+const detailRequests = createLatestRequest({
+  read: (id: string) => invokeIpc(IPC_CHANNELS.MODULE_GET, { id }),
+  commit: (module) => {
+    selectedModule.value = module as PromptModule | null
+  },
+  loading: () => {},
+  error: () => {}
+})
+const previewRequests = createLatestRequest({
+  read: (id: string) => invokeIpc(IPC_CHANNELS.PROMPT_PREVIEW, { moduleIds: [id] }),
+  commit: (result) => {
+    promptPreview.value = result
+  },
+  loading: () => {},
+  error: () => {
+    promptPreview.value = null
+  }
+})
+
+async function refreshSelectedModule(): Promise<void> {
+  const id = selectedModuleId.value
+  if (!id) return
+  await Promise.all([detailRequests.request(id), moduleStore.loadItems(id), updatePreview()])
+}
+
+watch(selectedModuleId, async (id) => {
+  detailRequests.cancel()
+  previewRequests.cancel()
   selectedModule.value = null
   moduleStore.selectModule(id)
   promptPreview.value = null
-  previewRequest++
   if (!id) return
   try {
-    const module = await invokeIpc(IPC_CHANNELS.MODULE_GET, { id })
-    if (!current) return
-    selectedModule.value = module as PromptModule | null
-    await moduleStore.loadItems(id)
-    if (current) await updatePreview()
+    await detailRequests.request(id)
+    if (id === selectedModuleId.value && selectedModule.value)
+      await Promise.all([moduleStore.loadItems(id), updatePreview()])
   } catch (error) {
-    if (current) message.error(String(error))
+    if (id === selectedModuleId.value) message.error(String(error))
   }
 })
 
 async function updatePreview(): Promise<void> {
   const id = selectedModuleId.value
-  const request = ++previewRequest
   if (!id) {
     promptPreview.value = null
     return
   }
   try {
-    const result = await invokeIpc(IPC_CHANNELS.PROMPT_PREVIEW, { moduleIds: [id] })
-    if (request === previewRequest && id === selectedModuleId.value) promptPreview.value = result
+    await previewRequests.request(id)
   } catch {
-    if (request === previewRequest && id === selectedModuleId.value) promptPreview.value = null
+    // A current preview failure is reflected by previewRequests.error.
   }
 }
 
@@ -180,9 +198,7 @@ async function handleEditModule(): Promise<void> {
     })
     showEditModuleModal.value = false
     if (selectedModuleId.value === editModule.value.id) {
-      selectedModule.value = (await invokeIpc(IPC_CHANNELS.MODULE_GET, {
-        id: editModule.value.id
-      })) as PromptModule | null
+      await refreshSelectedModule()
     }
     message.success(t('module.msg.updated'))
   } catch (e) {
@@ -374,13 +390,22 @@ async function handleReorderItems(): Promise<void> {
   await invokeIpc(IPC_CHANNELS.MODULE_ITEM_REORDER, { itemIds })
 }
 
+let unsubscribeData: (() => void) | undefined
 onBeforeUnmount(() => {
-  previewRequest++
+  unsubscribeData?.()
+  detailRequests.cancel()
+  previewRequests.cancel()
   moduleStore.selectModule(null)
 })
 
 onMounted(() => {
-  moduleStore.loadModules()
+  unsubscribeData = onIpc(IPC_CHANNELS.DATA_CHANGED, ({ scopes }) => {
+    if (!scopes.includes('modules')) return
+    void Promise.all([moduleStore.loadModules(), refreshSelectedModule()]).catch((error) =>
+      message.error(String(error))
+    )
+  })
+  void moduleStore.loadModules().catch((error) => message.error(String(error)))
 })
 </script>
 

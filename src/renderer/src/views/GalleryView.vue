@@ -24,8 +24,8 @@ import {
 import { useRoute, useRouter } from 'vue-router'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
-import { useQueueStore } from '@renderer/stores/queue.store'
-import { GALLERY_BATCH_REFRESH_DEBOUNCE_MS } from '@renderer/constants'
+import { onIpc } from '@renderer/utils/ipc'
+import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { buildGalleryRatingOptions, buildGallerySortOptions } from '@renderer/utils/view-labels'
 import { formatGalleryFileSize, parseGalleryGenerationParams } from '@renderer/utils/gallery'
 import PageShell from '@renderer/components/common/PageShell.vue'
@@ -39,7 +39,6 @@ const message = useMessage()
 const router = useRouter()
 const route = useRoute()
 const galleryStore = useGalleryStore()
-const queueStore = useQueueStore()
 
 // Filters
 const searchText = ref('')
@@ -54,6 +53,7 @@ const showDetail = ref(false)
 const detailIndex = ref(-1)
 const navigatingDetail = ref(false)
 const transitionImage = ref<GalleryImage | null>(null)
+let deletingDetail = false
 
 const detailImage = computed<GalleryImage | null>(() => {
   if (navigatingDetail.value && transitionImage.value) return transitionImage.value
@@ -272,8 +272,14 @@ async function handleDeleteFromDetail(): Promise<void> {
   if (!detailImage.value) return
   const id = detailImage.value.id
   const previousPage = galleryStore.page
+  const previousIndex = detailIndex.value
 
-  await galleryStore.deleteImages([id])
+  deletingDetail = true
+  try {
+    await galleryStore.deleteImages([id])
+  } finally {
+    deletingDetail = false
+  }
   message.success(t('gallery.msg.imageDeleted'))
 
   if (galleryStore.images.length === 0) {
@@ -282,7 +288,7 @@ async function handleDeleteFromDetail(): Promise<void> {
   } else {
     detailIndex.value =
       previousPage === galleryStore.page
-        ? Math.min(detailIndex.value, galleryStore.images.length - 1)
+        ? Math.min(previousIndex, galleryStore.images.length - 1)
         : galleryStore.images.length - 1
   }
 }
@@ -332,6 +338,18 @@ watch(
 )
 
 watch(
+  () => galleryStore.images,
+  (images, previous) => {
+    if (!showDetail.value || navigatingDetail.value || deletingDetail) return
+    const selected = previous[detailIndex.value]
+    if (!selected) return
+    detailIndex.value = images.findIndex((image) => image.id === selected.id)
+    if (detailIndex.value < 0) showDetail.value = false
+  },
+  { flush: 'sync' }
+)
+
+watch(
   () => galleryStore.images.map((image) => image.id),
   (visibleIds) => {
     const visible = new Set(visibleIds)
@@ -349,20 +367,14 @@ watch(showDetail, (val) => {
   }
 })
 
-// Auto-refresh gallery when tasks complete (debounced to avoid excessive reloads)
-let galleryRefreshTimer: ReturnType<typeof setTimeout> | null = null
-watch(
-  () => queueStore.activeJobs.reduce((sum, j) => sum + j.completed_tasks, 0),
-  () => {
-    if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
-    galleryRefreshTimer = setTimeout(() => {
-      if (!showDetail.value)
-        void galleryStore.loadImages().catch(() => message.error(t('gallery.msg.loadFailed')))
-    }, GALLERY_BATCH_REFRESH_DEBOUNCE_MS)
-  }
-)
+// Repository changes cover generated output and external gallery edits alike.
+let unsubscribeData: (() => void) | undefined
 
 onMounted(async () => {
+  unsubscribeData = onIpc(IPC_CHANNELS.DATA_CHANGED, ({ scopes }) => {
+    if (!scopes.includes('gallery')) return
+    void galleryStore.loadImages().catch(() => message.error(t('gallery.msg.loadFailed')))
+  })
   await applyFilters()
 
   const requestedImageId = typeof route.query.imageId === 'string' ? route.query.imageId : undefined
@@ -379,7 +391,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (galleryRefreshTimer) clearTimeout(galleryRefreshTimer)
+  unsubscribeData?.()
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   window.removeEventListener('keydown', handleKeydown)
 })

@@ -20,6 +20,8 @@ import {
   DB_SAVE_RETRY_DELAYS_MS
 } from '../../constants'
 import log from '../../logger'
+import type { DataChangeScope } from '@shared/ipc-contract'
+import { notifyDatabaseChanged } from './changes'
 
 let readEpoch = 0
 let db: SqlJsDatabase | null = null
@@ -34,6 +36,7 @@ let batchMode = false
 let isClosing = false
 let transactionDepth = 0
 let savepointCounter = 0
+const transactionChanges: Array<Set<DataChangeScope>> = []
 
 const SQLITE_OK = 'ok'
 
@@ -142,6 +145,7 @@ export async function initDatabase(): Promise<SqlJsDatabase> {
   lastSaveError = undefined
   transactionDepth = 0
   savepointCounter = 0
+  transactionChanges.length = 0
 
   const dataDir = join(app.getPath('userData'), 'data')
   if (!existsSync(dataDir)) {
@@ -193,8 +197,13 @@ export function getDatabase(): SqlJsDatabase {
   return db
 }
 
-export function saveDatabase(): void {
+export function saveDatabase(scope?: DataChangeScope): void {
   if (!db || isClosing) return
+  if (scope) {
+    const pending = transactionChanges.at(-1)
+    if (pending) pending.add(scope)
+    else notifyDatabaseChanged([scope])
+  }
   if (transactionDepth > 0) return
 
   requestDatabaseSave()
@@ -318,6 +327,7 @@ export async function closeDatabase(): Promise<void> {
     writePromise = null
     transactionDepth = 0
     savepointCounter = 0
+    transactionChanges.length = 0
   }
 
   if (closeError) {
@@ -325,7 +335,13 @@ export async function closeDatabase(): Promise<void> {
   }
 }
 
-export function withTransaction<T>(fn: () => T): T {
+/** All writes must finish synchronously; asynchronous effects belong outside the transaction. */
+export function withTransaction<T>(
+  fn: () => T & (Extract<T, PromiseLike<unknown>> extends never ? unknown : never)
+): T {
+  if (fn.constructor.name === 'AsyncFunction') {
+    throw new Error('Database transactions require a synchronous callback')
+  }
   const database = getDatabase()
   const isOutermost = transactionDepth === 0
   const savepointName = `app_tx_${++savepointCounter}`
@@ -333,9 +349,19 @@ export function withTransaction<T>(fn: () => T): T {
 
   database.run(isOutermost ? 'BEGIN TRANSACTION' : `SAVEPOINT ${savepointName}`)
   transactionDepth++
+  const changes = new Set<DataChangeScope>()
+  transactionChanges.push(changes)
 
   try {
     const result = fn()
+    if (
+      result !== null &&
+      (typeof result === 'object' || typeof result === 'function') &&
+      'then' in result &&
+      typeof result.then === 'function'
+    ) {
+      throw new Error('Database transactions must not return a Promise')
+    }
     database.run(isOutermost ? 'COMMIT' : `RELEASE SAVEPOINT ${savepointName}`)
     committed = true
     return result
@@ -355,6 +381,15 @@ export function withTransaction<T>(fn: () => T): T {
     // A rollback must invalidate snapshots even though SQLite total_changes() stays incremented.
     readEpoch++
     transactionDepth--
+    transactionChanges.pop()
+    if (committed) {
+      const parent = transactionChanges.at(-1)
+      if (parent) {
+        for (const scope of changes) parent.add(scope)
+      } else {
+        notifyDatabaseChanged(changes)
+      }
+    }
     if (isOutermost && committed) {
       requestDatabaseSave()
     }

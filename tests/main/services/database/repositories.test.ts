@@ -516,14 +516,15 @@ describe('Database Repositories', () => {
         [ids[0], 'uncertain'],
         [ids[0], 'failed'],
         [ids[1], 'uncertain']
-      ]) {
+      ] as const) {
         const taskId = tasks.createSingle({
           job_id: jobId,
           prompt_data: '{}',
           sort_order: 0,
           metadata: '{}'
         })
-        tasks.updateStatus(taskId, status)
+        if (status === 'failed') tasks.finish(taskId, status)
+        else tasks.updateStatus(taskId, status)
       }
 
       const first = repo.listSummaries(1, 0, 'failed')
@@ -716,26 +717,55 @@ describe('Database Repositories', () => {
       expect(taskRepo.listPage(jobId, 2, 0, "uncertain' OR 1=1 --")).toEqual([])
     })
 
-    it('updates task status', () => {
+    it('records the server before submission and binds an accepted prompt to that server', () => {
       taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const tasks = taskRepo.listByJob(jobId)
       const taskId = tasks[0].id as string
-      taskRepo.updateStatus(taskId, 'running')
+      taskRepo.markSubmitting(taskId, 'http://localhost:8188')
+      expect(taskRepo.get(taskId)).toMatchObject({
+        status: 'submitting',
+        comfyui_prompt_id: null,
+        comfyui_server_url: 'http://localhost:8188'
+      })
+      taskRepo.markAccepted(taskId, { promptId: 'prompt-123', serverUrl: 'http://localhost:8188' })
       const updated = taskRepo.listByJob(jobId)
-      expect(updated[0].status).toBe('running')
+      expect(updated[0]).toMatchObject({
+        status: 'running',
+        comfyui_prompt_id: 'prompt-123',
+        comfyui_server_url: 'http://localhost:8188'
+      })
     })
 
     it('updates status with extra fields', () => {
       taskRepo.createSingle({ job_id: jobId, prompt_data: '{}', sort_order: 0, metadata: '{}' })
       const taskId = taskRepo.listByJob(jobId)[0].id as string
-      taskRepo.updateStatus(taskId, 'completed', {
-        comfyui_prompt_id: 'prompt-123',
+      taskRepo.markAccepted(taskId, { promptId: 'prompt-123', serverUrl: 'http://localhost:8188' })
+      taskRepo.finish(taskId, 'completed', {
         result_path: '/output/image.png'
       })
       const task = taskRepo.listByJob(jobId)[0]
       expect(task.status).toBe('completed')
       expect(task.comfyui_prompt_id).toBe('prompt-123')
       expect(task.result_path).toBe('/output/image.png')
+    })
+
+    it('rejects terminal shortcuts and accepted requests without a server', () => {
+      const taskId = taskRepo.createSingle({
+        job_id: jobId,
+        prompt_data: '{}',
+        sort_order: 0,
+        metadata: '{}'
+      })
+      expect(() => {
+        // @ts-expect-error Terminal transitions must update progress through finish().
+        taskRepo.updateStatus(taskId, 'completed')
+      }).toThrow('finish()')
+      expect(() => {
+        // @ts-expect-error Accepted requests must retain the originating server.
+        taskRepo.markAccepted(taskId, { promptId: 'remote' })
+      }).toThrow('both its prompt ID')
+      expect(taskRepo.get(taskId)).toMatchObject({ status: 'pending', comfyui_prompt_id: null })
+      expect(jobRepo.get(jobId)).toMatchObject({ completed_tasks: 0, failed_tasks: 0 })
     })
 
     it('increments retry_count on retrying status', () => {
@@ -758,8 +788,8 @@ describe('Database Repositories', () => {
       }
       const tasks = taskRepo.listByJob(jobId)
       taskRepo.updateStatus(tasks[1].id as string, 'retrying')
-      taskRepo.updateStatus(tasks[2].id as string, 'failed')
-      taskRepo.updateStatus(tasks[3].id as string, 'completed')
+      taskRepo.finish(tasks[2].id as string, 'failed')
+      taskRepo.finish(tasks[3].id as string, 'completed')
 
       expect(taskRepo.listByJobPending(jobId, 50).map((task) => task.status)).toEqual([
         'pending',
@@ -782,9 +812,15 @@ describe('Database Repositories', () => {
         taskRepo.createSingle(task)
       }
       const tasks = taskRepo.listByJob(jobId)
-      taskRepo.updateStatus(tasks[0].id as string, 'completed')
-      taskRepo.updateStatus(tasks[1].id as string, 'running', { comfyui_prompt_id: 'p-1' })
-      taskRepo.updateStatus(tasks[2].id as string, 'running', { comfyui_prompt_id: 'p-2' })
+      taskRepo.finish(tasks[0].id as string, 'completed')
+      taskRepo.markAccepted(tasks[1].id as string, {
+        promptId: 'p-1',
+        serverUrl: 'http://localhost:8188'
+      })
+      taskRepo.markAccepted(tasks[2].id as string, {
+        promptId: 'p-2',
+        serverUrl: 'http://localhost:8188'
+      })
 
       taskRepo.resetRunningTasksByJob(jobId)
 
@@ -806,9 +842,10 @@ describe('Database Repositories', () => {
         taskRepo.createSingle(task)
       }
       const tasks = taskRepo.listByJob(jobId)
-      taskRepo.updateStatus(tasks[0].id as string, 'completed')
-      taskRepo.updateStatus(tasks[1].id as string, 'running')
-      taskRepo.updateStatus(tasks[2].id as string, 'failed')
+      taskRepo.finish(tasks[0].id as string, 'completed')
+      // Seed a legacy running request that had no persisted prompt ID.
+      mockDb.run("UPDATE batch_tasks SET status = 'running' WHERE id = ?", [tasks[1].id as string])
+      taskRepo.finish(tasks[2].id as string, 'failed')
       // tasks[3] stays 'pending'
 
       taskRepo.cancelRemainingTasksByJob(jobId)
@@ -828,7 +865,8 @@ describe('Database Repositories', () => {
           sort_order: 0,
           metadata: '{}'
         })
-        taskRepo.updateStatus(id, status)
+        // Older snapshots can contain incomplete submission evidence.
+        mockDb.run('UPDATE batch_tasks SET status = ? WHERE id = ?', [status, id])
       }
       taskRepo.resetRunningTasksByJob(jobId)
       expect(taskRepo.countByJobStatus(jobId)).toEqual({ uncertain: 3 })
@@ -856,7 +894,11 @@ describe('Database Repositories', () => {
           sort_order: index,
           metadata: '{}'
         })
-        taskRepo.updateStatus(id, status, { comfyui_prompt_id: `remote-${index}` })
+        mockDb.run('UPDATE batch_tasks SET status = ?, comfyui_prompt_id = ? WHERE id = ?', [
+          status,
+          `remote-${index}`,
+          id
+        ])
         return id
       })
       taskRepo.cancelRemainingTasksByJob(jobId)
@@ -883,7 +925,8 @@ describe('Database Repositories', () => {
         sort_order: 7,
         metadata: '{}'
       })
-      taskRepo.updateStatus(id, 'uncertain', { comfyui_prompt_id: 'remote' })
+      taskRepo.markAccepted(id, { promptId: 'remote', serverUrl: 'http://localhost:8188' })
+      taskRepo.updateStatus(id, 'uncertain')
       expect(taskRepo.nextSortOrder(jobId)).toBe(8)
       expect(taskRepo.get('missing')).toBeNull()
       taskRepo.updateStatus(id, 'retrying', { comfyui_prompt_id: null })

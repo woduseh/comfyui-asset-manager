@@ -5,9 +5,10 @@ import { defineComponent } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { NButton, NMessageProvider, NSelect, NCollapseItem } from 'naive-ui'
+import { NAlert, NButton, NMessageProvider, NSelect, NCollapseItem } from 'naive-ui'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
+import type { DataChangedEvent } from '@shared/ipc-contract'
 import BatchWizard from '@renderer/components/jobs/BatchWizard.vue'
 import JobStatusBar from '@renderer/components/jobs/JobStatusBar.vue'
 import ProductionJobTable from '@renderer/components/jobs/ProductionJobTable.vue'
@@ -19,10 +20,16 @@ import OverflowActionMenu from '@renderer/components/common/OverflowActionMenu.v
 import ko from '@renderer/locales/ko.json'
 import en from '@renderer/locales/en.json'
 
-const invokeIpcMock = vi.hoisted(() => vi.fn())
+const { invokeIpcMock, onIpcMock } = vi.hoisted(() => ({
+  invokeIpcMock: vi.fn(),
+  onIpcMock: vi.fn<(channel: string, listener: (event: DataChangedEvent) => void) => () => void>(
+    () => vi.fn()
+  )
+}))
 
 vi.mock('@renderer/utils/ipc', () => ({
-  invokeIpc: invokeIpcMock
+  invokeIpc: invokeIpcMock,
+  onIpc: onIpcMock
 }))
 
 function createTestI18n(): ReturnType<typeof createI18n> {
@@ -37,6 +44,7 @@ function createTestI18n(): ReturnType<typeof createI18n> {
 
 beforeEach(() => {
   invokeIpcMock.mockReset()
+  onIpcMock.mockClear()
   invokeIpcMock.mockImplementation((channel: string) => {
     if (channel === IPC_CHANNELS.MODULE_LIST) {
       return Promise.resolve([
@@ -72,6 +80,7 @@ beforeEach(() => {
       ])
     }
     if (channel === IPC_CHANNELS.WORKFLOW_VARIABLES) return Promise.resolve([])
+    if (channel === IPC_CHANNELS.BATCH_PREVIEW_COUNT) return Promise.resolve(1)
     if (channel === IPC_CHANNELS.COMFYUI_MODELS) {
       return Promise.resolve({
         checkpoints: [],
@@ -291,10 +300,14 @@ describe('BatchWizard', () => {
       IPC_CHANNELS.WORKFLOW_VARIABLES,
       IPC_CHANNELS.COMFYUI_MODELS,
       IPC_CHANNELS.MODULE_ITEM_LIST
-    ].flatMap((pendingChannel) => [
-      { pendingChannel, oldResponseFirst: true },
-      { pendingChannel, oldResponseFirst: false }
-    ])
+    ].flatMap<{ pendingChannel: string; oldResponseFirst: boolean }>((pendingChannel) =>
+      pendingChannel === IPC_CHANNELS.MODULE_LIST
+        ? [{ pendingChannel, oldResponseFirst: true }]
+        : [
+            { pendingChannel, oldResponseFirst: true },
+            { pendingChannel, oldResponseFirst: false }
+          ]
+    )
   )(
     'ignores cancelled $pendingChannel initialization (old response first: $oldResponseFirst)',
     async ({ pendingChannel, oldResponseFirst }) => {
@@ -351,10 +364,11 @@ describe('BatchWizard', () => {
       await wrapper.setProps({ sourceJob: job('Current') })
       await wrapper.setProps({ show: true })
       await flushPromises()
-      expect(pending).toHaveLength(2)
+      expect(pending).toHaveLength(pendingChannel === IPC_CHANNELS.MODULE_LIST ? 1 : 2)
       const wizard = wrapper.findComponent(BatchWizard)
       pending[oldResponseFirst ? 0 : 1]()
       await flushPromises()
+      expect(pending).toHaveLength(2)
       expect(
         wizard
           .findAllComponents(NButton)
@@ -474,6 +488,89 @@ describe('BatchWizard', () => {
     expect(wizard.findComponent(WizardStepConfirm).props('variableOverrides')).toEqual([
       expect.objectContaining({ enabled: false, value: '20' })
     ])
+    wrapper.unmount()
+  })
+
+  it('uses only the latest persisted-item count and blocks saving while a preview is unresolved', async () => {
+    const pending: Array<{ resolve: (count: number) => void; reject: (error: Error) => void }> = []
+    const defaultInvoke = invokeIpcMock.getMockImplementation()!
+    invokeIpcMock.mockImplementation((channel: string, args: unknown) =>
+      channel === IPC_CHANNELS.BATCH_PREVIEW_COUNT
+        ? new Promise<number>((resolve, reject) => pending.push({ resolve, reject }))
+        : defaultInvoke(channel, args)
+    )
+    const sourceJob = {
+      id: 'saved',
+      name: 'Keep my draft',
+      config: JSON.stringify({
+        workflowId: 'workflow-1',
+        moduleSelections: [{ moduleId: 'module-1', selectedItemIds: ['item-1', 'disabled'] }]
+      })
+    }
+    const Host = defineComponent({
+      components: { BatchWizard, NMessageProvider },
+      setup: () => ({ sourceJob }),
+      template:
+        '<NMessageProvider><BatchWizard :show="true" mode="edit" :source-job="sourceJob" /></NMessageProvider>'
+    })
+    const wrapper = mount(Host, {
+      global: {
+        plugins: [createPinia(), createTestI18n()],
+        stubs: {
+          NModal: { template: '<div><slot /><slot name="footer" /></div>' },
+          NScrollbar: { template: '<div><slot /></div>' }
+        }
+      }
+    })
+    await flushPromises()
+    const wizard = wrapper.findComponent(BatchWizard)
+    const submit = wizard
+      .findAllComponents(NButton)
+      .find((button) => button.text().includes('wizard.submitEdit'))!
+    expect(submit.props('disabled')).toBe(true)
+    wizard.findComponent(WizardStepWorkflow).vm.$emit('update:countPerCombination', 3)
+    await flushPromises()
+    pending[0].resolve(2)
+    await flushPromises()
+    expect(submit.props('disabled')).toBe(true)
+    expect(wizard.findComponent(WizardStepConfirm).props('taskPreview').totalTasks).toBe(0)
+    pending[1].resolve(3)
+    await flushPromises()
+    expect(wizard.findComponent(WizardStepConfirm).props('taskPreview')).toEqual({
+      totalTasks: 3,
+      totalCombinations: 1
+    })
+    expect(submit.props('disabled')).toBe(false)
+
+    onIpcMock.mock.calls.find(([channel]) => channel === IPC_CHANNELS.DATA_CHANGED)![1]({
+      scopes: ['modules']
+    })
+    await flushPromises()
+    expect(submit.props('disabled')).toBe(true)
+    pending[2].reject(new Error('Read failed'))
+    await flushPromises()
+    expect(submit.props('disabled')).toBe(true)
+    expect(
+      wizard
+        .findAllComponents(NAlert)
+        .find((alert) => alert.props('type') === 'error')!
+        .text()
+    ).toContain('batch.editor.previewFailed')
+    expect(wizard.findComponent(WizardStepWorkflow).props('batchName')).toBe('Keep my draft')
+    await wizard
+      .findAllComponents(NButton)
+      .find((button) => button.text() === 'common.retry')!
+      .trigger('click')
+    await flushPromises()
+    pending[3].resolve(3)
+    await flushPromises()
+    expect(submit.props('disabled')).toBe(false)
+    await submit.trigger('click')
+    await flushPromises()
+    expect(invokeIpcMock).toHaveBeenCalledWith(
+      IPC_CHANNELS.BATCH_UPDATE_DRAFT,
+      expect.objectContaining({ id: 'saved' })
+    )
     wrapper.unmount()
   })
 

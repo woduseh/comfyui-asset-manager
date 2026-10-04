@@ -44,11 +44,25 @@ function fixture(): Parameters<typeof downloadTaskImages>[0] & {
     taskId: 'task',
     jobId: 'job',
     getImage: vi.fn(async () => Buffer.from('complete-image')),
+    journal: { plan: vi.fn(), discard: vi.fn() },
     target: { savedPaths: [] as string[], imageRecords: [] as TaskImageRecord[] }
   }
 }
 
 describe('task output failure boundaries', () => {
+  it('does not create an output file when recording intent fails', async () => {
+    const options = fixture()
+    options.journal.plan = () => {
+      throw new Error('Journal unavailable')
+    }
+
+    await expect(downloadTaskImages(options)).rejects.toThrow('Journal unavailable')
+
+    expect(options.target.savedPaths).toEqual([])
+    expect(options.target.imageRecords).toEqual([])
+    expect(fs.readdirSync(options.outputDirectory)).toEqual([])
+  })
+
   it('tracks partially written files for cleanup when the write fails', async () => {
     const options = fixture()
     vi.mocked(fs.writeFileSync).mockImplementationOnce((path) => {

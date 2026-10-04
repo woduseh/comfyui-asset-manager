@@ -3,7 +3,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
-import { NSelect } from 'naive-ui'
+import { NButton, NCheckbox, NSelect } from 'naive-ui'
 import { describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import WizardStepModules from '@renderer/components/jobs/WizardStepModules.vue'
@@ -72,6 +72,19 @@ describe('wizard module selection', () => {
       })
     ])
     expect(moduleStore.currentItems).toEqual([editorItem])
+
+    expect(
+      wrapper
+        .findAllComponents(NCheckbox)
+        .find((checkbox) => checkbox.props('value') === 'first-disabled')!
+        .props('disabled')
+    ).toBe(true)
+    wrapper.props('moduleSelections')[0].selectedItemIds = []
+    await wrapper
+      .findAllComponents(NButton)
+      .find((button) => button.text() === 'batch.wizard.selectAllShort')!
+      .trigger('click')
+    expect(wrapper.props('moduleSelections')[0].selectedItemIds).toEqual(['first-enabled'])
     wrapper.unmount()
   })
 })

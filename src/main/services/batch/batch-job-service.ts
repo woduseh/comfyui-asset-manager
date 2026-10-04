@@ -5,9 +5,13 @@ import {
   ModuleRepository,
   type BatchJobWriteData
 } from '../database/repositories'
-import { validateBatchConfig, validatePromptVariants } from '../../ipc/validators'
+import {
+  validateBatchConfig,
+  validateBatchPreviewInput,
+  validatePromptVariants
+} from '../../ipc/validators'
 import { buildPrompt } from '../prompt/composition-engine'
-import type { BatchConfig } from '@shared/ipc-contract'
+import type { BatchConfig, BatchModuleSelection } from '@shared/ipc-contract'
 import { countTotalTasksFromData, type ModuleDataSnapshot } from './task-generator'
 
 export interface PreparedBatchJob {
@@ -36,6 +40,14 @@ export class BatchJobService {
     this.dependencies.batchJobRepo.updateDraft(id, prepared.data)
     notifyBatchChanged()
     return { jobId: id, totalTasks: prepared.totalTasks }
+  }
+
+  previewCount(moduleSelections: BatchModuleSelection[], countPerCombination: number): number {
+    validateBatchPreviewInput(moduleSelections, countPerCombination)
+    return countTotalTasksFromData(
+      { moduleSelections, countPerCombination },
+      this.resolveModuleData(moduleSelections)
+    )
   }
 
   prepare(config: BatchConfig): PreparedBatchJob {
@@ -82,33 +94,7 @@ export class BatchJobService {
       }
     }
 
-    // Keep every selected item when a module supplies more than one dimension.
-    const selectedIdsByModule = new Map<string, Set<string>>()
-    for (const selection of resolvedConfig.moduleSelections) {
-      let ids = selectedIdsByModule.get(selection.moduleId)
-      if (!ids) {
-        ids = new Set<string>()
-        selectedIdsByModule.set(selection.moduleId, ids)
-      }
-      for (const id of selection.selectedItemIds) ids.add(id)
-    }
-
-    const moduleData: ModuleDataSnapshot = resolvedConfig.moduleSelections.map((selection) => ({
-      moduleId: selection.moduleId,
-      moduleType: selection.moduleType,
-      items: this.dependencies.moduleItemRepo
-        .list(selection.moduleId)
-        .filter((item) => selectedIdsByModule.get(selection.moduleId)!.has(item.id as string))
-        .map((item) => ({
-          id: item.id as string,
-          name: item.name as string,
-          prompt: item.prompt as string,
-          negative: (item.negative as string) || '',
-          weight: (item.weight as number | null) ?? 1.0,
-          enabled: (item.enabled as number) !== 0,
-          prompt_variants: validatePromptVariants(item.prompt_variants as string)
-        }))
-    }))
+    const moduleData = this.resolveModuleData(resolvedConfig.moduleSelections)
     const totalTasks = countTotalTasksFromData(resolvedConfig, moduleData)
     if (totalTasks <= 0) {
       throw new Error('Batch must contain at least one enabled selected item')
@@ -128,6 +114,36 @@ export class BatchJobService {
         module_data_snapshot: JSON.stringify(moduleData)
       }
     }
+  }
+
+  private resolveModuleData(moduleSelections: BatchModuleSelection[]): ModuleDataSnapshot {
+    // Keep every selected item when a module supplies more than one dimension.
+    const selectedIdsByModule = new Map<string, Set<string>>()
+    for (const selection of moduleSelections) {
+      let ids = selectedIdsByModule.get(selection.moduleId)
+      if (!ids) {
+        ids = new Set<string>()
+        selectedIdsByModule.set(selection.moduleId, ids)
+      }
+      for (const id of selection.selectedItemIds) ids.add(id)
+    }
+
+    return moduleSelections.map((selection) => ({
+      moduleId: selection.moduleId,
+      moduleType: selection.moduleType,
+      items: this.dependencies.moduleItemRepo
+        .list(selection.moduleId)
+        .filter((item) => selectedIdsByModule.get(selection.moduleId)!.has(item.id as string))
+        .map((item) => ({
+          id: item.id as string,
+          name: item.name as string,
+          prompt: item.prompt as string,
+          negative: (item.negative as string) || '',
+          weight: (item.weight as number | null) ?? 1.0,
+          enabled: (item.enabled as number) !== 0,
+          prompt_variants: validatePromptVariants(item.prompt_variants as string)
+        }))
+    }))
   }
 }
 

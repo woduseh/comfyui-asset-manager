@@ -5,4 +5,3 @@ export const PRODUCTION_RECENT_RESULTS_LIMIT = 8
 
 // === Batch Processing UI ===
 export const JOBS_REFRESH_INTERVAL_MS = 10_000 // Job list polling interval during batch
-export const GALLERY_BATCH_REFRESH_DEBOUNCE_MS = 10_000 // Gallery auto-refresh debounce during batch

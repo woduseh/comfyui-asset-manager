@@ -160,6 +160,33 @@ describe('BatchJobService', () => {
     )
   })
 
+  it('previews the same enabled-item count used for creation and draft edits', () => {
+    const items = moduleItemList()
+    moduleItemList.mockReturnValue([
+      ...items,
+      { ...items[0], id: 'disabled', enabled: 0 },
+      { ...items[0], id: 'unselected' }
+    ])
+    const config = makeConfig({
+      moduleSelections: [
+        {
+          moduleId: 'module-id',
+          moduleType: 'character',
+          selectedItemIds: ['item-id', 'disabled', 'missing']
+        }
+      ],
+      countPerCombination: 3
+    })
+
+    expect(service.previewCount(config.moduleSelections, config.countPerCombination)).toBe(3)
+    expect(service.create(config).totalTasks).toBe(3)
+    expect(service.updateDraft('existing-job', config)).toEqual({
+      jobId: 'existing-job',
+      totalTasks: 3
+    })
+    moduleItemList.mockReturnValue(items)
+  })
+
   it('rejects invalid or empty jobs before persistence', () => {
     expect(() => service.create(makeConfig({ countPerCombination: 0 }))).toThrow(
       'count per combination'

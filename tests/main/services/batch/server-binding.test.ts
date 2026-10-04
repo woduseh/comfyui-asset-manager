@@ -113,10 +113,14 @@ describe('ComfyUI execution server binding', () => {
     async (mode) => {
       const accepted = await manager.restClient.queuePrompt({})
       source.complete(accepted.prompt_id)
-      new repos.BatchTaskRepository().updateStatus(taskId, 'running', {
-        comfyui_prompt_id: accepted.prompt_id,
-        ...(mode === 'different' ? { comfyui_server_url: manager.restClient.serverUrl } : {})
+      new repos.BatchTaskRepository().markAccepted(taskId, {
+        promptId: accepted.prompt_id,
+        serverUrl: manager.restClient.serverUrl
       })
+      if (mode === 'unknown') {
+        // Legacy snapshots accepted requests before the server URL was recorded.
+        fixture.db.run('UPDATE batch_tasks SET comfyui_server_url = NULL WHERE id = ?', [taskId])
+      }
       new repos.BatchJobRepository().updateStatus(jobId, 'running')
       await fixture.database.closeDatabase()
       fixture.db = await fixture.database.initDatabase()

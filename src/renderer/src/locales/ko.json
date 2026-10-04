@@ -406,6 +406,8 @@
       "summary": "생성 요약",
       "formula": "{combinations}개 조합 × 조합당 {count}장",
       "selectItemsHint": "모듈에서 사용할 아이템을 선택하면 예상 수량이 표시됩니다.",
+      "previewLoading": "생성 수량을 계산하고 있어요…",
+      "previewFailed": "생성 수량을 계산하지 못했어요: {error}",
       "saveHint": "저장한 작업은 생성 대기열에 추가됩니다. 실제 생성은 작업을 시작할 때 실행됩니다.",
       "requiredHint": "작업 이름, 워크플로우, 하나 이상의 아이템 조합이 필요합니다.",
       "editRoles": "워크플로우 변수 역할 설정",

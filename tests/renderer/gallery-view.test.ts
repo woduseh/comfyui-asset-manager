@@ -4,7 +4,7 @@ import { defineComponent, reactive } from 'vue'
 import { createPinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { NMessageProvider } from 'naive-ui'
+import { NMessageProvider, NRate } from 'naive-ui'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import GalleryView from '@renderer/views/GalleryView.vue'
@@ -13,12 +13,19 @@ import GalleryImageCard from '@renderer/components/gallery/GalleryImageCard.vue'
 import { useGalleryStore } from '@renderer/stores/gallery.store'
 import en from '@renderer/locales/en.json'
 
-const { invokeIpc, replace, route } = vi.hoisted(() => ({
+const { invokeIpc, replace, route, listeners } = vi.hoisted(() => ({
   invokeIpc: vi.fn(),
   replace: vi.fn(),
-  route: { query: {} as Record<string, string> }
+  route: { query: {} as Record<string, string> },
+  listeners: new Map<string, (payload: unknown) => void>()
 }))
-vi.mock('@renderer/utils/ipc', () => ({ invokeIpc }))
+vi.mock('@renderer/utils/ipc', () => ({
+  invokeIpc,
+  onIpc: (channel: string, listener: (payload: unknown) => void) => {
+    listeners.set(channel, listener)
+    return () => listeners.delete(channel)
+  }
+}))
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
   useRoute: () => route
@@ -34,6 +41,7 @@ describe('gallery continuous viewer', () => {
     rejectNavigation = false
     pendingNavigation = undefined
     invokeIpc.mockReset()
+    listeners.clear()
     invokeIpc.mockImplementation(async (channel, query) => {
       if (channel !== IPC_CHANNELS.GALLERY_LIST) return true
       if (query.page === 2 && rejectNavigation) throw new Error('offline')
@@ -105,6 +113,45 @@ describe('gallery continuous viewer', () => {
     await view.get('.nav-prev').trigger('click')
     await flushPromises()
     expect(view.get('.detail-position').text()).toBe('2 / 3')
+  })
+
+  it('keeps the selected image on an external review reorder and updates its rating/favorite', async () => {
+    const view = await openGallery()
+    view.findAllComponents(GalleryImageCard)[1].vm.$emit('open')
+    await flushPromises()
+    invokeIpc.mockResolvedValueOnce({
+      items: [
+        { id: '2', file_path: 'image-2.png', rating: 5, is_favorite: 1 },
+        { id: '1', file_path: 'image-1.png', rating: 0, is_favorite: 0 }
+      ],
+      total: 3
+    })
+    listeners.get(IPC_CHANNELS.DATA_CHANGED)!({ scopes: ['gallery'] })
+    await flushPromises()
+    expect(view.get('.detail-position').text()).toBe('1 / 3')
+    expect(view.findComponent(NRate).props('value')).toBe(5)
+    expect(view.get('.detail-actions').text()).toContain('♥')
+    expect(invokeIpc.mock.calls.at(-1)?.[1]).toMatchObject({ page: 1, jobId: 'selected-job' })
+    view.unmount()
+    wrapper = undefined
+    expect(listeners.size).toBe(0)
+  })
+
+  it('preserves a requested page over a stale navigation response during external invalidation', async () => {
+    const view = await openGallery()
+    view.findAllComponents(GalleryImageCard)[1].vm.$emit('open')
+    await flushPromises()
+    pendingNavigation = () => {}
+    await view.get('.nav-next').trigger('click')
+    await flushPromises()
+    listeners.get(IPC_CHANNELS.DATA_CHANGED)!({ scopes: ['gallery'] })
+    const release = pendingNavigation!
+    pendingNavigation = undefined
+    release()
+    await flushPromises()
+    expect(view.get('.detail-position').text()).toBe('3 / 3')
+    expect(invokeIpc.mock.calls.at(-1)?.[1]).toMatchObject({ page: 2, jobId: 'selected-job' })
+    expect(useGalleryStore().page).toBe(2)
   })
 
   it('keeps the current image on failure and allows retry', async () => {

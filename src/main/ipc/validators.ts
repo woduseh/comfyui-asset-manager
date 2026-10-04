@@ -128,19 +128,10 @@ export function validateWorkflowRole(val: unknown): string {
 
 export function validateWorkflowUpdate(val: unknown): void {
   const data = validateObject(val, 'workflow update')
-  rejectUnknownFields(
-    data,
-    ['name', 'description', 'category', 'api_json', 'ui_json', 'variables'],
-    'workflow update'
-  )
+  rejectUnknownFields(data, ['name', 'description', 'category'], 'workflow update')
   if (data.name !== undefined) validateString(data.name, 200)
   if (data.description !== undefined) validateString(data.description, 10_000)
   if (data.category !== undefined) validateWorkflowCategory(data.category)
-  if (data.api_json !== undefined) validateString(data.api_json, MAX_WORKFLOW_JSON_LENGTH)
-  if (data.ui_json !== undefined && data.ui_json !== null) {
-    validateString(data.ui_json, MAX_WORKFLOW_JSON_LENGTH)
-  }
-  if (data.variables !== undefined) validateString(data.variables, MAX_WORKFLOW_JSON_LENGTH)
 }
 
 export function validateModuleData(val: unknown, update = false): void {
@@ -431,8 +422,6 @@ export function validateTerminalDimensions(cols: unknown, rows: unknown): void {
   validateIntegerRange(cols, 1, MAX_TERMINAL_DIMENSION, 'Terminal columns')
   validateIntegerRange(rows, 1, MAX_TERMINAL_DIMENSION, 'Terminal rows')
 }
-
-const MAX_WORKFLOW_JSON_LENGTH = 10_485_760
 
 export function validateRating(val: unknown): number {
   if (typeof val !== 'number' || !Number.isFinite(val) || val < 0 || val > 5) {

@@ -123,7 +123,7 @@ export function writeModuleItemsFile(
     fs.writeFileSync(resolved, content, { encoding: 'utf-8', flag: 'wx' })
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
-      throw new Error(existsMessage)
+      throw new Error(existsMessage, { cause: error })
     }
     throw error
   }

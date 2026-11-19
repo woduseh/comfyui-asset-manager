@@ -123,7 +123,7 @@ MCP에 연결된 에이전트에게 캐릭터 프로필과 필요한 감정을 �
 
 예를 들어 얼굴 왜곡이나 의상 불일치 등을 제외하려면 `create_module`로 `type: "negative"`인 공통 제외 모듈을 만들고, 그 안에 `prompt: "blurry face, distorted facial features, inconsistent clothing"`인 항목 하나를 생성해 선택해요. `negative` 필드는 빈 문자열로 둘 수 있어요. 자연어 variant가 필요한 슬롯이면 `natural_language.prompt`에도 제외 내용을 넣어요. 명시적으로 슬롯을 나눈다면 positive 슬롯에는 캐릭터·의상·감정 모듈을, negative 슬롯에는 이 제외 모듈을 할당하고 필요한 모든 슬롯을 함께 설정해요. 제외 모듈에서 항목 하나만 선택하면 기존 3개 감정 조합의 수량은 늘어나지 않아요. 해당 워크플로우가 negative conditioning을 지원하는지는 먼저 확인해요.
 
-Danbooru 검사는 태그 프롬프트에만 사용해요. 새로 작성하거나 변경한 태그를 저장 전에 `validate_danbooru_tags`로 한 번에 최대 200개씩 검증하고, 바뀌지 않은 태그의 성공 결과는 새 근거가 없는 한 재사용해요. 조회 불가로 `unverified`인 태그는 잘못된 태그로 단정하거나 계속 재시도하지 않고 확인 한계를 알려요. `danbooru_tag_guide`는 서식·검증 안내만 제공하며 인기 태그 예시는 필요할 때 `get_popular_danbooru_tags`로 조회해요.
+Danbooru 검사는 태그 프롬프트에만 사용해요. 새로 작성하거나 변경한 태그를 저장 전에 `validate_danbooru_tags`로 한 번에 최대 200개씩 검증하고, 바뀌지 않은 태그의 성공 결과는 새 근거가 없는 한 재사용해요. 조회 불가로 `unverified`인 태그는 잘못된 태그로 단정하거나 계속 재시도하지 않고 확인 한계를 알려요. `danbooru_tag_guide` MCP 프롬프트는 서식·검증 안내만 제공하며 인기 태그 예시는 필요할 때 `get_popular_danbooru_tags`로 조회해요.
 
 `validate_module_tags`는 기본적으로 `tags` variant를 검사하며, 기본 프롬프트가 자연어이면 `include_default: false`를 지정해요. 다른 태그 variant는 `variant_names`로 선택할 수 있어요. 자연어를 태그 검증 결과에 맞춰 무조건 바꾸지 않아요.
 

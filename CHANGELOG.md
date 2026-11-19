@@ -8,6 +8,10 @@
 
 - 에이전트 지침 `AGENTS.md`를 Claude Code와 Codex 공용으로 정리하고, 승인이 필요한 프로젝트 작업과
   승인 없이 실행하는 검사를 구체적으로 명시
+- 의존성 minor·patch 22개 갱신. sql.js 1.15.2부터 DB 내보내기가 연결을 유지해 외래키 등 연결 설정이 보존되며,
+  쓰기 트랜잭션 중 내보내기는 롤백 대신 오류로 거부
+- `@electron-toolkit/eslint-config-ts` 4.0으로 갱신하고, 새 `preserve-caught-error` 규칙에 맞춰
+  MCP 파일 내보내기의 기존 파일 충돌 오류에 원인 오류를 연결
 
 ## [1.0.2] - 2026-11-19
 

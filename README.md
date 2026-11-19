@@ -240,9 +240,9 @@ npm run dev        # 개발 모드 (HMR)
 
 ## 개발
 
-### Codex 작업 안내
+### 에이전트 작업 안내
 
-저장소의 에이전트 지침은 [AGENTS.md](AGENTS.md)에서 Codex용으로 관리합니다.
+저장소의 에이전트 지침은 [AGENTS.md](AGENTS.md) 하나에서 관리하며 Claude Code와 Codex가 함께 사용합니다.
 변경 이력은 [CHANGELOG.md](CHANGELOG.md), 현재 제약과 판단에 필요한 감사·성능 근거는
 `docs/`에서 관리합니다. 과거 구현 과정은 Git 이력에서 확인할 수 있습니다.
 앱의 MCP 클라이언트 연동 지원과 저장소의 에이전트 지침 지원은 별개입니다.

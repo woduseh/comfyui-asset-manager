@@ -180,7 +180,7 @@
     "defaultValueNone": "(none)"
   },
   "module": {
-    "title": "Prompt Modules",
+    "title": "Library",
     "pageDescription": "Manage reusable prompt modules, items, and slot-specific variants.",
     "create": "New Module",
     "empty": "No modules registered",
@@ -433,7 +433,7 @@
     "statusWaiting": "Waiting"
   },
   "gallery": {
-    "title": "Gallery",
+    "title": "Results",
     "pageDescription": "Search, rate, and inspect generated images.",
     "empty": "No generated images",
     "imageCount": "{count} images",
@@ -492,7 +492,8 @@
       "outfit": "Outfit",
       "emotion": "Emotion",
       "style": "Style",
-      "file": "File"
+      "file": "File",
+      "parameters": "Parameters"
     },
     "promptInfo": "Prompt Info",
     "emptyHint": "Compare and curate your generated images here. Start your first job in Production.",

@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
 
 .workflow-variable {
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--app-surface-muted);
   margin-bottom: 8px;
 }

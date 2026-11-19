@@ -130,7 +130,7 @@ describe('gallery continuous viewer', () => {
     await flushPromises()
     expect(view.get('.detail-position').text()).toBe('1 / 3')
     expect(view.findComponent(NRate).props('value')).toBe(5)
-    expect(view.get('.detail-actions').text()).toContain('♥')
+    expect(view.find('.detail-actions [aria-pressed="true"]').exists()).toBe(true)
     expect(invokeIpc.mock.calls.at(-1)?.[1]).toMatchObject({ page: 1, jobId: 'selected-job' })
     view.unmount()
     wrapper = undefined

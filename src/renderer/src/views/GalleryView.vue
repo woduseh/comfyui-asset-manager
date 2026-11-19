@@ -19,15 +19,31 @@ import {
   NCollapse,
   NCollapseItem,
   NSkeleton,
-  NAlert
+  NAlert,
+  NIcon
 } from 'naive-ui'
+import {
+  ChevronBackOutline,
+  ChevronForwardOutline,
+  CloseOutline,
+  CopyOutline,
+  FolderOpenOutline,
+  Heart,
+  HeartOutline,
+  TrashOutline
+} from '@vicons/ionicons5'
 import { useRoute, useRouter } from 'vue-router'
 import type { SelectMixedOption } from 'naive-ui/es/select/src/interface'
 import { useGalleryStore, type GalleryImage } from '@renderer/stores/gallery.store'
 import { onIpc } from '@renderer/utils/ipc'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
 import { buildGalleryRatingOptions, buildGallerySortOptions } from '@renderer/utils/view-labels'
-import { formatGalleryFileSize, parseGalleryGenerationParams } from '@renderer/utils/gallery'
+import {
+  formatGalleryFileSize,
+  parseGalleryGenerationParams,
+  toAssetUrl,
+  toThumbnailUrl
+} from '@renderer/utils/gallery'
 import PageShell from '@renderer/components/common/PageShell.vue'
 import PageHeader from '@renderer/components/common/PageHeader.vue'
 import ActionableEmptyState from '@renderer/components/common/ActionableEmptyState.vue'
@@ -84,11 +100,6 @@ const selectionMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
 const failedImageIds = ref<Set<string>>(new Set())
 const failedImageCount = computed(() => failedImageIds.value.size)
-
-function toFileUrl(path: string | undefined): string {
-  if (!path) return ''
-  return 'local-asset://image/' + encodeURIComponent(path)
-}
 
 const sortOptions = computed(() => buildGallerySortOptions(t))
 
@@ -496,7 +507,7 @@ onUnmounted(() => {
               :image="image"
               :selected="selectedIds.has(image.id)"
               :selection-mode="selectionMode"
-              :source="toFileUrl(image.thumbnail_path || image.file_path)"
+              :source="toThumbnailUrl(image)"
               @open="openDetail(image)"
               @rate="(value) => galleryStore.rateImage(image.id, value)"
               @favorite="handleToggleFavorite(image)"
@@ -544,12 +555,14 @@ onUnmounted(() => {
       <div v-if="detailImage" class="detail-overlay" @click.self="showDetail = false">
         <!-- Navigation: Previous -->
         <button
+          type="button"
           class="nav-btn nav-prev"
           :disabled="!canGoPrev"
           :title="t('gallery.viewer.prevImage')"
+          :aria-label="t('gallery.viewer.prevImage')"
           @click="goToPrev"
         >
-          ‹
+          <NIcon :component="ChevronBackOutline" :size="28" />
         </button>
 
         <!-- Main content -->
@@ -560,16 +573,26 @@ onUnmounted(() => {
             <div class="detail-actions">
               <NTooltip>
                 <template #trigger>
-                  <NButton quaternary circle size="small" @click="handleCopyToClipboard">
-                    📋
+                  <NButton
+                    quaternary
+                    circle
+                    :aria-label="t('gallery.viewer.copyToClipboard')"
+                    @click="handleCopyToClipboard"
+                  >
+                    <template #icon><NIcon :component="CopyOutline" /></template>
                   </NButton>
                 </template>
                 {{ t('gallery.viewer.copyToClipboard') }}
               </NTooltip>
               <NTooltip>
                 <template #trigger>
-                  <NButton quaternary circle size="small" @click="handleShowInExplorer">
-                    📂
+                  <NButton
+                    quaternary
+                    circle
+                    :aria-label="t('gallery.viewer.openInExplorer')"
+                    @click="handleShowInExplorer"
+                  >
+                    <template #icon><NIcon :component="FolderOpenOutline" /></template>
                   </NButton>
                 </template>
                 {{ t('gallery.viewer.openInExplorer') }}
@@ -579,11 +602,18 @@ onUnmounted(() => {
                   <NButton
                     quaternary
                     circle
-                    size="small"
                     :type="detailImage.is_favorite ? 'warning' : 'default'"
+                    :aria-label="
+                      detailImage.is_favorite
+                        ? t('gallery.viewer.removeFavorite')
+                        : t('gallery.viewer.addFavorite')
+                    "
+                    :aria-pressed="!!detailImage.is_favorite"
                     @click="handleToggleFavorite(detailImage!)"
                   >
-                    {{ detailImage.is_favorite ? '♥' : '♡' }}
+                    <template #icon>
+                      <NIcon :component="detailImage.is_favorite ? Heart : HeartOutline" />
+                    </template>
                   </NButton>
                 </template>
                 {{
@@ -600,7 +630,14 @@ onUnmounted(() => {
                 <template #trigger>
                   <NTooltip>
                     <template #trigger>
-                      <NButton quaternary circle size="small" type="error"> 🗑️ </NButton>
+                      <NButton
+                        quaternary
+                        circle
+                        type="error"
+                        :aria-label="t('gallery.viewer.deleteImage')"
+                      >
+                        <template #icon><NIcon :component="TrashOutline" /></template>
+                      </NButton>
                     </template>
                     {{ t('gallery.viewer.deleteImage') }}
                   </NTooltip>
@@ -610,11 +647,11 @@ onUnmounted(() => {
               <NButton
                 quaternary
                 circle
-                size="small"
-                style="margin-left: 8px"
+                class="detail-close"
+                :aria-label="t('common.close')"
                 @click="showDetail = false"
               >
-                ✕
+                <template #icon><NIcon :component="CloseOutline" /></template>
               </NButton>
             </div>
           </div>
@@ -625,9 +662,9 @@ onUnmounted(() => {
             <div class="detail-image-section">
               <div class="detail-image-area">
                 <NImage
-                  :src="toFileUrl(detailImage.file_path)"
+                  :src="toAssetUrl(detailImage.file_path)"
                   object-fit="contain"
-                  style="max-height: 75vh; max-width: 100%; border-radius: 8px"
+                  style="max-height: 75vh; max-width: 100%; border-radius: var(--radius-md)"
                   :preview-disabled="false"
                 />
               </div>
@@ -698,18 +735,18 @@ onUnmounted(() => {
               >
                 <NCollapseItem :title="t('gallery.promptInfo')" name="prompt">
                   <div v-if="detailImage.prompt_text" class="prompt-block">
-                    <div class="prompt-label">Positive</div>
+                    <div class="prompt-label">{{ t('workflow.roleShort.promptPositive') }}</div>
                     <div class="prompt-text">{{ detailImage.prompt_text }}</div>
                   </div>
                   <div v-if="detailImage.negative_text" class="prompt-block">
-                    <div class="prompt-label">Negative</div>
+                    <div class="prompt-label">{{ t('workflow.roleShort.promptNegative') }}</div>
                     <div class="prompt-text negative">{{ detailImage.negative_text }}</div>
                   </div>
                   <div
                     v-if="parseGalleryGenerationParams(detailImage.generation_params)"
                     class="prompt-block"
                   >
-                    <div class="prompt-label">Parameters</div>
+                    <div class="prompt-label">{{ t('gallery.meta.parameters') }}</div>
                     <div class="prompt-text params">
                       <template
                         v-for="(value, key) in parseGalleryGenerationParams(
@@ -729,12 +766,14 @@ onUnmounted(() => {
 
         <!-- Navigation: Next -->
         <button
+          type="button"
           class="nav-btn nav-next"
           :disabled="!canGoNext"
           :title="t('gallery.viewer.nextImage')"
+          :aria-label="t('gallery.viewer.nextImage')"
           @click="goToNext"
         >
-          ›
+          <NIcon :component="ChevronForwardOutline" :size="28" />
         </button>
       </div>
     </NModal>
@@ -752,30 +791,37 @@ onUnmounted(() => {
 }
 
 .nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 48px;
   height: 80px;
-  border: none;
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 32px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   transition:
     background 0.2s,
     opacity 0.2s;
   flex-shrink: 0;
 }
 .nav-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--app-surface-hover);
+}
+.nav-btn:focus-visible {
+  outline: 2px solid var(--app-accent-blue);
+  outline-offset: 2px;
 }
 .nav-btn:disabled {
-  opacity: 0.2;
+  opacity: 0.3;
   cursor: default;
 }
 
 .detail-container {
-  background: var(--n-color, #1e1e2e);
-  border-radius: 12px;
+  background: var(--app-surface-raised);
+  color: var(--app-text-primary);
+  border-radius: var(--radius-lg);
   max-width: 1200px;
   width: 92vw;
   max-height: 90vh;
@@ -789,12 +835,16 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--app-border-subtle);
+}
+
+.detail-close {
+  margin-left: 8px;
 }
 
 .detail-position {
   font-size: 13px;
-  opacity: 0.6;
+  color: var(--app-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -826,7 +876,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   overflow-y: auto;
   padding: 16px;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 1px solid var(--app-border-subtle);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -848,15 +898,10 @@ onUnmounted(() => {
 
 .detail-image-meta {
   font-size: 12px;
-  opacity: 0.55;
+  color: var(--app-text-muted);
   padding: 8px 16px 12px;
   text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-.detail-info-panel {
-  padding: 12px 16px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .detail-metadata {
@@ -864,8 +909,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  background: var(--app-surface-muted);
+  border-radius: var(--radius-md);
 }
 .metadata-item {
   display: flex;
@@ -876,13 +921,12 @@ onUnmounted(() => {
 .metadata-label {
   font-size: 11px;
   font-weight: 600;
-  opacity: 0.45;
+  color: var(--app-text-subtle);
   flex-shrink: 0;
   min-width: 40px;
 }
 .metadata-value {
   font-size: 12px;
-  opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -892,12 +936,12 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
+  background: var(--app-surface-muted);
+  border-radius: var(--radius-md);
 }
 .filepath-text {
   font-size: 11px;
-  opacity: 0.5;
+  color: var(--app-text-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -911,7 +955,7 @@ onUnmounted(() => {
 .prompt-label {
   font-size: 11px;
   font-weight: 600;
-  opacity: 0.5;
+  color: var(--app-text-subtle);
   margin-bottom: 4px;
   text-transform: uppercase;
 }
@@ -919,13 +963,13 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.6;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
+  background: var(--app-surface-muted);
+  border-radius: var(--radius-md);
   word-break: break-word;
   white-space: pre-wrap;
 }
 .prompt-text.negative {
-  border-left: 3px solid rgba(255, 100, 100, 0.4);
+  border-left: 3px solid var(--app-danger);
 }
 .prompt-text.params {
   display: flex;
@@ -957,8 +1001,8 @@ onUnmounted(() => {
   }
   .detail-sidebar {
     width: 100%;
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: none;
+    border-top: 1px solid var(--app-border-subtle);
     max-height: 200px;
   }
 }

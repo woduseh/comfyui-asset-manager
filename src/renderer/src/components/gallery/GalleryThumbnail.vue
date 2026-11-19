@@ -78,7 +78,7 @@ function retry(): void {
   width: 100%;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--app-surface-muted);
 }
 

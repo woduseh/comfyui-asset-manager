@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NConfigProvider, NMessageProvider, NDialogProvider, darkTheme, lightTheme } from 'naive-ui'
 import AppLayout from './components/layout/AppLayout.vue'
@@ -20,6 +20,14 @@ const theme = computed(() => (settingsStore.settings.theme === 'light' ? lightTh
 const themeOverrides = computed(() =>
   settingsStore.settings.theme === 'light' ? lightThemeOverrides : darkThemeOverrides
 )
+
+// Modals and popovers teleport to <body>, so theme tokens must live on the document root.
+watchEffect(() => {
+  document.documentElement.classList.toggle(
+    'app-theme-light',
+    settingsStore.settings.theme === 'light'
+  )
+})
 
 const eventCleanups: Array<() => void> = []
 
@@ -68,11 +76,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <NConfigProvider
-    :theme="theme"
-    :theme-overrides="themeOverrides"
-    :class="{ 'app-theme-light': settingsStore.settings.theme === 'light' }"
-  >
+  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <NDialogProvider>
         <AppLayout />

@@ -13,10 +13,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <NEmpty :description="title" class="actionable-empty-state">
+  <NEmpty class="actionable-empty-state">
     <template v-if="$slots.icon" #icon>
       <slot name="icon" />
     </template>
+    <strong class="actionable-empty-state__title">{{ title }}</strong>
     <template v-if="description || actionLabel" #extra>
       <div class="actionable-empty-state__extra">
         <p v-if="description">{{ description }}</p>
@@ -29,6 +30,12 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
+.actionable-empty-state__title {
+  color: var(--app-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .actionable-empty-state__extra {
   display: flex;
   flex-direction: column;

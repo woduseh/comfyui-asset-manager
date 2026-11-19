@@ -6,7 +6,7 @@ import { FolderOpenOutline, ImagesOutline, OpenOutline, WarningOutline } from '@
 import { NButton, NIcon, NSkeleton } from 'naive-ui'
 import GalleryThumbnail from '@renderer/components/gallery/GalleryThumbnail.vue'
 import type { GalleryImage } from '@renderer/stores/gallery.store'
-import { formatGalleryFileSize } from '@renderer/utils/gallery'
+import { formatGalleryFileSize, toThumbnailUrl } from '@renderer/utils/gallery'
 import { PRODUCTION_RECENT_RESULTS_LIMIT } from '@renderer/constants'
 
 const props = defineProps<{
@@ -61,10 +61,6 @@ function openSelectedResult(): void {
   })
 }
 
-function toFileUrl(path: string | undefined): string {
-  return path ? 'local-asset://image/' + encodeURIComponent(path) : ''
-}
-
 function labelFor(image: GalleryImage): string {
   return (
     [image.character_name, image.outfit_name, image.emotion_name].filter(Boolean).join(' · ') ||
@@ -112,7 +108,7 @@ function labelFor(image: GalleryImage): string {
           @click="selectedId = image.id"
         >
           <GalleryThumbnail
-            :src="toFileUrl(image.thumbnail_path || image.file_path)"
+            :src="toThumbnailUrl(image)"
             :alt="labelFor(image)"
             :error-text="t('gallery.thumbnailLoadFailed')"
             :retry-text="t('common.retry')"
@@ -124,7 +120,7 @@ function labelFor(image: GalleryImage): string {
       <div v-if="selectedImage" class="results-panel__inspector">
         <div class="results-panel__preview">
           <GalleryThumbnail
-            :src="toFileUrl(selectedImage.thumbnail_path || selectedImage.file_path)"
+            :src="toThumbnailUrl(selectedImage)"
             :alt="labelFor(selectedImage)"
             :error-text="t('gallery.thumbnailLoadFailed')"
             :retry-text="t('common.retry')"
@@ -210,7 +206,7 @@ function labelFor(image: GalleryImage): string {
   min-width: 0;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   outline: none;
   background: transparent;
   cursor: pointer;
@@ -224,7 +220,7 @@ function labelFor(image: GalleryImage): string {
 }
 
 .results-panel__thumb :deep(.gallery-thumbnail) {
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
 }
 
 .results-panel__inspector {
@@ -277,7 +273,7 @@ function labelFor(image: GalleryImage): string {
 
 .results-panel__meta dt {
   color: var(--app-text-subtle);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .results-panel__meta dd {

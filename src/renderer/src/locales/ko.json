@@ -180,7 +180,7 @@
     "defaultValueNone": "(없음)"
   },
   "module": {
-    "title": "프롬프트 모듈",
+    "title": "라이브러리",
     "pageDescription": "재사용할 프롬프트 모듈과 아이템, 슬롯별 변형을 관리합니다.",
     "create": "새 모듈",
     "empty": "등록된 모듈이 없습니다",
@@ -433,7 +433,7 @@
     "statusWaiting": "대기"
   },
   "gallery": {
-    "title": "갤러리",
+    "title": "결과",
     "pageDescription": "생성된 이미지를 검색하고 평가하며 세부 정보를 확인합니다.",
     "empty": "생성된 이미지가 없습니다",
     "imageCount": "{count}장",
@@ -492,7 +492,8 @@
       "outfit": "복장",
       "emotion": "감정",
       "style": "스타일",
-      "file": "파일"
+      "file": "파일",
+      "parameters": "생성 파라미터"
     },
     "promptInfo": "프롬프트 정보",
     "emptyHint": "생성한 이미지를 여기에서 비교하고 선별할 수 있어요. 프로덕션에서 첫 작업을 시작해보세요.",

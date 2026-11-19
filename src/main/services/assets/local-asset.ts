@@ -3,7 +3,10 @@ import { isAbsolute, normalize, relative, resolve } from 'path'
 import { resolveConfiguredOutputRoot, type OutputRootSettings } from '../output-root'
 
 const LOCAL_ASSET_PREFIX = 'local-asset://image/'
+const LOCAL_ASSET_THUMBNAIL_PREFIX = 'local-asset://thumbnail/'
 const LOCAL_ASSET_FALLBACK_PREFIX = 'local-asset://'
+
+type LocalAssetRequestKind = 'image' | 'thumbnail'
 
 export interface LocalAssetResolverDeps {
   realpathSync: (filePath: string) => string
@@ -11,16 +14,20 @@ export interface LocalAssetResolverDeps {
   isTrackedAssetPath: (candidatePaths: readonly string[]) => boolean
 }
 
+type FetchLocalAsset = (filePath: string) => Response | Promise<Response>
+
 export interface LocalAssetRequestHandlerDeps {
   outputDirectory: string | null | undefined
-  fetchAsset: (filePath: string) => Response | Promise<Response>
+  fetchAsset: FetchLocalAsset
+  fetchThumbnail: FetchLocalAsset
   resolverDeps?: Partial<LocalAssetResolverDeps>
 }
 
 export interface LocalAssetSettingsRequestHandlerDeps {
   settings: OutputRootSettings
   fallbackRoot?: string
-  fetchAsset: (filePath: string) => Response | Promise<Response>
+  fetchAsset: FetchLocalAsset
+  fetchThumbnail: FetchLocalAsset
   resolverDeps?: Partial<LocalAssetResolverDeps>
 }
 
@@ -62,13 +69,19 @@ function isPathWithinDirectory(
   return relativePath !== '' && !relativePath.startsWith('..') && !isAbsolute(relativePath)
 }
 
-function extractEncodedPath(requestUrl: string): string | null {
+function parseLocalAssetUrl(
+  requestUrl: string
+): { kind: LocalAssetRequestKind; encodedPath: string } | null {
+  if (requestUrl.startsWith(LOCAL_ASSET_THUMBNAIL_PREFIX)) {
+    return { kind: 'thumbnail', encodedPath: requestUrl.slice(LOCAL_ASSET_THUMBNAIL_PREFIX.length) }
+  }
+
   if (requestUrl.startsWith(LOCAL_ASSET_PREFIX)) {
-    return requestUrl.slice(LOCAL_ASSET_PREFIX.length)
+    return { kind: 'image', encodedPath: requestUrl.slice(LOCAL_ASSET_PREFIX.length) }
   }
 
   if (requestUrl.startsWith(LOCAL_ASSET_FALLBACK_PREFIX)) {
-    return requestUrl.slice(LOCAL_ASSET_FALLBACK_PREFIX.length)
+    return { kind: 'image', encodedPath: requestUrl.slice(LOCAL_ASSET_FALLBACK_PREFIX.length) }
   }
 
   return null
@@ -108,14 +121,14 @@ export function resolveLocalAssetPath(
   outputDirectory: string | null | undefined,
   deps: Partial<LocalAssetResolverDeps> = {}
 ): string | null {
-  const encodedPath = extractEncodedPath(requestUrl)
-  if (!encodedPath) {
+  const parsed = parseLocalAssetUrl(requestUrl)
+  if (!parsed?.encodedPath) {
     return null
   }
 
   let decodedPath: string
   try {
-    decodedPath = decodeURIComponent(encodedPath)
+    decodedPath = decodeURIComponent(parsed.encodedPath)
   } catch (error) {
     void error
     // Malformed percent-encoding indicates an invalid request URL and should be rejected.
@@ -147,7 +160,9 @@ export function handleLocalAssetRequest(
     return new Response('Forbidden', { status: 403 })
   }
 
-  return deps.fetchAsset(filePath)
+  return parseLocalAssetUrl(requestUrl)?.kind === 'thumbnail'
+    ? deps.fetchThumbnail(filePath)
+    : deps.fetchAsset(filePath)
 }
 
 export function resolveDirectAssetPathFromSettings(
@@ -168,6 +183,7 @@ export function handleLocalAssetRequestFromSettings(
   return handleLocalAssetRequest(requestUrl, {
     outputDirectory: resolveConfiguredOutputRoot(deps.settings, deps.fallbackRoot),
     fetchAsset: deps.fetchAsset,
+    fetchThumbnail: deps.fetchThumbnail,
     resolverDeps: deps.resolverDeps
   })
 }

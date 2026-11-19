@@ -109,7 +109,7 @@ const { t } = useI18n()
           :key="vo.variableId"
           style="
             padding: 8px 10px;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             background: rgba(128, 128, 128, 0.06);
             margin-bottom: 6px;
           "

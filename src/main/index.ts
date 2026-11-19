@@ -1,7 +1,7 @@
 import { onBatchChanged } from './services/batch/changes'
 import { onDatabaseChanged } from './services/database/changes'
 import { IPC_CHANNELS } from '@shared/ipc-channels'
-import { app, shell, BrowserWindow, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, protocol, net, nativeImage } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
@@ -12,6 +12,7 @@ import { mcpServerManager } from './services/mcp'
 import { ptyManager } from './services/terminal/pty-manager'
 import { queueManager } from './services/batch/queue-manager'
 import { handleLocalAssetRequestFromSettings } from './services/assets/local-asset'
+import { createThumbnailResponse } from './services/assets/thumbnail'
 import { SettingsRepository, GeneratedImageRepository } from './services/database/repositories'
 import { comfyuiManager } from './services/comfyui/manager'
 import {
@@ -110,10 +111,23 @@ app.whenReady().then(async () => {
   const imageRepo = new GeneratedImageRepository()
 
   // Register protocol handler for local file access
+  const thumbnailCacheDirectory = join(app.getPath('userData'), 'thumbnail-cache')
+  const fetchOriginalAsset = (filePath: string): Promise<Response> =>
+    net.fetch(pathToFileURL(filePath).toString())
   protocol.handle('local-asset', (request) => {
     return handleLocalAssetRequestFromSettings(request.url, {
       settings: settingsRepo,
-      fetchAsset: (filePath) => net.fetch(pathToFileURL(filePath).toString()),
+      fetchAsset: fetchOriginalAsset,
+      fetchThumbnail: (filePath) =>
+        createThumbnailResponse(filePath, {
+          cacheDirectory: thumbnailCacheDirectory,
+          createThumbnail: (path, size) => nativeImage.createThumbnailFromPath(path, size),
+          fetchOriginal: fetchOriginalAsset,
+          onFallback: (path, reason) =>
+            log.debug('[Assets] Serving original image instead of thumbnail:', path, reason),
+          onCacheWriteFailed: (path, error) =>
+            log.warn('[Assets] Failed to cache thumbnail:', path, error)
+        }),
       resolverDeps: {
         isTrackedAssetPath: (candidatePaths) => imageRepo.hasTrackedAssetPath(candidatePaths)
       }

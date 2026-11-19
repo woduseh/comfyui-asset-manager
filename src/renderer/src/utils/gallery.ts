@@ -1,5 +1,16 @@
 import { isJsonObject, safeJsonParse } from '@shared/safe-json'
 
+export function toAssetUrl(path: string | null | undefined): string {
+  return path ? 'local-asset://image/' + encodeURIComponent(path) : ''
+}
+
+export function toThumbnailUrl(image: {
+  file_path: string
+  thumbnail_path: string | null
+}): string {
+  return 'local-asset://thumbnail/' + encodeURIComponent(image.thumbnail_path || image.file_path)
+}
+
 export function formatGalleryFileSize(bytes: number | null): string {
   if (!bytes) return '-'
   if (bytes < 1024) return `${bytes} B`

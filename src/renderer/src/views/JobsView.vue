@@ -565,7 +565,7 @@ onUnmounted(() => {
 
 .production-section__header h2 {
   margin-top: 3px;
-  font-size: 17px;
+  font-size: 16px;
 }
 
 .production-section__count {

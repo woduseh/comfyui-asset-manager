@@ -270,7 +270,7 @@ const stages = computed(() => {
 .active-run h2 {
   overflow: hidden;
   margin: 0;
-  font-size: 21px;
+  font-size: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -333,7 +333,7 @@ const stages = computed(() => {
 
 .active-run__metrics span {
   color: var(--app-text-subtle);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;

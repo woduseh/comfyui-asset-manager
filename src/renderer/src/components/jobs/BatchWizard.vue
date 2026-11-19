@@ -515,7 +515,6 @@ async function handleCreateBatch(): Promise<void> {
     v-model:show="showWizard"
     preset="card"
     class="batch-editor"
-    :class="{ 'app-theme-light': settingsStore.settings.theme === 'light' }"
     style="width: min(1440px, calc(100vw - 32px)); max-height: calc(100vh - 32px)"
     :title="editingJobId ? t('batch.wizard.editTitle') : t('batch.wizard.createTitle')"
     :mask-closable="false"
@@ -681,7 +680,7 @@ async function handleCreateBatch(): Promise<void> {
   border-bottom: 1px solid var(--app-border);
 }
 .batch-editor__section h2 {
-  font-size: 17px;
+  font-size: 16px;
   margin-bottom: 18px;
 }
 .batch-editor__summary {
@@ -701,7 +700,7 @@ async function handleCreateBatch(): Promise<void> {
 }
 .batch-editor__total span {
   margin-left: 8px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
 }
 .batch-editor__summary p {

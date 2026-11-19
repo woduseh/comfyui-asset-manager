@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import { NButton, NCard, NCheckbox, NRate, NSpace } from 'naive-ui'
+import { NButton, NCard, NCheckbox, NIcon, NRate } from 'naive-ui'
+import { Heart, HeartOutline } from '@vicons/ionicons5'
 import type { GalleryImage } from '@renderer/stores/gallery.store'
 import GalleryThumbnail from './GalleryThumbnail.vue'
 
@@ -26,12 +27,8 @@ const { t } = useI18n()
   <NCard
     size="small"
     hoverable
-    :style="{
-      cursor: 'pointer',
-      border: selected ? '2px solid #63e2b7' : undefined,
-      borderRadius: '12px',
-      overflow: 'hidden'
-    }"
+    class="gallery-card"
+    :class="{ 'gallery-card--selected': selected }"
     @click="$emit('open')"
   >
     <template v-if="selectionMode" #header-extra>
@@ -45,7 +42,7 @@ const { t } = useI18n()
       @failed="$emit('thumbnailFailed')"
       @loaded="$emit('thumbnailLoaded')"
     />
-    <NSpace justify="space-between" align="center" style="margin-top: 8px">
+    <div class="gallery-card__actions">
       <NRate
         :value="image.rating"
         :count="5"
@@ -54,31 +51,53 @@ const { t } = useI18n()
         @update:value="(value: number) => $emit('rate', value)"
       />
       <NButton
-        text
-        :type="image.is_favorite ? 'warning' : 'default'"
+        quaternary
+        circle
         size="small"
+        :type="image.is_favorite ? 'warning' : 'default'"
         :aria-label="
           image.is_favorite ? t('gallery.viewer.removeFavorite') : t('gallery.viewer.addFavorite')
         "
+        :aria-pressed="!!image.is_favorite"
         @click.stop="$emit('favorite')"
       >
-        {{ image.is_favorite ? '♥' : '♡' }}
+        <template #icon>
+          <NIcon :component="image.is_favorite ? Heart : HeartOutline" />
+        </template>
       </NButton>
-    </NSpace>
-    <div
-      v-if="image.character_name"
-      style="
-        margin-top: 4px;
-        font-size: 11px;
-        opacity: 0.7;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      "
-    >
+    </div>
+    <div v-if="image.character_name" class="gallery-card__label">
       {{
         [image.character_name, image.outfit_name, image.emotion_name].filter(Boolean).join(' / ')
       }}
     </div>
   </NCard>
 </template>
+
+<style scoped>
+.gallery-card {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+}
+
+.gallery-card--selected {
+  box-shadow: 0 0 0 2px var(--app-accent-blue);
+}
+
+.gallery-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.gallery-card__label {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

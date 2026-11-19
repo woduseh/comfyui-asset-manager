@@ -100,6 +100,7 @@ describe('resolveLocalAssetPath', () => {
       const response = await handleLocalAssetRequest(toLocalAssetUrl(externalFile), {
         outputDirectory,
         fetchAsset: (filePath) => new Response(filePath, { status: 200 }),
+        fetchThumbnail: () => new Response('thumbnail', { status: 200 }),
         resolverDeps: {
           realpathSync: (filePath: string) => filePath,
           platform: process.platform,
@@ -120,6 +121,7 @@ describe('resolveLocalAssetPath', () => {
           fetchCalled = true
           return new Response('unexpected', { status: 200 })
         },
+        fetchThumbnail: () => new Response('unexpected', { status: 200 }),
         resolverDeps: {
           realpathSync: (filePath: string) => filePath,
           platform: process.platform,
@@ -129,6 +131,36 @@ describe('resolveLocalAssetPath', () => {
 
       expect(response.status).toBe(403)
       expect(fetchCalled).toBe(false)
+    })
+
+    it('serves thumbnail requests only after the same path check as full images', async () => {
+      const served: string[] = []
+      const deps = {
+        outputDirectory,
+        fetchAsset: () => new Response('original', { status: 200 }),
+        fetchThumbnail: (filePath: string) => {
+          served.push(filePath)
+          return new Response('thumbnail', { status: 200 })
+        },
+        resolverDeps: {
+          realpathSync: (filePath: string) => filePath,
+          platform: process.platform,
+          isTrackedAssetPath: () => false
+        }
+      }
+
+      const allowed = await handleLocalAssetRequest(
+        `local-asset://thumbnail/${encodeURIComponent(directFile)}`,
+        deps
+      )
+      const rejected = await handleLocalAssetRequest(
+        `local-asset://thumbnail/${encodeURIComponent(externalFile)}`,
+        deps
+      )
+
+      expect(await allowed.text()).toBe('thumbnail')
+      expect(rejected.status).toBe(403)
+      expect(served).toEqual([directFile])
     })
 
     it('uses the legacy output.directory setting when resolving direct output-root access', async () => {
@@ -145,6 +177,7 @@ describe('resolveLocalAssetPath', () => {
           }
         },
         fetchAsset: (filePath) => new Response(filePath, { status: 200 }),
+        fetchThumbnail: () => new Response('thumbnail', { status: 200 }),
         resolverDeps: {
           realpathSync: (filePath: string) => filePath,
           platform: process.platform,

@@ -28,7 +28,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: rgba(128, 128, 128, 0.3);
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -40,12 +40,10 @@ h2 {
   font-weight: 600;
 }
 
-/* ═══ v0.6.0 Global Style Improvements ═══ */
-
-/* Unified border-radius */
 :root {
+  --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 9px;
+  --radius-md: 8px;
   --radius-lg: 12px;
   --page-max-width: 1440px;
   --page-compact-max-width: 960px;
@@ -86,16 +84,10 @@ h2 {
 
 .section-eyebrow {
   color: var(--app-accent-blue);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-
-/* Smooth transitions for interactive elements */
-.n-tag,
-.n-button {
-  transition: all 0.2s ease !important;
 }
 
 /* Only interactive cards should visually lift. */
@@ -111,6 +103,19 @@ h2 {
   transform: translateY(-1px);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
+  .interactive-card:hover {
+    transform: none;
+  }
+}
+
 /* Better empty states */
 .n-empty {
   padding: 40px 20px !important;
@@ -118,7 +123,7 @@ h2 {
 
 /* Compact status tags */
 .n-tag {
-  border-radius: 5px !important;
+  border-radius: var(--radius-xs) !important;
 }
 
 /* Modal improvements */
@@ -128,7 +133,7 @@ h2 {
 
 .card-title {
   min-width: 0;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 650;
   line-height: 1.35;
 }

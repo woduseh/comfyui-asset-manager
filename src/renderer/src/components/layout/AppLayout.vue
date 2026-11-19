@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch, type Component } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -30,10 +30,13 @@ import type { Component as VueComponent } from 'vue'
 import { useConnectionStore } from '@renderer/stores/connection.store'
 import { useQueueStore } from '@renderer/stores/queue.store'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
-import TerminalPanel from '@renderer/components/terminal/TerminalPanel.vue'
 import { NAV_ITEMS } from '@renderer/navigation'
 import type { RouteName } from '@renderer/navigation'
 import { getServiceStatusType } from '@renderer/utils/status-presentation'
+
+const TerminalPanel = defineAsyncComponent(
+  () => import('@renderer/components/terminal/TerminalPanel.vue')
+)
 
 const router = useRouter()
 const route = useRoute()
@@ -166,10 +169,12 @@ async function handleToggleConnection(): Promise<void> {
       <NLayoutHeader bordered class="app-header">
         <NSpace align="center" :size="12">
           <NButton
-            size="tiny"
+            size="small"
             :type="terminalStore.panelVisible ? 'primary' : 'default'"
             quaternary
             :title="t('terminal.togglePanel')"
+            :aria-label="t('terminal.togglePanel')"
+            :aria-pressed="terminalStore.panelVisible"
             @click="terminalStore.togglePanel()"
           >
             <template #icon>
@@ -203,7 +208,7 @@ async function handleToggleConnection(): Promise<void> {
             }}</span>
           </NTag>
           <NButton
-            size="tiny"
+            size="small"
             :type="connectionStore.isConnected ? 'default' : 'primary'"
             :loading="connectionStore.isConnecting"
             @click="handleToggleConnection"
@@ -278,12 +283,12 @@ async function handleToggleConnection(): Promise<void> {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--app-danger);
   transition: background 0.3s;
 }
 
 .status-dot.connected {
-  background: #22c55e;
+  background: var(--app-success);
 }
 
 .app-header {
@@ -317,7 +322,7 @@ async function handleToggleConnection(): Promise<void> {
     background 0.2s ease,
     color 0.2s ease !important;
   min-height: 38px;
-  border-radius: 6px !important;
+  border-radius: var(--radius-sm) !important;
   margin: 3px 8px !important;
   font-size: 12px;
 }

@@ -93,7 +93,7 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
           :key="sel.moduleId"
           style="
             padding: 10px;
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             background: rgba(128, 128, 128, 0.06);
             margin-bottom: 8px;
           "
@@ -180,7 +180,7 @@ function addPrefixModule(slot: SlotMapping, moduleId: string | null): void {
           :key="slot.variableId"
           style="
             padding: 10px;
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             background: rgba(128, 128, 128, 0.06);
             margin-bottom: 8px;
           "

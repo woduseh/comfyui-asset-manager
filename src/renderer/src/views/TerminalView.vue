@@ -158,7 +158,7 @@ onMounted(() => {
   gap: 9px;
   padding: 6px 7px 6px 10px;
   border: 1px solid var(--n-border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--app-surface-muted);
 }
 
@@ -175,7 +175,7 @@ onMounted(() => {
 
 .mcp-control__copy span {
   color: var(--app-text-muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .terminal-tabs-bar {
@@ -191,7 +191,7 @@ onMounted(() => {
 .terminal-content {
   flex: 1;
   position: relative;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: #1e1e2e;
   min-height: 200px;

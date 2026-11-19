@@ -543,7 +543,7 @@ onMounted(() => {
               v-if="promptPreview.positive"
               style="
                 padding: 8px;
-                border-radius: 4px;
+                border-radius: var(--radius-xs);
                 background: rgba(99, 226, 183, 0.1);
                 margin-bottom: 8px;
                 font-size: 13px;
@@ -556,7 +556,7 @@ onMounted(() => {
               v-if="promptPreview.negative"
               style="
                 padding: 8px;
-                border-radius: 4px;
+                border-radius: var(--radius-xs);
                 background: rgba(255, 107, 107, 0.1);
                 font-size: 13px;
                 word-break: break-all;
@@ -667,7 +667,7 @@ onMounted(() => {
           :key="idx"
           style="
             padding: 8px;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             background: rgba(128, 128, 128, 0.06);
             margin-bottom: 8px;
           "
@@ -770,7 +770,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--app-surface-muted);
   margin-bottom: 7px;
 }

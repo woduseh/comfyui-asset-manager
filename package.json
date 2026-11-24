@@ -63,7 +63,7 @@
     "@vitejs/plugin-vue": "^6.0.10",
     "@vitest/coverage-v8": "^5.1.0",
     "@vue/test-utils": "^2.5.1",
-    "electron": "^44.4.5",
+    "electron": "^45.4.1",
     "electron-builder": "^26.18.0",
     "eslint": "^10.14.0",
     "eslint-plugin-vue": "^10.12.0",
